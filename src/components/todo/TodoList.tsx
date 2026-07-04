@@ -1,0 +1,197 @@
+'use client'
+
+import { useMemo, useState, useTransition } from 'react'
+import { setHomeworkCompletion } from '@/app/todo/actions'
+import { getTodayDateKey } from '@/lib/study/dates'
+import { cn } from '@/lib/utils'
+import type { TodoCategory, TodoItem } from '@/types/todo'
+
+const CATEGORY_LABELS: Record<TodoCategory, string> = {
+  homework: '宿題',
+  quiz: '小テスト',
+  application: '申込関連',
+}
+
+const CATEGORY_COLORS: Record<TodoCategory, string> = {
+  homework: 'bg-blue-100 text-blue-800',
+  quiz: 'bg-orange-100 text-orange-800',
+  application: 'bg-purple-100 text-purple-800',
+}
+
+function formatDate(date: string): string {
+  const [y, m, d] = date.split('-')
+  return `${y}年${Number(m)}月${Number(d)}日`
+}
+
+function HomeworkCheckbox({
+  taskId,
+  initialCompleted,
+}: {
+  taskId: string
+  initialCompleted: boolean
+}) {
+  const [completed, setCompleted] = useState(initialCompleted)
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+
+  const handleChange = (checked: boolean) => {
+    setCompleted(checked)
+    setError(null)
+    startTransition(async () => {
+      const result = await setHomeworkCompletion(taskId, checked)
+      if (result.error) {
+        setCompleted(!checked)
+        setError(result.error)
+      }
+    })
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="checkbox"
+        checked={completed}
+        disabled={pending}
+        onChange={(e) => handleChange(e.target.checked)}
+        className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20"
+        aria-label="宿題を完了にする"
+      />
+      {error && <span className="text-xs text-error">{error}</span>}
+    </div>
+  )
+}
+
+function TodoRow({ item, today }: { item: TodoItem; today: string }) {
+  const isOverdue = !item.completed && item.dueDate < today
+  const isHomework = item.category === 'homework'
+
+  return (
+    <li
+      className={cn(
+        'flex items-start gap-3 rounded-lg border border-border p-4',
+        item.completed && 'bg-background opacity-70',
+        isOverdue && !item.completed && 'border-red-200 bg-red-50/50',
+      )}
+    >
+      <div className="mt-0.5 w-5 shrink-0">
+        {isHomework && item.homeworkTaskId ? (
+          <HomeworkCheckbox
+            taskId={item.homeworkTaskId}
+            initialCompleted={item.completed}
+          />
+        ) : (
+          <span className="inline-block h-4 w-4" aria-hidden />
+        )}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={cn(
+              'rounded-full px-2 py-0.5 text-xs font-medium',
+              CATEGORY_COLORS[item.category],
+            )}
+          >
+            {CATEGORY_LABELS[item.category]}
+          </span>
+          {item.completed && (
+            <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+              完了
+            </span>
+          )}
+          {isOverdue && (
+            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+              期限超過
+            </span>
+          )}
+        </div>
+        <p
+          className={cn(
+            'mt-1 font-medium',
+            item.completed && 'line-through text-muted',
+          )}
+        >
+          {item.title}
+        </p>
+        <p className={cn('mt-1 text-sm', isOverdue ? 'text-red-700' : 'text-muted')}>
+          期日: {formatDate(item.dueDate)}
+          {item.subject ? ` / ${item.subject}` : ''}
+        </p>
+        {item.description && (
+          <p className="mt-1 text-xs text-muted">{item.description}</p>
+        )}
+      </div>
+    </li>
+  )
+}
+
+interface TodoListProps {
+  items: TodoItem[]
+}
+
+export function TodoList({ items }: TodoListProps) {
+  const today = getTodayDateKey()
+
+  const { pending, completed, byCategory } = useMemo(() => {
+    const pendingItems = items.filter((i) => !i.completed)
+    const completedItems = items.filter((i) => i.completed)
+    const categories: TodoCategory[] = ['homework', 'quiz', 'application']
+    const grouped = Object.fromEntries(
+      categories.map((c) => [c, pendingItems.filter((i) => i.category === c)]),
+    ) as Record<TodoCategory, TodoItem[]>
+    return { pending: pendingItems, completed: completedItems, byCategory: grouped }
+  }, [items])
+
+  if (items.length === 0) {
+    return (
+      <p className="rounded-2xl border border-border bg-card p-6 text-sm text-muted shadow-sm">
+        現在、ToDo はありません。
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <h2 className="text-lg font-bold">
+          未完了 ({pending.length})
+        </h2>
+        <p className="mt-1 text-sm text-muted">
+          宿題はチェックを入れると「完了」になります。
+        </p>
+
+        {pending.length === 0 ? (
+          <p className="mt-4 text-sm text-muted">すべて完了しています。</p>
+        ) : (
+          <div className="mt-4 space-y-6">
+            {(['homework', 'quiz', 'application'] as TodoCategory[]).map((category) =>
+              byCategory[category].length > 0 ? (
+                <div key={category}>
+                  <h3 className="mb-2 text-sm font-semibold text-muted">
+                    {CATEGORY_LABELS[category]}
+                  </h3>
+                  <ul className="space-y-2">
+                    {byCategory[category].map((item) => (
+                      <TodoRow key={item.id} item={item} today={today} />
+                    ))}
+                  </ul>
+                </div>
+              ) : null,
+            )}
+          </div>
+        )}
+      </section>
+
+      {completed.length > 0 && (
+        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <h2 className="text-lg font-bold">完了済み ({completed.length})</h2>
+          <ul className="mt-4 space-y-2">
+            {completed.map((item) => (
+              <TodoRow key={item.id} item={item} today={today} />
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  )
+}

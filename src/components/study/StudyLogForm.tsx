@@ -1,0 +1,152 @@
+'use client'
+
+import Link from 'next/link'
+import { useActionState, useState } from 'react'
+import { createStudyLog, type StudyLogActionState } from '@/app/study/actions'
+import { getTodayDateKey } from '@/lib/study/dates'
+import { filterTextbooksBySubject } from '@/components/textbooks/TextbookManager'
+import type { Textbook } from '@/types/textbook'
+
+const initialState: StudyLogActionState = {}
+
+interface StudyLogFormProps {
+  profileSubjects: string[]
+  textbooks: Textbook[]
+}
+
+export function StudyLogForm({ profileSubjects, textbooks }: StudyLogFormProps) {
+  const [state, formAction, pending] = useActionState(createStudyLog, initialState)
+  const [selectedSubject, setSelectedSubject] = useState('')
+
+  const filteredTextbooks = filterTextbooksBySubject(textbooks, selectedSubject)
+
+  if (profileSubjects.length === 0) {
+    return (
+      <div className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        使用科目が未設定です。{' '}
+        <Link href="/dashboard/profile" className="font-medium underline">
+          プロフィール編集
+        </Link>
+        で科目を選んでから学習記録を追加してください。
+      </div>
+    )
+  }
+
+  return (
+    <form action={formAction} className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-medium">
+            学習日 <span className="text-error">*</span>
+          </span>
+          <input
+            type="date"
+            name="studiedOn"
+            defaultValue={getTodayDateKey()}
+            required
+            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          />
+        </label>
+
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-medium">
+            科目 <span className="text-error">*</span>
+          </span>
+          <select
+            name="subject"
+            required
+            value={selectedSubject}
+            onChange={(e) => setSelectedSubject(e.target.value)}
+            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          >
+            <option value="" disabled>
+              選択してください
+            </option>
+            {profileSubjects.map((subject) => (
+              <option key={subject} value={subject}>
+                {subject}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-medium">
+          教材 <span className="text-error">*</span>
+        </span>
+        <select
+          name="textbookId"
+          required
+          disabled={!selectedSubject}
+          defaultValue=""
+          key={selectedSubject}
+          className="w-full rounded-lg border border-border bg-background px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+        >
+          <option value="" disabled>
+            {selectedSubject ? '教材を選択' : '先に科目を選択してください'}
+          </option>
+          {filteredTextbooks.map((book) => (
+            <option key={book.id} value={book.id}>
+              {book.name}
+            </option>
+          ))}
+        </select>
+        {selectedSubject && filteredTextbooks.length === 0 && (
+          <p className="mt-2 text-xs text-amber-700">
+            この科目の教材がありません。{' '}
+            <Link href="/dashboard/bookshelf" className="underline">
+              本棚
+            </Link>
+            で教材を登録してください。
+          </p>
+        )}
+      </label>
+
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-medium">内容</span>
+        <textarea
+          name="content"
+          rows={3}
+          placeholder="例: 第3章 二次関数の演習"
+          className="w-full rounded-lg border border-border bg-background px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+        />
+      </label>
+
+      <label className="block sm:max-w-xs">
+        <span className="mb-1.5 block text-sm font-medium">
+          学習時間（分） <span className="text-error">*</span>
+        </span>
+        <input
+          type="number"
+          name="durationMinutes"
+          min={1}
+          step={1}
+          required
+          placeholder="60"
+          className="w-full rounded-lg border border-border bg-background px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+        />
+      </label>
+
+      {state.error && (
+        <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
+
+      {state.success && (
+        <p className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
+          学習記録を保存しました
+        </p>
+      )}
+
+      <button
+        type="submit"
+        disabled={pending || !selectedSubject || filteredTextbooks.length === 0}
+        className="rounded-lg bg-primary px-6 py-2.5 font-medium text-white transition hover:bg-primary-hover disabled:opacity-60"
+      >
+        {pending ? '保存中…' : '記録を追加'}
+      </button>
+    </form>
+  )
+}

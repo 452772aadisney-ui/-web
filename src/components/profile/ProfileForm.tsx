@@ -1,0 +1,108 @@
+'use client'
+
+import Link from 'next/link'
+import { useActionState } from 'react'
+import { updateProfile, type ProfileActionState } from '@/app/profile/actions'
+import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
+import type { Profile } from '@/types/database'
+
+const initialState: ProfileActionState = {}
+
+interface ProfileFormProps {
+  profile: Profile
+  backHref: string
+}
+
+export function ProfileForm({ profile, backHref }: ProfileFormProps) {
+  const [state, formAction, pending] = useActionState(updateProfile, initialState)
+
+  const targetSchoolsText = profile.target_schools.join('\n')
+  const selectedSubjects = new Set(profile.subjects)
+
+  return (
+    <form action={formAction} className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block sm:col-span-2">
+          <span className="mb-1.5 block text-sm font-medium">
+            氏名 <span className="text-error">*</span>
+          </span>
+          <input
+            type="text"
+            name="fullName"
+            defaultValue={profile.full_name}
+            required
+            placeholder="山田 太郎"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          />
+        </label>
+      </div>
+
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-medium">誕生日</span>
+        <input
+          type="date"
+          name="birthday"
+          defaultValue={profile.birthday ?? ''}
+          className="w-full rounded-lg border border-border bg-background px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 sm:max-w-xs"
+        />
+      </label>
+
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-medium">志望校</span>
+        <textarea
+          name="targetSchools"
+          defaultValue={targetSchoolsText}
+          rows={4}
+          placeholder={'東京大学\n京都大学\n早稲田大学'}
+          className="w-full rounded-lg border border-border bg-background px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+        />
+        <span className="mt-1 block text-xs text-muted">1行に1校ずつ入力してください</span>
+      </label>
+
+      <fieldset>
+        <legend className="mb-3 text-sm font-medium">使用科目</legend>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {EXAM_SUBJECTS.map((subject) => (
+            <label
+              key={subject}
+              className="flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 hover:bg-background has-checked:border-primary has-checked:bg-blue-50"
+            >
+              <input
+                type="checkbox"
+                name={`subject_${subject}`}
+                defaultChecked={selectedSubjects.has(subject)}
+                className="h-4 w-4 accent-primary"
+              />
+              <span className="text-sm">{subject}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      {state.error && (
+        <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
+
+      {state.success && (
+        <p className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
+          プロフィールを保存しました
+        </p>
+      )}
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <button
+          type="submit"
+          disabled={pending}
+          className="rounded-lg bg-primary px-6 py-2.5 font-medium text-white transition hover:bg-primary-hover disabled:opacity-60"
+        >
+          {pending ? '保存中…' : '保存する'}
+        </button>
+        <Link href={backHref} className="text-center text-sm text-muted hover:text-foreground">
+          キャンセル
+        </Link>
+      </div>
+    </form>
+  )
+}

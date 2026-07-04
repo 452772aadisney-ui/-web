@@ -1,0 +1,74 @@
+const inputClass =
+  'w-full rounded-lg border border-border bg-card px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20'
+
+interface TextbookDateFieldsProps {
+  startDate?: string | null
+  plannedEndDate?: string | null
+}
+
+export function TextbookDateFields({
+  startDate,
+  plannedEndDate,
+}: TextbookDateFieldsProps) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-medium">開始日</span>
+        <input
+          type="date"
+          name="startDate"
+          defaultValue={startDate ?? ''}
+          className={inputClass}
+        />
+      </label>
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-medium">終了予定日</span>
+        <input
+          type="date"
+          name="plannedEndDate"
+          defaultValue={plannedEndDate ?? ''}
+          className={inputClass}
+        />
+      </label>
+    </div>
+  )
+}
+
+interface SubjectTagFieldsProps {
+  profileSubjects: string[]
+  selectedSubjects?: string[]
+}
+
+export function SubjectTagFields({
+  profileSubjects,
+  selectedSubjects = [],
+}: SubjectTagFieldsProps) {
+  const selected = new Set(selectedSubjects)
+
+  return (
+    <fieldset>
+      <legend className="mb-2 text-sm font-medium">
+        科目タグ <span className="text-error">*</span>
+      </legend>
+      <p className="mb-2 text-xs text-muted">プロフィールで選択中の科目から選べます</p>
+      <div className="flex flex-wrap gap-2">
+        {profileSubjects.map((subject) => (
+          <label
+            key={subject}
+            className="flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm has-checked:border-primary has-checked:bg-blue-50"
+          >
+            <input
+              type="checkbox"
+              name={`subject_${subject}`}
+              defaultChecked={selected.has(subject)}
+              className="accent-primary"
+            />
+            {subject}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
+
+export { inputClass }
