@@ -30,7 +30,8 @@ export function AdminMainNav({ unreadChatCount }: AdminMainNavProps) {
               (pathname?.startsWith('/admin/students') ?? false)) ||
             (item.href === '/admin/textbooks' &&
               (pathname?.startsWith('/admin/textbooks') ?? false)) ||
-            (item.href === '/admin/chat' && (pathname?.startsWith('/admin/chat') ?? false))
+            (item.href === '/admin/chat' &&
+              (pathname?.startsWith('/admin/chat') ?? false))
 
           return (
             <Link

@@ -24,6 +24,7 @@ interface ChatRoomProps {
   currentUserRole: 'student' | 'admin'
   studentParticipant: ChatParticipant
   initialMessages: ChatMessage[]
+  peerLabel?: string
 }
 
 export function ChatRoom({
@@ -32,6 +33,7 @@ export function ChatRoom({
   currentUserRole,
   studentParticipant,
   initialMessages,
+  peerLabel,
 }: ChatRoomProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [body, setBody] = useState('')
@@ -118,15 +120,17 @@ export function ChatRoom({
     })
   }
 
+  const peerDisplayName =
+    peerLabel ??
+    (currentUserRole === 'admin' ? getPersonName(studentParticipant) : '管理者')
+
   return (
     <div className="flex h-[min(70vh,560px)] flex-col rounded-2xl border border-border bg-card shadow-sm">
       <div className="border-b border-border px-4 py-3">
         <p className="text-sm text-muted">
           {currentUserRole === 'admin' ? 'チャット相手' : '管理者とのチャット'}
         </p>
-        <p className="font-bold">
-          {getPersonName(studentParticipant)}
-        </p>
+        <p className="font-bold">{peerDisplayName}</p>
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
