@@ -1,5 +1,6 @@
 'use server'
 
+import { unstable_cache } from 'next/cache'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 
@@ -31,7 +32,7 @@ export async function markChatAsRead(studentId: string): Promise<void> {
   revalidateChatPaths()
 }
 
-export async function fetchUnreadChatCount(userId: string): Promise<number> {
+async function computeUnreadChatCount(userId: string): Promise<number> {
   const supabase = await createClient()
 
   const { data: profile } = await supabase
@@ -63,21 +64,35 @@ export async function fetchUnreadChatCount(userId: string): Promise<number> {
     return count ?? 0
   }
 
-  const { data: messages } = await supabase
+  const { data: threads } = await supabase
     .from('chat_messages')
-    .select('student_id, created_at')
+    .select('student_id')
     .neq('sender_id', userId)
 
-  if (!messages) return 0
+  const studentIds = [...new Set((threads ?? []).map((row) => row.student_id as string))]
+  if (studentIds.length === 0) return 0
 
-  let total = 0
-  for (const message of messages) {
-    const threadId = message.student_id as string
-    const since = readMap.get(threadId) ?? EPOCH
-    if ((message.created_at as string) > since) {
-      total++
-    }
-  }
+  const counts = await Promise.all(
+    studentIds.map(async (studentId) => {
+      const since = readMap.get(studentId) ?? EPOCH
+      const { count } = await supabase
+        .from('chat_messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('student_id', studentId)
+        .neq('sender_id', userId)
+        .gt('created_at', since)
+      return count ?? 0
+    }),
+  )
 
-  return total
+  return counts.reduce((sum, count) => sum + count, 0)
+}
+
+export async function fetchUnreadChatCount(userId: string): Promise<number> {
+  const cached = unstable_cache(
+    () => computeUnreadChatCount(userId),
+    ['unread-chat-count', userId],
+    { revalidate: 30 },
+  )
+  return cached()
 }

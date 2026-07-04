@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { loadTextbooksForAdmin } from '@/app/textbooks/actions'
 import { getPersonName } from '@/lib/auth/display-name'
 import { TextbookManager } from '@/components/textbooks/TextbookManager'
 import type { Textbook } from '@/types/textbook'
@@ -12,16 +13,31 @@ interface AdminTextbookScheduleProps {
     display_name: string
     subjects: string[]
   }>
-  textbooksByStudent: Record<string, Textbook[]>
 }
 
-export function AdminTextbookSchedule({
-  students,
-  textbooksByStudent,
-}: AdminTextbookScheduleProps) {
+export function AdminTextbookSchedule({ students }: AdminTextbookScheduleProps) {
   const [selectedId, setSelectedId] = useState(students[0]?.id ?? '')
+  const [textbooks, setTextbooks] = useState<Textbook[]>([])
+  const [loading, setLoading] = useState(false)
   const selected = students.find((s) => s.id === selectedId)
-  const textbooks = textbooksByStudent[selectedId] ?? []
+
+  useEffect(() => {
+    if (!selectedId) return
+
+    let cancelled = false
+    setLoading(true)
+
+    void loadTextbooksForAdmin(selectedId).then((data) => {
+      if (!cancelled) {
+        setTextbooks(data as Textbook[])
+        setLoading(false)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedId])
 
   if (students.length === 0) {
     return <p className="text-sm text-muted">登録されている生徒がいません。</p>
@@ -44,7 +60,9 @@ export function AdminTextbookSchedule({
         </select>
       </label>
 
-      {selected && (
+      {loading && <p className="text-sm text-muted">読み込み中…</p>}
+
+      {selected && !loading && (
         <TextbookManager
           studentId={selected.id}
           profileSubjects={selected.subjects ?? []}

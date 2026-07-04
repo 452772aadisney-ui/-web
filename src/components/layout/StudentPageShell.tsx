@@ -26,10 +26,12 @@ export async function StudentPageShell({
   children,
 }: StudentPageShellProps) {
   const profile = await getCurrentProfile()
-  const unreadAnnouncementCount = profile
-    ? await fetchUnreadAnnouncementCount(profile.id)
-    : 0
-  const unreadChatCount = profile ? await fetchUnreadChatCount(profile.id) : 0
+  const [unreadAnnouncementCount, unreadChatCount] = profile
+    ? await Promise.all([
+        fetchUnreadAnnouncementCount(profile.id),
+        fetchUnreadChatCount(profile.id),
+      ])
+    : [0, 0]
 
   const menuItems: HamburgerMenuItem[] = STUDENT_HAMBURGER_ITEMS.map((item) => ({
     ...item,

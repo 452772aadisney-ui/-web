@@ -183,3 +183,17 @@ export async function deleteTextbook(formData: FormData): Promise<void> {
     revalidateTextbookPaths(studentId)
   }
 }
+
+export async function loadTextbooksForAdmin(studentId: string) {
+  const authError = await assertCanManageStudent(studentId)
+  if (authError) return []
+
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('textbooks')
+    .select('*')
+    .eq('student_id', studentId)
+    .order('name')
+
+  return data ?? []
+}

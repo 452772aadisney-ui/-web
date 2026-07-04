@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import type { Profile } from '@/types/database'
 
@@ -45,7 +46,7 @@ async function ensureUserProfile(user: {
   return { profile: normalizeProfile(created), error: null }
 }
 
-export async function getCurrentProfileWithError(): Promise<ProfileResult> {
+export const getCurrentProfileWithError = cache(async (): Promise<ProfileResult> => {
   const supabase = await createClient()
 
   const {
@@ -71,11 +72,11 @@ export async function getCurrentProfileWithError(): Promise<ProfileResult> {
   }
 
   return ensureUserProfile(user)
-}
+})
 
-export async function getCurrentProfile(): Promise<Profile | null> {
+export const getCurrentProfile = cache(async (): Promise<Profile | null> => {
   const { profile } = await getCurrentProfileWithError()
   return profile
-}
+})
 
 export { getDashboardPathForRole } from '@/lib/auth/routes'

@@ -54,22 +54,29 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user) {
-    const role = (await getProfileRole(supabase, user.id)) ?? 'student'
-    const dashboardPath = getDashboardPathForRole(role)
+    const needsRole =
+      isAuthPath(pathname) ||
+      pathname === '/' ||
+      pathname.startsWith('/admin')
+
+    let role: Profile['role'] | null = null
+    if (needsRole) {
+      role = (await getProfileRole(supabase, user.id)) ?? 'student'
+    }
 
     if (pathname === '/reset-password') {
       return supabaseResponse
     }
 
-    if (isAuthPath(pathname)) {
+    if (isAuthPath(pathname) && role) {
       const url = request.nextUrl.clone()
-      url.pathname = dashboardPath
+      url.pathname = getDashboardPathForRole(role)
       return NextResponse.redirect(url)
     }
 
-    if (pathname === '/') {
+    if (pathname === '/' && role) {
       const url = request.nextUrl.clone()
-      url.pathname = dashboardPath
+      url.pathname = getDashboardPathForRole(role)
       return NextResponse.redirect(url)
     }
 
