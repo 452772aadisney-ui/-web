@@ -12,6 +12,11 @@ export const metadata: Metadata = {
   description: '大学受験生向け学習管理アプリ',
 }
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
