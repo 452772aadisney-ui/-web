@@ -1,4 +1,4 @@
-import { unstable_cache } from 'next/cache'
+import { cache } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import type { Announcement, AnnouncementRead, AnnouncementWithTargets } from '@/types/announcement'
 
@@ -94,18 +94,11 @@ export async function fetchAllAnnouncementReads(): Promise<AnnouncementRead[]> {
   return (data as AnnouncementRead[]) ?? []
 }
 
-export async function fetchUnreadAnnouncementCount(studentId: string): Promise<number> {
-  const cached = unstable_cache(
-    async () => {
-      const [announcements, reads] = await Promise.all([
-        fetchAnnouncementsForStudent(studentId),
-        fetchAnnouncementReadsForStudent(studentId),
-      ])
-      const readIds = new Set(reads.map((r) => r.announcement_id))
-      return announcements.filter((a) => !readIds.has(a.id)).length
-    },
-    ['unread-announcement-count', studentId],
-    { revalidate: 30 },
-  )
-  return cached()
-}
+export const fetchUnreadAnnouncementCount = cache(async (studentId: string): Promise<number> => {
+  const [announcements, reads] = await Promise.all([
+    fetchAnnouncementsForStudent(studentId),
+    fetchAnnouncementReadsForStudent(studentId),
+  ])
+  const readIds = new Set(reads.map((r) => r.announcement_id))
+  return announcements.filter((a) => !readIds.has(a.id)).length
+})

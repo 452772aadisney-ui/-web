@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
-import { fetchUnreadChatCount } from '@/lib/chat/unread'
+import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
 import {
   ADMIN_HAMBURGER_ITEMS,
   type HamburgerMenuItem,

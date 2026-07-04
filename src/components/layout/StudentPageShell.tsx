@@ -2,7 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { fetchUnreadAnnouncementCount } from '@/lib/announcements/queries'
-import { fetchUnreadChatCount } from '@/lib/chat/unread'
+import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
 import { HamburgerMenu } from '@/components/layout/HamburgerMenu'
 import {
   STUDENT_HAMBURGER_ITEMS,
