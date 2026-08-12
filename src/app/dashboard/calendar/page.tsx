@@ -2,7 +2,8 @@ import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { ScheduleCalendar } from '@/components/schedule/ScheduleCalendar'
-import { buildCalendarEvents } from '@/lib/calendar/build-events'
+import { buildCalendarEvents, buildCoachingCalendarEvents } from '@/lib/calendar/build-events'
+import { fetchCoachingBookingsForStudent } from '@/lib/coaching/queries'
 import {
   fetchExamSchedulesForStudent,
   fetchHomeworkTasksForStudent,
@@ -14,18 +15,22 @@ export default async function StudentCalendarPage() {
 
   if (!profile) redirect('/login')
 
-  const [exams, homework, textbooks] = await Promise.all([
+  const [exams, homework, textbooks, coachingBookings] = await Promise.all([
     fetchExamSchedulesForStudent(profile.id),
     fetchHomeworkTasksForStudent(profile.id),
     fetchTextbooksForStudent(profile.id),
+    fetchCoachingBookingsForStudent(profile.id),
   ])
 
-  const events = buildCalendarEvents(exams, homework, textbooks)
+  const events = [
+    ...buildCalendarEvents(exams, homework, textbooks),
+    ...buildCoachingCalendarEvents(coachingBookings),
+  ].sort((a, b) => a.date.localeCompare(b.date))
 
   return (
     <StudentPageShell title="カレンダー" backHref="/dashboard" backLabel="ダッシュボード">
       <p className="mb-6 text-sm text-muted">
-        模試・小テスト、宿題・タスク、参考書の開始・終了予定日を一覧できます。
+        模試・小テスト、宿題・タスク、参考書、コーチング予約を一覧できます。
       </p>
       <ScheduleCalendar events={events} />
     </StudentPageShell>

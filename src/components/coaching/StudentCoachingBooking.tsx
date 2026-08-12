@@ -4,7 +4,7 @@ import { useActionState, useState } from 'react'
 import Link from 'next/link'
 import { bookCoachingSlot, cancelCoachingBooking, type CoachingActionState } from '@/app/coaching/actions'
 import { CoachingWeekGrid } from '@/components/coaching/CoachingWeekGrid'
-import { formatCoachingDateTimeRange } from '@/lib/coaching/format'
+import { formatCoachingBookingDateTime } from '@/lib/coaching/format'
 import type {
   AvailableCoachingSlot,
   CoachingBookingWithDetails,
@@ -18,7 +18,7 @@ const fieldClass =
 interface StudentCoachingBookingProps {
   coaches: CoachingCoach[]
   selectedCoachId: string | null
-  weekStart: string
+  windowStart: string
   availableSlots: AvailableCoachingSlot[]
   bookings: CoachingBookingWithDetails[]
 }
@@ -36,7 +36,12 @@ function BookingForm({
     <form action={formAction} className="mt-4 space-y-3 rounded-lg border border-primary/30 bg-blue-50/40 p-4">
       <input type="hidden" name="slotId" value={slot.id} />
       <p className="text-sm font-medium">
-        {slot.coach.name} / {formatCoachingDateTimeRange(slot.starts_at, slot.ends_at)}
+        {slot.coach.name} / {formatCoachingBookingDateTime(
+          slot.slot_date,
+          slot.start_time,
+          slot.starts_at,
+          slot.ends_at,
+        )}
       </p>
       <label className="block">
         <span className="mb-1 block text-sm font-medium">伝えておきたいこと（任意）</span>
@@ -68,7 +73,7 @@ function BookingForm({
 export function StudentCoachingBooking({
   coaches,
   selectedCoachId,
-  weekStart,
+  windowStart,
   availableSlots,
   bookings,
 }: StudentCoachingBookingProps) {
@@ -94,7 +99,7 @@ export function StudentCoachingBooking({
             {coaches.map((coach) => (
               <Link
                 key={coach.id}
-                href={`/dashboard/coaching?coach=${coach.id}&week=${weekStart}`}
+                href={`/dashboard/coaching?coach=${coach.id}&start=${windowStart}`}
                 className={`rounded-xl border px-4 py-3 text-sm font-medium transition ${
                   selectedCoachId === coach.id
                     ? 'border-primary bg-blue-50 text-primary'
@@ -111,13 +116,13 @@ export function StudentCoachingBooking({
       {selectedCoachId && (
         <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-bold">2. 日時を選ぶ</h2>
-          <p className="mt-1 text-sm text-muted">開放されている枠のみ表示されます。</p>
+          <p className="mt-1 text-sm text-muted">3日分の開放枠を表示しています。</p>
 
           <div className="mt-4">
             <CoachingWeekGrid
               mode="student"
               coachId={selectedCoachId}
-              weekStart={weekStart}
+              windowStart={windowStart}
               gridSlots={[]}
               availableSlots={availableSlots}
               selectedSlotId={selectedSlot?.id ?? null}
@@ -126,7 +131,7 @@ export function StudentCoachingBooking({
           </div>
 
           {availableSlots.length === 0 && (
-            <p className="mt-4 text-sm text-muted">この週に予約可能な枠はありません。</p>
+            <p className="mt-4 text-sm text-muted">この期間に予約可能な枠はありません。</p>
           )}
 
           {selectedSlot && (
@@ -145,7 +150,12 @@ export function StudentCoachingBooking({
               <li key={booking.id} className="rounded-lg border border-border p-4">
                 <p className="font-medium">{booking.coach.name}</p>
                 <p className="mt-1 text-sm text-muted">
-                  {formatCoachingDateTimeRange(booking.slot.starts_at, booking.slot.ends_at)}
+                  {formatCoachingBookingDateTime(
+                    booking.slot.slot_date,
+                    booking.slot.start_time,
+                    booking.slot.starts_at,
+                    booking.slot.ends_at,
+                  )}
                 </p>
                 {booking.student_note && (
                   <p className="mt-2 text-sm">伝言: {booking.student_note}</p>
@@ -170,7 +180,12 @@ export function StudentCoachingBooking({
               <li key={booking.id} className="rounded-lg border border-border p-4">
                 <p className="font-medium">{booking.coach.name}</p>
                 <p className="mt-1 text-sm text-muted">
-                  {formatCoachingDateTimeRange(booking.slot.starts_at, booking.slot.ends_at)}
+                  {formatCoachingBookingDateTime(
+                    booking.slot.slot_date,
+                    booking.slot.start_time,
+                    booking.slot.starts_at,
+                    booking.slot.ends_at,
+                  )}
                 </p>
               </li>
             ))}

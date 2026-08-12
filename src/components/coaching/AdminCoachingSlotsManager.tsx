@@ -3,22 +3,13 @@
 import { useActionState, useState } from 'react'
 import Link from 'next/link'
 import {
-  cancelCoachingBooking,
-  completeCoachingBooking,
   createCoachingCoach,
   deleteCoachingCoach,
   updateCoachingCoach,
-  bookCoachingSlot,
   type CoachingActionState,
 } from '@/app/coaching/actions'
 import { CoachingWeekGrid } from '@/components/coaching/CoachingWeekGrid'
-import { getPersonName } from '@/lib/auth/display-name'
-import { formatCoachingDateTimeRange } from '@/lib/coaching/format'
-import type {
-  AvailableCoachingSlot,
-  CoachingBookingWithDetails,
-  CoachingCoach,
-} from '@/types/coaching'
+import type { CoachingCoach } from '@/types/coaching'
 import type { CoachingGridSlot } from '@/lib/coaching/queries'
 
 const initialState: CoachingActionState = {}
@@ -76,27 +67,21 @@ function CoachForm({
   )
 }
 
-interface AdminCoachingManagerProps {
+interface AdminCoachingSlotsManagerProps {
   coaches: CoachingCoach[]
   selectedCoachId: string | null
   weekStart: string
   gridSlots: CoachingGridSlot[]
-  bookings: CoachingBookingWithDetails[]
 }
 
-export function AdminCoachingManager({
+export function AdminCoachingSlotsManager({
   coaches,
   selectedCoachId,
   weekStart,
   gridSlots,
-  bookings,
-}: AdminCoachingManagerProps) {
+}: AdminCoachingSlotsManagerProps) {
   const [editingCoachId, setEditingCoachId] = useState<string | null>(null)
   const activeCoaches = coaches.filter((c) => c.is_active)
-
-  const upcomingBookings = bookings.filter(
-    (b) => b.status === 'scheduled' && new Date(b.slot.starts_at) >= new Date(),
-  )
 
   return (
     <div className="space-y-8">
@@ -186,49 +171,6 @@ export function AdminCoachingManager({
               </div>
             )}
           </>
-        )}
-      </section>
-
-      <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <h2 className="text-lg font-bold">予約一覧</h2>
-        {upcomingBookings.length === 0 ? (
-          <p className="mt-4 text-sm text-muted">今後の予約はありません。</p>
-        ) : (
-          <ul className="mt-4 divide-y divide-border rounded-lg border border-border">
-            {upcomingBookings.map((booking) => (
-              <li key={booking.id} className="p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="font-medium">
-                      {booking.student ? getPersonName(booking.student) : '生徒'}
-                      {' / '}
-                      {booking.coach.name}
-                    </p>
-                    <p className="mt-1 text-sm text-muted">
-                      {formatCoachingDateTimeRange(booking.slot.starts_at, booking.slot.ends_at)}
-                    </p>
-                    {booking.student_note && (
-                      <p className="mt-2 text-sm">伝言: {booking.student_note}</p>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 gap-3">
-                    <form action={completeCoachingBooking}>
-                      <input type="hidden" name="bookingId" value={booking.id} />
-                      <button type="submit" className="text-xs text-primary hover:underline">
-                        完了にする
-                      </button>
-                    </form>
-                    <form action={cancelCoachingBooking}>
-                      <input type="hidden" name="bookingId" value={booking.id} />
-                      <button type="submit" className="text-xs text-error hover:underline">
-                        キャンセル
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
         )}
       </section>
     </div>

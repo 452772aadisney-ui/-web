@@ -1,4 +1,6 @@
 import type { CalendarEvent } from '@/lib/calendar/events'
+import { formatCoachingSlotDateTime } from '@/lib/coaching/format'
+import type { CoachingBookingWithDetails } from '@/types/coaching'
 import type { ExamSchedule, HomeworkTask } from '@/types/schedule'
 import type { Textbook } from '@/types/textbook'
 
@@ -66,4 +68,27 @@ export function buildCalendarEvents(
   }
 
   return events.sort((a, b) => a.date.localeCompare(b.date))
+}
+
+export function buildCoachingCalendarEvents(
+  bookings: CoachingBookingWithDetails[],
+): CalendarEvent[] {
+  return bookings
+    .filter((booking) => booking.status !== 'cancelled')
+    .map((booking) => {
+      const slotDate = booking.slot.slot_date ?? booking.slot.starts_at.slice(0, 10)
+      const startTime = booking.slot.start_time?.slice(0, 5)
+
+      return {
+        id: `coaching-${booking.id}`,
+        date: slotDate,
+        type: 'coaching' as const,
+        title: `コーチング（${booking.coach.name}）`,
+        detail:
+          slotDate && startTime
+            ? formatCoachingSlotDateTime(slotDate, startTime).replace(/^[^\s]+\s/, '')
+            : undefined,
+      }
+    })
+    .sort((a, b) => a.date.localeCompare(b.date))
 }

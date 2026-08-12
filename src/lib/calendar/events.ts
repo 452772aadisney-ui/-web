@@ -7,6 +7,7 @@ export type CalendarEventType =
   | 'homework'
   | 'textbook_start'
   | 'textbook_end'
+  | 'coaching'
 
 export interface CalendarEvent {
   id: string
@@ -24,6 +25,7 @@ export const CALENDAR_EVENT_LABELS: Record<CalendarEventType, string> = {
   homework: '宿題・タスク',
   textbook_start: '参考書開始',
   textbook_end: '参考書終了予定',
+  coaching: 'コーチング',
 }
 
 export const CALENDAR_EVENT_COLORS: Record<CalendarEventType, string> = {
@@ -33,6 +35,7 @@ export const CALENDAR_EVENT_COLORS: Record<CalendarEventType, string> = {
   homework: 'bg-blue-500',
   textbook_start: 'bg-emerald-500',
   textbook_end: 'bg-purple-500',
+  coaching: 'bg-cyan-500',
 }
 
 export const EXAM_TYPE_LABELS: Record<ExamScheduleType, string> = {

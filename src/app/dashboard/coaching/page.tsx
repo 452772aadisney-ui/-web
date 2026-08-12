@@ -7,15 +7,16 @@ import {
   fetchAvailableCoachingSlots,
   fetchCoachingBookingsForStudent,
   fetchCoachingCoaches,
+  getTodayDateKey,
 } from '@/lib/coaching/queries'
-import { getWeekStartMonday } from '@/lib/coaching/week'
+import { getThreeDayWindow } from '@/lib/coaching/week'
 
 export const dynamic = 'force-dynamic'
 
 export default async function StudentCoachingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ coach?: string; week?: string }>
+  searchParams: Promise<{ coach?: string; start?: string }>
 }) {
   const profile = await getCurrentProfile()
 
@@ -23,7 +24,8 @@ export default async function StudentCoachingPage({
   if (profile.role !== 'student') redirect(getDashboardPathForRole('admin'))
 
   const params = await searchParams
-  const weekStart = params.week ?? getWeekStartMonday()
+  const windowStart = params.start ?? getTodayDateKey()
+  const dateKeys = getThreeDayWindow(windowStart).map((day) => day.date)
 
   const coaches = await fetchCoachingCoaches(true)
   const selectedCoachId =
@@ -33,7 +35,7 @@ export default async function StudentCoachingPage({
 
   const [availableSlots, bookings] = await Promise.all([
     selectedCoachId
-      ? fetchAvailableCoachingSlots(selectedCoachId, weekStart)
+      ? fetchAvailableCoachingSlots(selectedCoachId, dateKeys)
       : Promise.resolve([]),
     fetchCoachingBookingsForStudent(profile.id),
   ])
@@ -46,7 +48,7 @@ export default async function StudentCoachingPage({
       <StudentCoachingBooking
         coaches={coaches}
         selectedCoachId={selectedCoachId}
-        weekStart={weekStart}
+        windowStart={windowStart}
         availableSlots={availableSlots}
         bookings={bookings}
       />

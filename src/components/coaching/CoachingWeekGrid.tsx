@@ -3,8 +3,16 @@
 import { useRouter } from 'next/navigation'
 import { useTransition } from 'react'
 import { toggleCoachingSlot } from '@/app/coaching/actions'
-import { COACHING_SLOT_TIMES, slotDateTimeKey } from '@/lib/coaching/slot-times'
-import { formatWeekRange, getWeekdays, shiftWeekStart, type WeekDay } from '@/lib/coaching/week'
+import { COACHING_SLOT_TIMES, buildSlotDateTime, slotDateTimeKey } from '@/lib/coaching/slot-times'
+import {
+  formatDayRange,
+  formatWeekRange,
+  getThreeDayWindow,
+  getWeekdays,
+  shiftStartDate,
+  shiftWeekStart,
+  type WeekDay,
+} from '@/lib/coaching/week'
 import type { AvailableCoachingSlot } from '@/types/coaching'
 import type { CoachingGridSlot } from '@/lib/coaching/queries'
 import { cn } from '@/lib/utils'
@@ -12,7 +20,8 @@ import { cn } from '@/lib/utils'
 interface CoachingWeekGridProps {
   mode: 'admin' | 'student'
   coachId: string
-  weekStart: string
+  weekStart?: string
+  windowStart?: string
   gridSlots: CoachingGridSlot[]
   availableSlots?: AvailableCoachingSlot[]
   onSelectSlot?: (slot: AvailableCoachingSlot) => void
@@ -71,6 +80,49 @@ function WeekNav({
   )
 }
 
+function ThreeDayNav({
+  windowStart,
+  coachId,
+}: {
+  windowStart: string
+  coachId: string
+}) {
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+  const days = getThreeDayWindow(windowStart)
+
+  function goWindow(offsetDays: number) {
+    const next = shiftStartDate(windowStart, offsetDays)
+    startTransition(() => {
+      router.push(`/dashboard/coaching?coach=${coachId}&start=${next}`)
+    })
+  }
+
+  return (
+    <div className="mb-4 flex items-center justify-between gap-3">
+      <button
+        type="button"
+        onClick={() => goWindow(-3)}
+        disabled={pending}
+        className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-background disabled:opacity-60"
+        aria-label="前の3日"
+      >
+        ←
+      </button>
+      <p className="text-sm font-medium">{formatDayRange(days)}</p>
+      <button
+        type="button"
+        onClick={() => goWindow(3)}
+        disabled={pending}
+        className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-background disabled:opacity-60"
+        aria-label="次の3日"
+      >
+        →
+      </button>
+    </div>
+  )
+}
+
 function AdminCell({
   coachId,
   day,
@@ -87,7 +139,7 @@ function AdminCell({
 
   const isPast = slot
     ? new Date(slot.starts_at) <= new Date()
-    : new Date(`${day.date}T${startTime}:00`) <= new Date()
+    : buildSlotDateTime(day.date, startTime) <= new Date()
 
   if (isPast) {
     return <div className="h-10 rounded-full bg-muted/20" />
@@ -131,20 +183,20 @@ function AdminCell({
   )
 }
 
-function StudentWeekGrid({
-  weekStart,
+function StudentThreeDayGrid({
+  windowStart,
   coachId,
   availableSlots,
   selectedSlotId,
   onSelectSlot,
 }: {
-  weekStart: string
+  windowStart: string
   coachId: string
   availableSlots: AvailableCoachingSlot[]
   selectedSlotId?: string | null
   onSelectSlot?: (slot: AvailableCoachingSlot) => void
 }) {
-  const weekdays = getWeekdays(weekStart)
+  const days = getThreeDayWindow(windowStart)
   const slotsByDay = new Map<string, AvailableCoachingSlot[]>()
 
   for (const slot of availableSlots) {
@@ -158,11 +210,11 @@ function StudentWeekGrid({
   }
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-border bg-white p-4 shadow-sm">
-      <WeekNav weekStart={weekStart} coachId={coachId} basePath="/dashboard/coaching" />
+    <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
+      <ThreeDayNav windowStart={windowStart} coachId={coachId} />
 
-      <div className="grid min-w-[480px] grid-cols-5 gap-3">
-        {weekdays.map((day) => {
+      <div className="grid grid-cols-3 gap-3">
+        {days.map((day) => {
           const daySlots = slotsByDay.get(day.date) ?? []
 
           return (
@@ -200,7 +252,8 @@ function StudentWeekGrid({
 export function CoachingWeekGrid({
   mode,
   coachId,
-  weekStart,
+  weekStart = '',
+  windowStart = '',
   gridSlots,
   availableSlots = [],
   onSelectSlot,
@@ -208,8 +261,8 @@ export function CoachingWeekGrid({
 }: CoachingWeekGridProps) {
   if (mode === 'student') {
     return (
-      <StudentWeekGrid
-        weekStart={weekStart}
+      <StudentThreeDayGrid
+        windowStart={windowStart}
         coachId={coachId}
         availableSlots={availableSlots}
         selectedSlotId={selectedSlotId}
@@ -220,11 +273,10 @@ export function CoachingWeekGrid({
 
   const weekdays = getWeekdays(weekStart)
   const gridMap = buildGridMap(gridSlots)
-  const basePath = '/admin/coaching'
 
   return (
     <div className="overflow-x-auto rounded-2xl border border-border bg-white p-4 shadow-sm">
-      <WeekNav weekStart={weekStart} coachId={coachId} basePath={basePath} />
+      <WeekNav weekStart={weekStart} coachId={coachId} basePath="/admin/coaching" />
 
       <div
         className="grid min-w-[640px] gap-2"

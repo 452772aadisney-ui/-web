@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import {
   buildSlotDateTime,
   buildSlotEndDateTime,
+  getTodayDateKey,
   slotDateTimeKey,
 } from '@/lib/coaching/slot-times'
 import { getWeekdays, parseDateKey } from '@/lib/coaching/week'
@@ -153,29 +154,27 @@ export async function fetchCoachingGridForWeek(
 
 export async function fetchAvailableCoachingSlots(
   coachId?: string,
-  weekStartMonday?: string,
+  dateKeys?: string[],
 ): Promise<AvailableCoachingSlot[]> {
   const supabase = await createClient()
   const now = new Date()
+  const todayKey = getTodayDateKey()
 
   let query = supabase
     .from('coaching_slots')
     .select('*, coaching_coaches!inner(id, name, is_active)')
     .eq('is_open', true)
-    .gte('starts_at', now.toISOString())
+    .gte('slot_date', todayKey)
     .eq('coaching_coaches.is_active', true)
-    .order('starts_at')
+    .order('slot_date')
+    .order('start_time')
 
   if (coachId) {
     query = query.eq('coach_id', coachId)
   }
 
-  if (weekStartMonday) {
-    const weekdays = getWeekdays(weekStartMonday)
-    query = query.in(
-      'slot_date',
-      weekdays.map((d) => d.date),
-    )
+  if (dateKeys && dateKeys.length > 0) {
+    query = query.in('slot_date', dateKeys)
   }
 
   const { data, error } = await query
@@ -294,4 +293,4 @@ export function slotEndsAtIso(slotDate: string, startTime: string): string {
   return buildSlotEndDateTime(slotDate, startTime).toISOString()
 }
 
-export { slotDateTimeKey, parseDateKey }
+export { slotDateTimeKey, parseDateKey, getTodayDateKey }

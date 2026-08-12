@@ -2,12 +2,9 @@ import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { getDashboardPathForRole } from '@/lib/auth/routes'
 import { AdminPageShell } from '@/components/layout/AdminPageShell'
-import { AdminCoachingManager } from '@/components/coaching/AdminCoachingManager'
-import {
-  fetchCoachingBookingsForAdmin,
-  fetchCoachingCoaches,
-  fetchCoachingGridForWeek,
-} from '@/lib/coaching/queries'
+import { AdminCoachingNav } from '@/components/coaching/AdminCoachingNav'
+import { AdminCoachingSlotsManager } from '@/components/coaching/AdminCoachingSlotsManager'
+import { fetchCoachingCoaches, fetchCoachingGridForWeek } from '@/lib/coaching/queries'
 import { getWeekStartMonday } from '@/lib/coaching/week'
 
 export default async function AdminCoachingPage({
@@ -23,10 +20,7 @@ export default async function AdminCoachingPage({
   const params = await searchParams
   const weekStart = params.week ?? getWeekStartMonday()
 
-  const [coaches, bookings] = await Promise.all([
-    fetchCoachingCoaches(),
-    fetchCoachingBookingsForAdmin(),
-  ])
+  const coaches = await fetchCoachingCoaches()
 
   const activeCoaches = coaches.filter((c) => c.is_active)
   const selectedCoachId =
@@ -39,16 +33,16 @@ export default async function AdminCoachingPage({
     : []
 
   return (
-    <AdminPageShell title="コーチング予約" backHref="/admin" backLabel="管理画面">
+    <AdminPageShell title="コーチング枠設定" backHref="/admin" backLabel="管理画面">
+      <AdminCoachingNav />
       <p className="mb-6 text-sm text-muted">
         担当講師ごとに週間グリッドから予約枠を開放します。生徒には開放された枠だけが表示されます。
       </p>
-      <AdminCoachingManager
+      <AdminCoachingSlotsManager
         coaches={coaches}
         selectedCoachId={selectedCoachId}
         weekStart={weekStart}
         gridSlots={gridSlots}
-        bookings={bookings}
       />
     </AdminPageShell>
   )

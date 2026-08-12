@@ -16,7 +16,9 @@ export type CoachingActionState = {
 
 function revalidateCoachingPaths() {
   revalidatePath('/admin/coaching')
+  revalidatePath('/admin/coaching/bookings')
   revalidatePath('/dashboard/coaching')
+  revalidatePath('/dashboard/calendar')
   revalidatePath('/dashboard')
 }
 

@@ -60,3 +60,36 @@ export function formatWeekRange(weekStartMonday: string): string {
   const last = parseDateKey(days[4].date)
   return `${first.getMonth() + 1}/${first.getDate()} 〜 ${last.getMonth() + 1}/${last.getDate()}`
 }
+
+function toWeekDay(date: Date): WeekDay {
+  const jsDay = date.getDay()
+  const weekdayIndex = jsDay === 0 ? 6 : jsDay - 1
+  return {
+    date: toDateKey(date),
+    label: `${WEEKDAY_LABELS[weekdayIndex]} ${date.getDate()}`,
+    weekdayLabel: WEEKDAY_LABELS[weekdayIndex],
+    dayNumber: date.getDate(),
+  }
+}
+
+/** 指定日から連続3日間（生徒向け予約画面） */
+export function getThreeDayWindow(startDate: string): WeekDay[] {
+  const start = parseDateKey(startDate)
+  return Array.from({ length: 3 }, (_, index) => {
+    const date = new Date(start)
+    date.setDate(start.getDate() + index)
+    return toWeekDay(date)
+  })
+}
+
+export function shiftStartDate(startDate: string, days: number): string {
+  const d = parseDateKey(startDate)
+  d.setDate(d.getDate() + days)
+  return toDateKey(d)
+}
+
+export function formatDayRange(days: WeekDay[]): string {
+  const first = parseDateKey(days[0].date)
+  const last = parseDateKey(days[days.length - 1].date)
+  return `${first.getMonth() + 1}/${first.getDate()} 〜 ${last.getMonth() + 1}/${last.getDate()}`
+}
