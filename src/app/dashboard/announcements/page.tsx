@@ -8,6 +8,8 @@ import {
 } from '@/lib/announcements/queries'
 import type { AnnouncementWithReadStatus } from '@/types/announcement'
 
+export const dynamic = 'force-dynamic'
+
 export default async function StudentAnnouncementsPage() {
   const profile = await getCurrentProfile()
 

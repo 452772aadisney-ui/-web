@@ -1,9 +1,11 @@
 import Link from 'next/link'
 import { redirect, notFound } from 'next/navigation'
-import { markAnnouncementAsRead } from '@/app/announcements/actions'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
+import { MarkAnnouncementRead } from '@/components/announcements/MarkAnnouncementRead'
 import { fetchAnnouncementById } from '@/lib/announcements/queries'
+
+export const dynamic = 'force-dynamic'
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso)
@@ -29,10 +31,9 @@ export default async function StudentAnnouncementDetailPage({
   const announcement = await fetchAnnouncementById(id)
   if (!announcement) notFound()
 
-  await markAnnouncementAsRead(id)
-
   return (
     <StudentPageShell title="お知らせ" backHref="/dashboard/announcements" backLabel="お知らせ一覧">
+      <MarkAnnouncementRead announcementId={id} />
       <article className="rounded-2xl border border-border bg-white p-6 shadow-sm">
         <h2 className="text-xl font-bold">{announcement.title}</h2>
         <p className="mt-2 text-sm text-muted">{formatDateTime(announcement.created_at)}</p>

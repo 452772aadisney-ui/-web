@@ -28,8 +28,8 @@ export async function StudentPageShell({
   const profile = await getCurrentProfile()
   const [unreadAnnouncementCount, unreadChatCount] = profile
     ? await Promise.all([
-        fetchUnreadAnnouncementCount(profile.id),
-        fetchUnreadChatCount(profile.id),
+        fetchUnreadAnnouncementCount(profile.id).catch(() => 0),
+        fetchUnreadChatCount(profile.id).catch(() => 0),
       ])
     : [0, 0]
 
