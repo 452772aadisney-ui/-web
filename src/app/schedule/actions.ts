@@ -29,10 +29,20 @@ async function assertAdmin(): Promise<string | null> {
 
 function revalidateSchedulePaths() {
   revalidatePath('/admin/schedule')
+  revalidatePath('/admin/schedule/quiz')
+  revalidatePath('/admin/schedule/homework')
+  revalidatePath('/admin/schedule/application')
+  revalidatePath('/admin/schedule/mock-exam')
   revalidatePath('/admin/textbooks')
   revalidatePath('/dashboard/calendar')
   revalidatePath('/dashboard/todo')
   revalidatePath('/admin/students')
+}
+
+function parseReturnOn(formData: FormData, examType: ExamScheduleType): string | null {
+  const raw = String(formData.get('returnOn') ?? '').trim()
+  if (examType !== 'mock_exam') return null
+  return raw || null
 }
 
 function parseStudentIds(formData: FormData): string[] {
@@ -125,15 +135,24 @@ export async function createExamSchedule(
   const examType = String(formData.get('examType') ?? '') as ExamScheduleType
   const subject = String(formData.get('subject') ?? '').trim()
   const scheduledOn = String(formData.get('scheduledOn') ?? '').trim()
+  const returnOn = parseReturnOn(formData, examType)
   const note = String(formData.get('note') ?? '').trim()
   const studentIds = parseStudentIds(formData)
 
   if (!title || !scheduledOn) {
-    return { error: 'タイトルと実施日は必須です' }
+    return { error: 'タイトルと受験日は必須です' }
   }
 
   if (examType !== 'mock_exam' && examType !== 'quiz') {
     return { error: '種別を選択してください' }
+  }
+
+  if (examType === 'mock_exam' && !returnOn) {
+    return { error: '返却日を入力してください' }
+  }
+
+  if (examType === 'mock_exam' && returnOn && returnOn < scheduledOn) {
+    return { error: '返却日は受験日以降にしてください' }
   }
 
   if (studentIds.length === 0) {
@@ -148,6 +167,7 @@ export async function createExamSchedule(
       exam_type: examType,
       subject,
       scheduled_on: scheduledOn,
+      return_on: returnOn,
       note,
       target_all: false,
     })
@@ -175,11 +195,20 @@ export async function updateExamSchedule(
   const examType = String(formData.get('examType') ?? '') as ExamScheduleType
   const subject = String(formData.get('subject') ?? '').trim()
   const scheduledOn = String(formData.get('scheduledOn') ?? '').trim()
+  const returnOn = parseReturnOn(formData, examType)
   const note = String(formData.get('note') ?? '').trim()
   const studentIds = parseStudentIds(formData)
 
   if (!id || !title || !scheduledOn) {
     return { error: '必須項目を入力してください' }
+  }
+
+  if (examType === 'mock_exam' && !returnOn) {
+    return { error: '返却日を入力してください' }
+  }
+
+  if (examType === 'mock_exam' && returnOn && returnOn < scheduledOn) {
+    return { error: '返却日は受験日以降にしてください' }
   }
 
   if (studentIds.length === 0) {
@@ -194,6 +223,7 @@ export async function updateExamSchedule(
       exam_type: examType,
       subject,
       scheduled_on: scheduledOn,
+      return_on: returnOn,
       note,
       target_all: false,
     })

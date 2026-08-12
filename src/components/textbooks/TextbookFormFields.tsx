@@ -1,3 +1,5 @@
+import { TEXTBOOK_USAGE_TAGS } from '@/lib/constants/textbook-tags'
+
 const inputClass =
   'w-full rounded-lg border border-border bg-card px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20'
 
@@ -72,3 +74,36 @@ export function SubjectTagFields({
 }
 
 export { inputClass }
+
+interface UsageTagFieldsProps {
+  selectedUsageTags?: string[]
+}
+
+export function UsageTagFields({ selectedUsageTags = [] }: UsageTagFieldsProps) {
+  const selected = new Set(selectedUsageTags)
+
+  return (
+    <fieldset>
+      <legend className="mb-2 text-sm font-medium">
+        用途タグ <span className="text-error">*</span>
+      </legend>
+      <p className="mb-2 text-xs text-muted">授業用・自習用から選べます（複数選択可）</p>
+      <div className="flex flex-wrap gap-2">
+        {TEXTBOOK_USAGE_TAGS.map((tag) => (
+          <label
+            key={tag}
+            className="flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm has-checked:border-primary has-checked:bg-blue-50"
+          >
+            <input
+              type="checkbox"
+              name={`usage_${tag}`}
+              defaultChecked={selected.has(tag)}
+              className="accent-primary"
+            />
+            {tag}
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  )
+}

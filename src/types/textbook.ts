@@ -3,6 +3,7 @@ export interface Textbook {
   student_id: string
   name: string
   subjects: string[]
+  usage_tags: string[]
   start_date: string | null
   planned_end_date: string | null
   created_at: string

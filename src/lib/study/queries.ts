@@ -15,7 +15,10 @@ export async function fetchTextbooksForStudent(studentId: string): Promise<Textb
     return []
   }
 
-  return data as Textbook[]
+  return data.map((book) => ({
+    ...(book as Textbook),
+    usage_tags: (book as Textbook).usage_tags ?? [],
+  }))
 }
 
 export async function fetchStudyLogsForStudent(studentId: string): Promise<StudyLog[]> {

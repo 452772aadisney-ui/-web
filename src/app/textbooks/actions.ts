@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { TEXTBOOK_USAGE_TAGS } from '@/lib/constants/textbook-tags'
 import { parseOptionalDate, validateDateRange } from '@/lib/textbooks/format'
 
 export type TextbookActionState = {
@@ -11,6 +12,10 @@ export type TextbookActionState = {
 
 function parseSubjects(formData: FormData, allowedSubjects: string[]): string[] {
   return allowedSubjects.filter((subject) => formData.get(`subject_${subject}`) === 'on')
+}
+
+function parseUsageTags(formData: FormData): string[] {
+  return TEXTBOOK_USAGE_TAGS.filter((tag) => formData.get(`usage_${tag}`) === 'on')
 }
 
 function parseTextbookDates(formData: FormData): {
@@ -84,6 +89,7 @@ export async function createTextbook(
   const name = String(formData.get('name') ?? '').trim()
   const allowedSubjects = (await getAllowedSubjectsForStudent(studentId)) ?? []
   const subjects = parseSubjects(formData, allowedSubjects)
+  const usageTags = parseUsageTags(formData)
   const { startDate, plannedEndDate, error: dateError } = parseTextbookDates(formData)
 
   if (!name) {
@@ -94,6 +100,10 @@ export async function createTextbook(
     return { error: '科目タグを1つ以上選択してください' }
   }
 
+  if (usageTags.length === 0) {
+    return { error: '用途タグを1つ以上選択してください' }
+  }
+
   if (dateError) {
     return { error: dateError }
   }
@@ -102,6 +112,7 @@ export async function createTextbook(
     student_id: studentId,
     name,
     subjects,
+    usage_tags: usageTags,
     start_date: startDate,
     planned_end_date: plannedEndDate,
   })
@@ -127,6 +138,7 @@ export async function updateTextbook(
   const name = String(formData.get('name') ?? '').trim()
   const allowedSubjects = (await getAllowedSubjectsForStudent(studentId)) ?? []
   const subjects = parseSubjects(formData, allowedSubjects)
+  const usageTags = parseUsageTags(formData)
   const { startDate, plannedEndDate, error: dateError } = parseTextbookDates(formData)
 
   if (!textbookId) {
@@ -141,6 +153,10 @@ export async function updateTextbook(
     return { error: '科目タグを1つ以上選択してください' }
   }
 
+  if (usageTags.length === 0) {
+    return { error: '用途タグを1つ以上選択してください' }
+  }
+
   if (dateError) {
     return { error: dateError }
   }
@@ -150,6 +166,7 @@ export async function updateTextbook(
     .update({
       name,
       subjects,
+      usage_tags: usageTags,
       start_date: startDate,
       planned_end_date: plannedEndDate,
     })
@@ -195,5 +212,8 @@ export async function loadTextbooksForAdmin(studentId: string) {
     .eq('student_id', studentId)
     .order('name')
 
-  return data ?? []
+  return (data ?? []).map((book) => ({
+    ...book,
+    usage_tags: book.usage_tags ?? [],
+  }))
 }

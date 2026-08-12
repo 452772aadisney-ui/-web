@@ -16,8 +16,19 @@ export function buildCalendarEvents(
       type: exam.exam_type,
       title: exam.title,
       subject: exam.subject || undefined,
-      detail: exam.note || undefined,
+      detail: exam.exam_type === 'mock_exam' ? '受験日' : exam.note || undefined,
     })
+
+    if (exam.exam_type === 'mock_exam' && exam.return_on) {
+      events.push({
+        id: `exam-return-${exam.id}`,
+        date: exam.return_on,
+        type: 'mock_exam_return',
+        title: exam.title,
+        subject: exam.subject || undefined,
+        detail: '返却日',
+      })
+    }
   }
 
   for (const task of homework) {

@@ -12,6 +12,7 @@ import {
   inputClass,
   SubjectTagFields,
   TextbookDateFields,
+  UsageTagFields,
 } from '@/components/textbooks/TextbookFormFields'
 import { formatTextbookPeriod } from '@/lib/textbooks/format'
 import type { Textbook } from '@/types/textbook'
@@ -59,6 +60,7 @@ function TextbookEditForm({
       </label>
 
       <SubjectTagFields profileSubjects={profileSubjects} selectedSubjects={book.subjects} />
+      <UsageTagFields selectedUsageTags={book.usage_tags} />
       <TextbookDateFields startDate={book.start_date} plannedEndDate={book.planned_end_date} />
 
       {state.error && (
@@ -135,6 +137,7 @@ export function TextbookManager({
         </label>
 
         <SubjectTagFields profileSubjects={profileSubjects} />
+        <UsageTagFields />
         <TextbookDateFields />
 
         {state.error && (
@@ -172,7 +175,10 @@ export function TextbookManager({
                 <div className="flex items-start justify-between gap-4 px-4 py-3">
                   <div>
                     <p className="font-medium">{book.name}</p>
-                    <p className="mt-1 text-xs text-muted">{book.subjects.join('・')}</p>
+                    <p className="mt-1 text-xs text-muted">
+                      {book.subjects.join('・')}
+                      {book.usage_tags.length > 0 ? ` / ${book.usage_tags.join('・')}` : ''}
+                    </p>
                     <p className="mt-1 text-xs text-muted">
                       期間: {formatTextbookPeriod(book.start_date, book.planned_end_date)}
                     </p>

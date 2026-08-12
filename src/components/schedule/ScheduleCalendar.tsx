@@ -32,9 +32,10 @@ export function ScheduleCalendar({ events }: ScheduleCalendarProps) {
   }, [events])
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[auto_1fr]">
-      <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_1fr]">
+      <section className="w-full min-w-0 rounded-2xl border border-border bg-card p-2 shadow-sm sm:p-4">
         <Calendar
+          className="w-full"
           mode="single"
           selected={selected}
           onSelect={setSelected}

@@ -18,6 +18,7 @@ function mapExamSchedule(row: ExamScheduleRow): ExamScheduleWithTargets {
   const { exam_schedule_students, ...exam } = row
   return {
     ...exam,
+    return_on: exam.return_on ?? null,
     target_student_ids:
       exam_schedule_students?.map((entry) => entry.student_id) ?? [],
   }
@@ -38,6 +39,13 @@ function isVisibleToStudent(
   studentId: string,
 ): boolean {
   return targetAll || targetStudentIds.includes(studentId)
+}
+
+export async function fetchExamSchedulesWithTargetsByType(
+  examType: ExamSchedule['exam_type'],
+): Promise<ExamScheduleWithTargets[]> {
+  const schedules = await fetchExamSchedulesWithTargets()
+  return schedules.filter((schedule) => schedule.exam_type === examType)
 }
 
 export async function fetchExamSchedulesWithTargets(): Promise<ExamScheduleWithTargets[]> {

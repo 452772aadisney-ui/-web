@@ -2,6 +2,7 @@ import type { ExamScheduleType } from '@/types/schedule'
 
 export type CalendarEventType =
   | 'mock_exam'
+  | 'mock_exam_return'
   | 'quiz'
   | 'homework'
   | 'textbook_start'
@@ -17,7 +18,8 @@ export interface CalendarEvent {
 }
 
 export const CALENDAR_EVENT_LABELS: Record<CalendarEventType, string> = {
-  mock_exam: '模試',
+  mock_exam: '模試（受験）',
+  mock_exam_return: '模試（返却）',
   quiz: '小テスト',
   homework: '宿題・タスク',
   textbook_start: '参考書開始',
@@ -26,6 +28,7 @@ export const CALENDAR_EVENT_LABELS: Record<CalendarEventType, string> = {
 
 export const CALENDAR_EVENT_COLORS: Record<CalendarEventType, string> = {
   mock_exam: 'bg-red-500',
+  mock_exam_return: 'bg-rose-400',
   quiz: 'bg-orange-500',
   homework: 'bg-blue-500',
   textbook_start: 'bg-emerald-500',

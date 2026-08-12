@@ -32,11 +32,63 @@ body {
   min-height: 100dvh;
 }
 
+/* カレンダーを画面幅いっぱいに（スマホ向け） */
+.schedule-calendar-picker.rdp-root {
+  width: 100%;
+}
+
+.schedule-calendar-picker.rdp-root .rdp-months {
+  width: 100%;
+  max-width: none;
+}
+
+.schedule-calendar-picker.rdp-root .rdp-month {
+  width: 100%;
+}
+
+.schedule-calendar-picker.rdp-root .rdp-month_grid {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.schedule-calendar-picker.rdp-root .rdp-weekday,
+.schedule-calendar-picker.rdp-root .rdp-day {
+  width: auto;
+  height: auto;
+}
+
+.schedule-calendar-picker.rdp-root .rdp-day_button {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 0.5rem;
+}
+
+.schedule-calendar-picker.rdp-root .rdp-selected .rdp-day_button {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+.schedule-calendar-picker.rdp-root .rdp-today:not(.rdp-outside) .rdp-day_button {
+  background-color: #eff6ff;
+  color: var(--primary);
+  font-weight: 600;
+}
+
 /* iOS Safari: 16px 未満の input フォーカス時に画面が自動拡大されるのを防ぐ */
 @media (max-width: 768px) {
   input,
   select,
   textarea {
     font-size: 16px;
+  }
+
+  .schedule-calendar-picker.rdp-root .rdp-day_button {
+    font-size: 1rem;
+  }
+
+  .schedule-calendar-picker.rdp-root .rdp-month_caption {
+    font-size: 1.05rem;
   }
 }

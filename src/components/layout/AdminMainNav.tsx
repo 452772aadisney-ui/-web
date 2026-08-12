@@ -28,6 +28,8 @@ export function AdminMainNav({ unreadChatCount }: AdminMainNavProps) {
             pathname === item.href ||
             (item.href === '/admin/students' &&
               (pathname?.startsWith('/admin/students') ?? false)) ||
+            (item.href === '/admin/schedule' &&
+              (pathname?.startsWith('/admin/schedule') ?? false)) ||
             (item.href === '/admin/textbooks' &&
               (pathname?.startsWith('/admin/textbooks') ?? false)) ||
             (item.href === '/admin/chat' &&

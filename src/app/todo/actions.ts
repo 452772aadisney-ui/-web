@@ -10,6 +10,7 @@ export type TodoActionState = {
 function revalidateTodoPaths(studentId: string) {
   revalidatePath('/dashboard/todo')
   revalidatePath('/admin/schedule')
+  revalidatePath('/admin/schedule/homework')
   revalidatePath(`/admin/students/${studentId}`)
 }
 

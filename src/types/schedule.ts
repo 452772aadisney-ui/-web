@@ -6,6 +6,7 @@ export interface ExamSchedule {
   exam_type: ExamScheduleType
   subject: string
   scheduled_on: string
+  return_on: string | null
   note: string
   target_all: boolean
   created_at: string
