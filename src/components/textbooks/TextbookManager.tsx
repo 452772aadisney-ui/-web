@@ -43,10 +43,10 @@ function TextbookEditForm({
   )
 
   return (
-    <form action={formAction} className="space-y-4 rounded-lg border border-primary/30 bg-blue-50/30 p-4">
+    <form action={formAction} className="min-w-0 space-y-4 rounded-lg border border-primary/30 bg-blue-50/30 p-4">
       <input type="hidden" name="textbookId" value={book.id} />
 
-      <label className="block">
+      <label className="block w-full min-w-0">
         <span className="mb-1.5 block text-sm font-medium">
           教材名 <span className="text-error">*</span>
         </span>
@@ -120,10 +120,10 @@ export function TextbookManager({
 
   return (
     <div className="space-y-6">
-      <form action={formAction} className="space-y-4 rounded-lg border border-border bg-background p-4">
+      <form action={formAction} className="min-w-0 space-y-4 rounded-lg border border-border bg-background p-4">
         <h3 className="font-medium">教材を追加</h3>
 
-        <label className="block">
+        <label className="block w-full min-w-0">
           <span className="mb-1.5 block text-sm font-medium">
             教材名 <span className="text-error">*</span>
           </span>

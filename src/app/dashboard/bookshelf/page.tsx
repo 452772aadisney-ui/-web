@@ -18,7 +18,7 @@ export default async function BookshelfPage() {
   return (
     <StudentPageShell title="本棚" backHref="/dashboard" backLabel="ダッシュボード">
       <div className="space-y-6">
-        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-bold">教材登録</h2>
           <p className="mt-1 text-sm text-muted">
             学習記録で選べるテキスト・参考書を登録します。科目タグはプロフィールの使用科目から選べます。

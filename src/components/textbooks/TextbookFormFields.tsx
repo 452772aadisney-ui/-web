@@ -1,7 +1,10 @@
 import { TEXTBOOK_USAGE_TAGS } from '@/lib/constants/textbook-tags'
 
-const inputClass =
-  'w-full rounded-lg border border-border bg-card px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20'
+export const inputClass =
+  'block w-full min-w-0 max-w-full rounded-lg border border-border bg-card px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20'
+
+const dateFieldShellClass =
+  'w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-card focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20'
 
 interface TextbookDateFieldsProps {
   startDate?: string | null
@@ -13,24 +16,28 @@ export function TextbookDateFields({
   plannedEndDate,
 }: TextbookDateFieldsProps) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <label className="block">
+    <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+      <label className="block w-full min-w-0">
         <span className="mb-1.5 block text-sm font-medium">開始日</span>
-        <input
-          type="date"
-          name="startDate"
-          defaultValue={startDate ?? ''}
-          className={inputClass}
-        />
+        <div className={dateFieldShellClass}>
+          <input
+            type="date"
+            name="startDate"
+            defaultValue={startDate ?? ''}
+            className="study-date-input px-3 py-2.5 outline-none"
+          />
+        </div>
       </label>
-      <label className="block">
+      <label className="block w-full min-w-0">
         <span className="mb-1.5 block text-sm font-medium">終了予定日</span>
-        <input
-          type="date"
-          name="plannedEndDate"
-          defaultValue={plannedEndDate ?? ''}
-          className={inputClass}
-        />
+        <div className={dateFieldShellClass}>
+          <input
+            type="date"
+            name="plannedEndDate"
+            defaultValue={plannedEndDate ?? ''}
+            className="study-date-input px-3 py-2.5 outline-none"
+          />
+        </div>
       </label>
     </div>
   )
@@ -72,8 +79,6 @@ export function SubjectTagFields({
     </fieldset>
   )
 }
-
-export { inputClass }
 
 interface UsageTagFieldsProps {
   selectedUsageTags?: string[]
