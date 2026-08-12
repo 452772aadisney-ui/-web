@@ -3,7 +3,10 @@ import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfileWithError } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { StudentQrCode } from '@/components/student/StudentQrCode'
+import { CoachingAlertBanner } from '@/components/coaching/CoachingAlertBanner'
 import { getPersonName } from '@/lib/auth/display-name'
+import { getCoachingAlertState } from '@/lib/coaching/alert'
+import { fetchCoachingBookingsForStudent } from '@/lib/coaching/queries'
 import { fetchTagsForProfile } from '@/lib/tags/queries'
 
 function formatBirthday(birthday: string | null): string {
@@ -46,10 +49,15 @@ export default async function StudentDashboardPage() {
 
   const personName = getPersonName(profile)
   const studentTags = profile.role === 'student' ? await fetchTagsForProfile(profile.id) : []
+  const coachingAlert =
+    profile.role === 'student'
+      ? getCoachingAlertState(await fetchCoachingBookingsForStudent(profile.id))
+      : null
 
   return (
     <StudentPageShell title="生徒ダッシュボード">
       <div className="space-y-6">
+        {coachingAlert?.showAlert && <CoachingAlertBanner message={coachingAlert.message} />}
         <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div>

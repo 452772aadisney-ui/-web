@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: '/dashboard/bookshelf', label: '本棚' },
   { href: '/dashboard/calendar', label: 'カレンダー' },
   { href: '/dashboard/todo', label: 'ToDoリスト' },
+  { href: '/dashboard/coaching', label: 'コーチング' },
   { href: '/dashboard/announcements', label: 'お知らせ', badge: 'announcement' as const },
   { href: '/dashboard/chat', label: 'メッセージ', badge: 'chat' as const },
 ] as const
@@ -41,6 +42,8 @@ export function StudentMainNav({
             pathname === item.href ||
             (item.href === '/dashboard/announcements' &&
               (pathname?.startsWith('/dashboard/announcements') ?? false)) ||
+            (item.href === '/dashboard/coaching' &&
+              (pathname?.startsWith('/dashboard/coaching') ?? false)) ||
             (item.href === '/dashboard/chat' &&
               (pathname?.startsWith('/dashboard/chat') ?? false))
 
