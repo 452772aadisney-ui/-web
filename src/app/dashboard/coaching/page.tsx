@@ -41,7 +41,7 @@ export default async function StudentCoachingPage({
   ])
 
   return (
-    <StudentPageShell title="コーチング予約" backHref="/dashboard" backLabel="ダッシュボード">
+    <StudentPageShell title="コーチング予約" backHref="/dashboard" backLabel="マイページ">
       <p className="mb-6 text-sm text-muted">
         担当を選び、予約枠から日時を選んで予約してください。各枠は30分です。
       </p>

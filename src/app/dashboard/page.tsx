@@ -2,18 +2,13 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfileWithError } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
-import { StudentQrCode } from '@/components/student/StudentQrCode'
 import { CoachingAlertBanner } from '@/components/coaching/CoachingAlertBanner'
-import { getPersonName } from '@/lib/auth/display-name'
+import { MyPageActions } from '@/components/student/MyPageActions'
+import { MyPageAlertBanner } from '@/components/student/MyPageAlertBanner'
+import { fetchUnreadAnnouncementCount } from '@/lib/announcements/queries'
+import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
 import { getCoachingAlertState } from '@/lib/coaching/alert'
 import { fetchCoachingBookingsForStudent } from '@/lib/coaching/queries'
-import { fetchTagsForProfile } from '@/lib/tags/queries'
-
-function formatBirthday(birthday: string | null): string {
-  if (!birthday) return '未設定'
-  const [year, month, day] = birthday.split('-')
-  return `${year}年${Number(month)}月${Number(day)}日`
-}
 
 export default async function StudentDashboardPage() {
   const supabase = await createClient()
@@ -29,7 +24,7 @@ export default async function StudentDashboardPage() {
 
   if (!profile) {
     return (
-      <StudentPageShell title="生徒ダッシュボード">
+      <StudentPageShell title="マイページ">
         <section className="rounded-2xl border border-red-200 bg-red-50 p-6">
           <h2 className="text-lg font-bold text-red-800">プロフィールを読み込めません</h2>
           <p className="mt-2 text-sm text-red-700">
@@ -47,68 +42,39 @@ export default async function StudentDashboardPage() {
     )
   }
 
-  const personName = getPersonName(profile)
-  const studentTags = profile.role === 'student' ? await fetchTagsForProfile(profile.id) : []
-  const coachingAlert =
+  const [coachingAlert, unreadAnnouncementCount, unreadChatCount] =
     profile.role === 'student'
-      ? getCoachingAlertState(await fetchCoachingBookingsForStudent(profile.id))
-      : null
+      ? await Promise.all([
+          getCoachingAlertState(await fetchCoachingBookingsForStudent(profile.id)),
+          fetchUnreadAnnouncementCount(profile.id).catch(() => 0),
+          fetchUnreadChatCount(profile.id).catch(() => 0),
+        ])
+      : [null, 0, 0]
 
   return (
-    <StudentPageShell title="生徒ダッシュボード">
+    <StudentPageShell title="マイページ">
       <div className="space-y-6">
         {coachingAlert?.showAlert && <CoachingAlertBanner message={coachingAlert.message} />}
-        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-sm text-muted">ようこそ</p>
-              <h2 className="mt-1 text-2xl font-bold">{personName} さん</h2>
-            </div>
-            <span className="shrink-0 rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-primary">
-              生徒
-            </span>
-          </div>
 
-          <dl className="mt-6 grid gap-3 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-muted">誕生日</dt>
-              <dd className="font-medium">{formatBirthday(profile.birthday)}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">使用科目</dt>
-              <dd className="font-medium">
-                {profile.subjects.length > 0 ? profile.subjects.join('・') : '未設定'}
-              </dd>
-            </div>
-            <div className="sm:col-span-2">
-              <dt className="text-muted">志望校</dt>
-              <dd className="font-medium">
-                {profile.target_schools.length > 0
-                  ? profile.target_schools.join(' / ')
-                  : '未設定'}
-              </dd>
-            </div>
-            {studentTags.length > 0 && (
-              <div className="sm:col-span-2">
-                <dt className="text-muted">タグ</dt>
-                <dd className="font-medium">
-                  {studentTags.map((tag) => `${tag.category}:${tag.name}`).join(' / ')}
-                </dd>
-              </div>
-            )}
-          </dl>
-        </section>
-
-        {profile.role === 'student' && profile.student_code && (
-          <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-            <h3 className="mb-4 text-lg font-bold">生徒ID（QRコード）</h3>
-            <StudentQrCode studentCode={profile.student_code} />
-          </section>
+        {unreadAnnouncementCount > 0 && (
+          <MyPageAlertBanner
+            title="未読のお知らせがあります"
+            message={`未読のお知らせが${unreadAnnouncementCount}件あります。内容を確認してください。`}
+            href="/dashboard/announcements"
+            actionLabel="お知らせを見る"
+          />
         )}
 
-        <p className="text-sm text-muted">
-          学習記録・本棚（教材登録）が利用できます。
-        </p>
+        {unreadChatCount > 0 && (
+          <MyPageAlertBanner
+            title="未読のメッセージがあります"
+            message={`未読のメッセージが${unreadChatCount}件あります。返信を確認してください。`}
+            href="/dashboard/chat"
+            actionLabel="メッセージを見る"
+          />
+        )}
+
+        <MyPageActions />
       </div>
     </StudentPageShell>
   )

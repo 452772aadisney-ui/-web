@@ -16,7 +16,7 @@ export default async function BookshelfPage() {
   const profileSubjects = profile.subjects ?? []
 
   return (
-    <StudentPageShell title="本棚" backHref="/dashboard" backLabel="ダッシュボード">
+    <StudentPageShell title="本棚" backHref="/dashboard" backLabel="マイページ">
       <div className="space-y-6">
         <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-bold">教材登録</h2>

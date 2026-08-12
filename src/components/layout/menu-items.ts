@@ -5,9 +5,15 @@ export type HamburgerMenuItem = {
 }
 
 export const STUDENT_HAMBURGER_ITEMS = [
-  { href: '/dashboard', label: 'ダッシュボード' },
+  { href: '/dashboard', label: 'マイページ' },
+  { href: '/dashboard/study', label: '学習記録' },
+  { href: '/dashboard/bookshelf', label: '本棚' },
+  { href: '/dashboard/calendar', label: 'カレンダー' },
+  { href: '/dashboard/todo', label: 'ToDoリスト' },
+  { href: '/dashboard/coaching', label: 'コーチング' },
+  { href: '/dashboard/announcements', label: 'お知らせ' },
   { href: '/dashboard/chat', label: 'メッセージ' },
-  { href: '/dashboard/profile', label: 'プロフィールを編集' },
+  { href: '/dashboard/info', label: '生徒情報' },
 ] as const
 
 export const ADMIN_HAMBURGER_ITEMS = [

@@ -31,7 +31,7 @@ export default async function StudentAnnouncementsPage() {
   const unreadCount = withStatus.filter((a) => !a.read).length
 
   return (
-    <StudentPageShell title="お知らせ" backHref="/dashboard" backLabel="ダッシュボード">
+    <StudentPageShell title="お知らせ" backHref="/dashboard" backLabel="マイページ">
       <p className="mb-6 text-sm text-muted">
         未読のお知らせは背景がピンク色です。タップして内容を確認すると既読になります。
         {unreadCount > 0 && (

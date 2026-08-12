@@ -25,7 +25,6 @@ export default async function StudentChatRoomPage() {
       title="管理者"
       backHref="/dashboard/chat"
       backLabel="トーク一覧"
-      showMainNav={false}
     >
       <ChatRoom
         studentId={profile.id}

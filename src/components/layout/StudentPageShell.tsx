@@ -8,21 +8,32 @@ import {
   STUDENT_HAMBURGER_ITEMS,
   type HamburgerMenuItem,
 } from '@/components/layout/menu-items'
-import { StudentMainNav } from '@/components/layout/StudentMainNav'
 
 interface StudentPageShellProps {
   title: string
   backHref?: string
   backLabel?: string
-  showMainNav?: boolean
   children: ReactNode
+}
+
+function getHamburgerBadgeCount(
+  href: string,
+  unreadAnnouncementCount: number,
+  unreadChatCount: number,
+): number | undefined {
+  if (href === '/dashboard/announcements' && unreadAnnouncementCount > 0) {
+    return unreadAnnouncementCount
+  }
+  if (href === '/dashboard/chat' && unreadChatCount > 0) {
+    return unreadChatCount
+  }
+  return undefined
 }
 
 export async function StudentPageShell({
   title,
   backHref,
   backLabel,
-  showMainNav = true,
   children,
 }: StudentPageShellProps) {
   const profile = await getCurrentProfile()
@@ -35,7 +46,7 @@ export async function StudentPageShell({
 
   const menuItems: HamburgerMenuItem[] = STUDENT_HAMBURGER_ITEMS.map((item) => ({
     ...item,
-    badgeCount: item.href === '/dashboard/chat' ? unreadChatCount : undefined,
+    badgeCount: getHamburgerBadgeCount(item.href, unreadAnnouncementCount, unreadChatCount),
   }))
 
   return (
@@ -54,13 +65,6 @@ export async function StudentPageShell({
           <HamburgerMenu items={menuItems} />
         </div>
       </header>
-
-      {showMainNav && (
-        <StudentMainNav
-          unreadAnnouncementCount={unreadAnnouncementCount}
-          unreadChatCount={unreadChatCount}
-        />
-      )}
 
       <main className="mx-auto max-w-3xl px-4 py-8">{children}</main>
     </div>

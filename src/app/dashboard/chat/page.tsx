@@ -13,7 +13,7 @@ export default async function StudentChatListPage() {
   const thread = await fetchStudentChatThread(profile.id)
 
   return (
-    <StudentPageShell title="メッセージ" backHref="/dashboard" backLabel="ダッシュボード">
+    <StudentPageShell title="メッセージ" backHref="/dashboard" backLabel="マイページ">
       <p className="mb-4 text-sm text-muted">
         トークをタップして管理者とのメッセージを確認・送信できます。
       </p>

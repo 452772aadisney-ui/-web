@@ -36,7 +36,7 @@ export default async function StudentStudyPage() {
   const profileSubjects = profile.subjects ?? []
 
   return (
-    <StudentPageShell title="学習記録" backHref="/dashboard" backLabel="ダッシュボード">
+    <StudentPageShell title="学習記録" backHref="/dashboard" backLabel="マイページ">
       <div className="space-y-6">
         <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-bold">学習を記録する</h2>

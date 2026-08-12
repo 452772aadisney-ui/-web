@@ -27,7 +27,7 @@ export default async function StudentTodoPage() {
   const items = buildTodoItems(homework, quizzes, applications, completions)
 
   return (
-    <StudentPageShell title="ToDoリスト" backHref="/dashboard" backLabel="ダッシュボード">
+    <StudentPageShell title="ToDoリスト" backHref="/dashboard" backLabel="マイページ">
       <p className="mb-6 text-sm text-muted">
         宿題・小テスト・申込関連のやるべきことと期日を確認できます。
       </p>

@@ -12,7 +12,7 @@ export default async function StudentProfilePage() {
     <StudentPageShell
       title="プロフィール編集"
       backHref="/dashboard"
-      backLabel="ダッシュボード"
+      backLabel="マイページ"
     >
       <div className="space-y-8">
         {isStudent && profile.student_code && (

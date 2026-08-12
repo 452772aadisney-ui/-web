@@ -28,7 +28,7 @@ export default async function StudentCalendarPage() {
   ].sort((a, b) => a.date.localeCompare(b.date))
 
   return (
-    <StudentPageShell title="カレンダー" backHref="/dashboard" backLabel="ダッシュボード">
+    <StudentPageShell title="カレンダー" backHref="/dashboard" backLabel="マイページ">
       <p className="mb-6 text-sm text-muted">
         模試・小テスト、宿題・タスク、参考書、コーチング予約を一覧できます。
       </p>
