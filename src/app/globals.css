@@ -91,4 +91,11 @@ body {
   .schedule-calendar-picker.rdp-root .rdp-month_caption {
     font-size: 1.05rem;
   }
+
+  input[type='date'] {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
 }

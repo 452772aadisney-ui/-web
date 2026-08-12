@@ -10,7 +10,7 @@ import type { Textbook } from '@/types/textbook'
 const initialState: StudyLogActionState = {}
 
 const fieldClass =
-  'w-full rounded-lg border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-primary'
+  'w-full min-w-0 max-w-full rounded-lg border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-primary'
 
 interface StudyLogTableProps {
   logs: StudyLog[]
@@ -60,8 +60,8 @@ function StudyLogEditRow({
         <form action={formAction} className="space-y-3">
           <input type="hidden" name="logId" value={log.id} />
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <label className="block">
+          <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="block min-w-0">
               <span className="mb-1 block text-xs font-medium">学習日</span>
               <input
                 type="date"
@@ -71,7 +71,7 @@ function StudyLogEditRow({
                 className={fieldClass}
               />
             </label>
-            <label className="block">
+            <label className="block min-w-0">
               <span className="mb-1 block text-xs font-medium">科目</span>
               <select
                 name="subject"
@@ -87,7 +87,7 @@ function StudyLogEditRow({
                 ))}
               </select>
             </label>
-            <label className="block">
+            <label className="block min-w-0">
               <span className="mb-1 block text-xs font-medium">教材</span>
               <select
                 name="textbookId"
