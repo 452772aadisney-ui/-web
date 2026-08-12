@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useActionState } from 'react'
 import { updateProfile, type ProfileActionState } from '@/app/profile/actions'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
+import { SubjectCheckboxGrid } from '@/components/subjects/SubjectCheckboxGrid'
 import type { Profile } from '@/types/database'
 
 const initialState: ProfileActionState = {}
@@ -61,22 +62,7 @@ export function ProfileForm({ profile, backHref }: ProfileFormProps) {
 
       <fieldset>
         <legend className="mb-3 text-sm font-medium">使用科目</legend>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {EXAM_SUBJECTS.map((subject) => (
-            <label
-              key={subject}
-              className="flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 hover:bg-background has-checked:border-primary has-checked:bg-blue-50"
-            >
-              <input
-                type="checkbox"
-                name={`subject_${subject}`}
-                defaultChecked={selectedSubjects.has(subject)}
-                className="h-4 w-4 accent-primary"
-              />
-              <span className="text-sm">{subject}</span>
-            </label>
-          ))}
-        </div>
+        <SubjectCheckboxGrid subjects={EXAM_SUBJECTS} selectedSubjects={selectedSubjects} />
       </fieldset>
 
       {state.error && (

@@ -1,4 +1,5 @@
 import { TEXTBOOK_USAGE_TAGS } from '@/lib/constants/textbook-tags'
+import { SubjectCheckboxGrid } from '@/components/subjects/SubjectCheckboxGrid'
 
 export const inputClass =
   'block w-full min-w-0 max-w-full rounded-lg border border-border bg-card px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20'
@@ -52,30 +53,13 @@ export function SubjectTagFields({
   profileSubjects,
   selectedSubjects = [],
 }: SubjectTagFieldsProps) {
-  const selected = new Set(selectedSubjects)
-
   return (
     <fieldset>
       <legend className="mb-2 text-sm font-medium">
         科目タグ <span className="text-error">*</span>
       </legend>
       <p className="mb-2 text-xs text-muted">プロフィールで選択中の科目から選べます</p>
-      <div className="flex flex-wrap gap-2">
-        {profileSubjects.map((subject) => (
-          <label
-            key={subject}
-            className="flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm has-checked:border-primary has-checked:bg-blue-50"
-          >
-            <input
-              type="checkbox"
-              name={`subject_${subject}`}
-              defaultChecked={selected.has(subject)}
-              className="accent-primary"
-            />
-            {subject}
-          </label>
-        ))}
-      </div>
+      <SubjectCheckboxGrid subjects={profileSubjects} selectedSubjects={selectedSubjects} />
     </fieldset>
   )
 }
