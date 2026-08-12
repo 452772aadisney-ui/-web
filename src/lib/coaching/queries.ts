@@ -1,4 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
+import {
+  buildSlotDateTime,
+  buildSlotEndDateTime,
+  slotDateTimeKey,
+} from '@/lib/coaching/slot-times'
+import { getWeekdays, parseDateKey } from '@/lib/coaching/week'
 import type {
   AvailableCoachingSlot,
   CoachingBooking,
@@ -6,6 +12,17 @@ import type {
   CoachingCoach,
   CoachingSlot,
 } from '@/types/coaching'
+
+export type CoachingGridSlot = {
+  id: string | null
+  coach_id: string
+  slot_date: string
+  start_time: string
+  starts_at: string
+  ends_at: string
+  is_open: boolean
+  is_booked: boolean
+}
 
 type SlotRow = CoachingSlot & {
   coaching_coaches: { id: string; name: string } | { id: string; name: string }[] | null
@@ -21,6 +38,25 @@ function mapCoach(row: { id: string; name: string }) {
   return { id: row.id, name: row.name }
 }
 
+function normalizeSlot(row: CoachingSlot): CoachingSlot {
+  const slotDate =
+    row.slot_date ?? row.starts_at.slice(0, 10)
+  const startTime =
+    row.start_time?.slice(0, 5) ??
+    new Date(row.starts_at).toLocaleTimeString('ja-JP', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+
+  return {
+    ...row,
+    slot_date: slotDate,
+    start_time: startTime,
+    is_open: row.is_open ?? true,
+  }
+}
+
 function mapBooking(row: BookingRow): CoachingBookingWithDetails {
   return {
     id: row.id,
@@ -32,7 +68,7 @@ function mapBooking(row: BookingRow): CoachingBookingWithDetails {
     booked_at: row.booked_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    slot: row.coaching_slots,
+    slot: normalizeSlot(row.coaching_slots),
     coach: mapCoach(row.coaching_coaches),
     student: row.profiles
       ? {
@@ -81,21 +117,65 @@ async function fetchBookingsBySlotIds(
   return new Map(((data as CoachingBooking[]) ?? []).map((b) => [b.slot_id, b]))
 }
 
+export async function fetchCoachingGridForWeek(
+  coachId: string,
+  weekStartMonday: string,
+): Promise<CoachingGridSlot[]> {
+  const weekdays = getWeekdays(weekStartMonday)
+  const dateKeys = weekdays.map((d) => d.date)
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('coaching_slots')
+    .select('*')
+    .eq('coach_id', coachId)
+    .in('slot_date', dateKeys)
+
+  if (error) {
+    console.error('[coaching] grid query failed:', error.message)
+    return []
+  }
+
+  const slots = ((data as CoachingSlot[]) ?? []).map(normalizeSlot)
+  const bookingsBySlot = await fetchBookingsBySlotIds(slots.map((s) => s.id))
+
+  return slots.map((slot) => ({
+    id: slot.id,
+    coach_id: slot.coach_id,
+    slot_date: slot.slot_date!,
+    start_time: slot.start_time!.slice(0, 5),
+    starts_at: slot.starts_at,
+    ends_at: slot.ends_at,
+    is_open: slot.is_open,
+    is_booked: bookingsBySlot.has(slot.id),
+  }))
+}
+
 export async function fetchAvailableCoachingSlots(
   coachId?: string,
+  weekStartMonday?: string,
 ): Promise<AvailableCoachingSlot[]> {
   const supabase = await createClient()
-  const now = new Date().toISOString()
+  const now = new Date()
 
   let query = supabase
     .from('coaching_slots')
     .select('*, coaching_coaches!inner(id, name, is_active)')
-    .gte('starts_at', now)
+    .eq('is_open', true)
+    .gte('starts_at', now.toISOString())
     .eq('coaching_coaches.is_active', true)
     .order('starts_at')
 
   if (coachId) {
     query = query.eq('coach_id', coachId)
+  }
+
+  if (weekStartMonday) {
+    const weekdays = getWeekdays(weekStartMonday)
+    query = query.in(
+      'slot_date',
+      weekdays.map((d) => d.date),
+    )
   }
 
   const { data, error } = await query
@@ -104,58 +184,28 @@ export async function fetchAvailableCoachingSlots(
     return []
   }
 
-  const slots = (data as SlotRow[]) ?? []
+  const slots = ((data as SlotRow[]) ?? []).map((row) => normalizeSlot(row))
   const bookingsBySlot = await fetchBookingsBySlotIds(slots.map((s) => s.id))
 
   return slots
     .filter((slot) => !bookingsBySlot.has(slot.id))
+    .filter((slot) => buildSlotDateTime(slot.slot_date!, slot.start_time!) > now)
     .map((slot) => {
-      const coach = Array.isArray(slot.coaching_coaches)
-        ? slot.coaching_coaches[0]
-        : slot.coaching_coaches
+      const coachRow = (data as SlotRow[]).find((r) => r.id === slot.id)?.coaching_coaches
+      const coach = Array.isArray(coachRow) ? coachRow[0] : coachRow
       return {
         id: slot.id,
         coach_id: slot.coach_id,
+        slot_date: slot.slot_date!,
+        start_time: slot.start_time!.slice(0, 5),
         starts_at: slot.starts_at,
         ends_at: slot.ends_at,
+        is_open: true,
         created_at: slot.created_at,
         coach: mapCoach(coach!),
         is_available: true as const,
       }
     })
-}
-
-export async function fetchCoachingSlotsForAdmin(): Promise<
-  Array<CoachingSlot & { coach: { id: string; name: string }; is_booked: boolean }>
-> {
-  const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('coaching_slots')
-    .select('*, coaching_coaches(id, name)')
-    .order('starts_at', { ascending: false })
-
-  if (error) {
-    console.error('[coaching] admin slots query failed:', error.message)
-    return []
-  }
-
-  const slots = (data as SlotRow[]) ?? []
-  const bookingsBySlot = await fetchBookingsBySlotIds(slots.map((s) => s.id))
-
-  return slots.map((slot) => {
-    const coach = Array.isArray(slot.coaching_coaches)
-      ? slot.coaching_coaches[0]
-      : slot.coaching_coaches
-    return {
-      id: slot.id,
-      coach_id: slot.coach_id,
-      starts_at: slot.starts_at,
-      ends_at: slot.ends_at,
-      created_at: slot.created_at,
-      coach: mapCoach(coach!),
-      is_booked: bookingsBySlot.has(slot.id),
-    }
-  })
 }
 
 export async function fetchCoachingBookingsForStudent(
@@ -209,3 +259,39 @@ export async function fetchCoachingBookingBySlotId(
 
   return (data as CoachingBooking) ?? null
 }
+
+export async function fetchCoachingSlotByKey(
+  coachId: string,
+  slotDate: string,
+  startTime: string,
+): Promise<CoachingSlot | null> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('coaching_slots')
+    .select('*')
+    .eq('coach_id', coachId)
+    .eq('slot_date', slotDate)
+    .eq('start_time', `${startTime}:00`)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[coaching] slot by key failed:', error.message)
+    return null
+  }
+
+  return data ? normalizeSlot(data as CoachingSlot) : null
+}
+
+export function isSlotInPast(slotDate: string, startTime: string): boolean {
+  return buildSlotDateTime(slotDate, startTime) <= new Date()
+}
+
+export function slotStartsAtIso(slotDate: string, startTime: string): string {
+  return buildSlotDateTime(slotDate, startTime).toISOString()
+}
+
+export function slotEndsAtIso(slotDate: string, startTime: string): string {
+  return buildSlotEndDateTime(slotDate, startTime).toISOString()
+}
+
+export { slotDateTimeKey, parseDateKey }

@@ -1,36 +1,29 @@
 'use client'
 
 import { useActionState, useState } from 'react'
+import Link from 'next/link'
 import {
   cancelCoachingBooking,
   completeCoachingBooking,
   createCoachingCoach,
-  createCoachingSlot,
   deleteCoachingCoach,
-  deleteCoachingSlot,
   updateCoachingCoach,
+  bookCoachingSlot,
   type CoachingActionState,
 } from '@/app/coaching/actions'
+import { CoachingWeekGrid } from '@/components/coaching/CoachingWeekGrid'
 import { getPersonName } from '@/lib/auth/display-name'
 import { formatCoachingDateTimeRange } from '@/lib/coaching/format'
 import type {
+  AvailableCoachingSlot,
   CoachingBookingWithDetails,
   CoachingCoach,
 } from '@/types/coaching'
+import type { CoachingGridSlot } from '@/lib/coaching/queries'
 
 const initialState: CoachingActionState = {}
 const fieldClass =
   'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20'
-
-type AdminSlot = {
-  id: string
-  coach_id: string
-  starts_at: string
-  ends_at: string
-  created_at: string
-  coach: { id: string; name: string }
-  is_booked: boolean
-}
 
 function CoachForm({
   coach,
@@ -58,6 +51,7 @@ function CoachForm({
             defaultValue={coach?.sort_order ?? 0}
             className={fieldClass}
           />
+          <p className="mt-1 text-xs text-muted">生徒の担当選択画面での並び順（小さい数字ほど先）</p>
         </label>
         {coach && (
           <label className="flex items-center gap-2 self-end text-sm">
@@ -84,16 +78,22 @@ function CoachForm({
 
 interface AdminCoachingManagerProps {
   coaches: CoachingCoach[]
-  slots: AdminSlot[]
+  selectedCoachId: string | null
+  weekStart: string
+  gridSlots: CoachingGridSlot[]
   bookings: CoachingBookingWithDetails[]
 }
 
-export function AdminCoachingManager({ coaches, slots, bookings }: AdminCoachingManagerProps) {
+export function AdminCoachingManager({
+  coaches,
+  selectedCoachId,
+  weekStart,
+  gridSlots,
+  bookings,
+}: AdminCoachingManagerProps) {
   const [editingCoachId, setEditingCoachId] = useState<string | null>(null)
-  const [slotState, slotAction, slotPending] = useActionState(createCoachingSlot, initialState)
-
   const activeCoaches = coaches.filter((c) => c.is_active)
-  const upcomingSlots = slots.filter((s) => new Date(s.starts_at) >= new Date())
+
   const upcomingBookings = bookings.filter(
     (b) => b.status === 'scheduled' && new Date(b.slot.starts_at) >= new Date(),
   )
@@ -120,6 +120,12 @@ export function AdminCoachingManager({ coaches, slots, bookings }: AdminCoaching
                         </p>
                       </div>
                       <div className="flex gap-3">
+                        <Link
+                          href={`/admin/coaching?coach=${coach.id}&week=${weekStart}`}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          枠を編集
+                        </Link>
                         <button
                           type="button"
                           onClick={() => setEditingCoachId(coach.id)}
@@ -144,71 +150,42 @@ export function AdminCoachingManager({ coaches, slots, bookings }: AdminCoaching
       </section>
 
       <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <h2 className="text-lg font-bold">予約枠の追加</h2>
-        <p className="mt-1 text-sm text-muted">講師ごとに、生徒が選べる空き枠を登録します。</p>
-        <form action={slotAction} className="mt-4 space-y-3 rounded-lg border border-border bg-background p-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block sm:col-span-2">
-              <span className="mb-1 block text-sm font-medium">担当講師 *</span>
-              <select name="coachId" required className={fieldClass} defaultValue="">
-                <option value="" disabled>
-                  選択してください
-                </option>
-                {activeCoaches.map((coach) => (
-                  <option key={coach.id} value={coach.id}>
-                    {coach.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium">日付 *</span>
-              <input type="date" name="slotDate" required className={fieldClass} />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium">開始時刻 *</span>
-              <input type="time" name="startTime" required className={fieldClass} />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium">終了時刻 *</span>
-              <input type="time" name="endTime" required className={fieldClass} />
-            </label>
-          </div>
-          {slotState.error && <p className="text-sm text-error">{slotState.error}</p>}
-          {slotState.success && <p className="text-sm text-green-700">予約枠を追加しました</p>}
-          <button
-            type="submit"
-            disabled={slotPending || activeCoaches.length === 0}
-            className="rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-60"
-          >
-            {slotPending ? '追加中…' : '枠を追加'}
-          </button>
-        </form>
+        <h2 className="text-lg font-bold">予約枠の開放</h2>
+        <p className="mt-1 text-sm text-muted">
+          10:00〜21:00（30分刻み）の枠から、開放する時間帯を選びます。
+        </p>
 
-        {upcomingSlots.length > 0 && (
-          <ul className="mt-6 divide-y divide-border rounded-lg border border-border">
-            {upcomingSlots.map((slot) => (
-              <li key={slot.id} className="flex items-center justify-between gap-4 p-4">
-                <div>
-                  <p className="font-medium">{slot.coach.name}</p>
-                  <p className="mt-1 text-sm text-muted">
-                    {formatCoachingDateTimeRange(slot.starts_at, slot.ends_at)}
-                  </p>
-                  <p className="mt-1 text-xs text-muted">
-                    {slot.is_booked ? '予約済み' : '空き'}
-                  </p>
-                </div>
-                {!slot.is_booked && (
-                  <form action={deleteCoachingSlot}>
-                    <input type="hidden" name="id" value={slot.id} />
-                    <button type="submit" className="text-xs text-error hover:underline">
-                      削除
-                    </button>
-                  </form>
-                )}
-              </li>
-            ))}
-          </ul>
+        {activeCoaches.length === 0 ? (
+          <p className="mt-4 text-sm text-muted">先に担当講師を登録してください。</p>
+        ) : (
+          <>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {activeCoaches.map((coach) => (
+                <Link
+                  key={coach.id}
+                  href={`/admin/coaching?coach=${coach.id}&week=${weekStart}`}
+                  className={`rounded-xl border px-4 py-2 text-sm font-medium transition ${
+                    selectedCoachId === coach.id
+                      ? 'border-primary bg-blue-50 text-primary'
+                      : 'border-border hover:bg-background'
+                  }`}
+                >
+                  {coach.name}
+                </Link>
+              ))}
+            </div>
+
+            {selectedCoachId && (
+              <div className="mt-6">
+                <CoachingWeekGrid
+                  mode="admin"
+                  coachId={selectedCoachId}
+                  weekStart={weekStart}
+                  gridSlots={gridSlots}
+                />
+              </div>
+            )}
+          </>
         )}
       </section>
 
@@ -233,7 +210,6 @@ export function AdminCoachingManager({ coaches, slots, bookings }: AdminCoaching
                     {booking.student_note && (
                       <p className="mt-2 text-sm">伝言: {booking.student_note}</p>
                     )}
-                    <p className="mt-1 text-xs text-muted">状態: {booking.status}</p>
                   </div>
                   <div className="flex shrink-0 gap-3">
                     <form action={completeCoachingBooking}>

@@ -1,18 +1,15 @@
 'use client'
 
-import { useActionState, useMemo, useState } from 'react'
+import { useActionState, useState } from 'react'
+import Link from 'next/link'
 import { bookCoachingSlot, cancelCoachingBooking, type CoachingActionState } from '@/app/coaching/actions'
-import {
-  formatCoachingDateKey,
-  formatCoachingDateLabel,
-  formatCoachingDateTimeRange,
-} from '@/lib/coaching/format'
+import { CoachingWeekGrid } from '@/components/coaching/CoachingWeekGrid'
+import { formatCoachingDateTimeRange } from '@/lib/coaching/format'
 import type {
   AvailableCoachingSlot,
   CoachingBookingWithDetails,
   CoachingCoach,
 } from '@/types/coaching'
-import { cn } from '@/lib/utils'
 
 const initialState: CoachingActionState = {}
 const fieldClass =
@@ -20,19 +17,10 @@ const fieldClass =
 
 interface StudentCoachingBookingProps {
   coaches: CoachingCoach[]
+  selectedCoachId: string | null
+  weekStart: string
   availableSlots: AvailableCoachingSlot[]
   bookings: CoachingBookingWithDetails[]
-}
-
-function groupSlotsByDate(slots: AvailableCoachingSlot[]) {
-  const map = new Map<string, AvailableCoachingSlot[]>()
-  for (const slot of slots) {
-    const key = formatCoachingDateKey(slot.starts_at)
-    const list = map.get(key) ?? []
-    list.push(slot)
-    map.set(key, list)
-  }
-  return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
 }
 
 function BookingForm({
@@ -79,20 +67,12 @@ function BookingForm({
 
 export function StudentCoachingBooking({
   coaches,
+  selectedCoachId,
+  weekStart,
   availableSlots,
   bookings,
 }: StudentCoachingBookingProps) {
-  const [selectedCoachId, setSelectedCoachId] = useState<string | null>(
-    coaches.length === 1 ? coaches[0]?.id ?? null : null,
-  )
-  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null)
-
-  const coachSlots = useMemo(
-    () => availableSlots.filter((slot) => slot.coach_id === selectedCoachId),
-    [availableSlots, selectedCoachId],
-  )
-  const groupedSlots = useMemo(() => groupSlotsByDate(coachSlots), [coachSlots])
-  const selectedSlot = availableSlots.find((slot) => slot.id === selectedSlotId) ?? null
+  const [selectedSlot, setSelectedSlot] = useState<AvailableCoachingSlot | null>(null)
 
   const upcomingBookings = bookings.filter(
     (b) => b.status === 'scheduled' && new Date(b.slot.starts_at) > new Date(),
@@ -112,22 +92,17 @@ export function StudentCoachingBooking({
         ) : (
           <div className="mt-4 flex flex-wrap gap-2">
             {coaches.map((coach) => (
-              <button
+              <Link
                 key={coach.id}
-                type="button"
-                onClick={() => {
-                  setSelectedCoachId(coach.id)
-                  setSelectedSlotId(null)
-                }}
-                className={cn(
-                  'rounded-xl border px-4 py-3 text-sm font-medium transition',
+                href={`/dashboard/coaching?coach=${coach.id}&week=${weekStart}`}
+                className={`rounded-xl border px-4 py-3 text-sm font-medium transition ${
                   selectedCoachId === coach.id
                     ? 'border-primary bg-blue-50 text-primary'
-                    : 'border-border hover:bg-background',
-                )}
+                    : 'border-border hover:bg-background'
+                }`}
               >
                 {coach.name}
-              </button>
+              </Link>
             ))}
           </div>
         )}
@@ -136,47 +111,26 @@ export function StudentCoachingBooking({
       {selectedCoachId && (
         <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-bold">2. 日時を選ぶ</h2>
-          <p className="mt-1 text-sm text-muted">空いている枠を選んで予約してください。</p>
+          <p className="mt-1 text-sm text-muted">開放されている枠のみ表示されます。</p>
 
-          {groupedSlots.length === 0 ? (
-            <p className="mt-4 text-sm text-muted">この担当の予約可能枠はまだありません。</p>
-          ) : (
-            <div className="mt-4 space-y-4">
-              {groupedSlots.map(([dateKey, slots]) => (
-                <div key={dateKey}>
-                  <p className="mb-2 text-sm font-medium text-muted">{formatCoachingDateLabel(dateKey)}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {slots.map((slot) => (
-                      <button
-                        key={slot.id}
-                        type="button"
-                        onClick={() => setSelectedSlotId(slot.id)}
-                        className={cn(
-                          'rounded-lg border px-3 py-2 text-sm transition',
-                          selectedSlotId === slot.id
-                            ? 'border-primary bg-primary text-white'
-                            : 'border-border hover:bg-background',
-                        )}
-                      >
-                        {new Date(slot.starts_at).toLocaleTimeString('ja-JP', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                        〜
-                        {new Date(slot.ends_at).toLocaleTimeString('ja-JP', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="mt-4">
+            <CoachingWeekGrid
+              mode="student"
+              coachId={selectedCoachId}
+              weekStart={weekStart}
+              gridSlots={[]}
+              availableSlots={availableSlots}
+              selectedSlotId={selectedSlot?.id ?? null}
+              onSelectSlot={setSelectedSlot}
+            />
+          </div>
+
+          {availableSlots.length === 0 && (
+            <p className="mt-4 text-sm text-muted">この週に予約可能な枠はありません。</p>
           )}
 
           {selectedSlot && (
-            <BookingForm slot={selectedSlot} onCancel={() => setSelectedSlotId(null)} />
+            <BookingForm slot={selectedSlot} onCancel={() => setSelectedSlot(null)} />
           )}
         </section>
       )}

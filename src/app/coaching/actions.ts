@@ -2,7 +2,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { fetchCoachingBookingBySlotId } from '@/lib/coaching/queries'
+import {
+  fetchCoachingBookingBySlotId,
+  slotEndsAtIso,
+  slotStartsAtIso,
+} from '@/lib/coaching/queries'
+import { isCoachingSlotTime } from '@/lib/coaching/slot-times'
 
 export type CoachingActionState = {
   error?: string
@@ -47,13 +52,6 @@ async function assertStudent(): Promise<{ userId: string } | { error: string }> 
 
   if (profile?.role !== 'student') return { error: '生徒アカウントでのみ予約できます' }
   return { userId: user.id }
-}
-
-function parseDateTime(date: string, time: string): string | null {
-  if (!date || !time) return null
-  const value = new Date(`${date}T${time}:00`)
-  if (Number.isNaN(value.getTime())) return null
-  return value.toISOString()
 }
 
 export async function createCoachingCoach(
@@ -120,57 +118,68 @@ export async function deleteCoachingCoach(formData: FormData): Promise<void> {
   revalidateCoachingPaths()
 }
 
-export async function createCoachingSlot(
-  _prev: CoachingActionState,
-  formData: FormData,
-): Promise<CoachingActionState> {
+export async function toggleCoachingSlot(formData: FormData): Promise<CoachingActionState> {
   const authError = await assertAdmin()
   if (authError) return { error: authError }
 
   const coachId = String(formData.get('coachId') ?? '').trim()
-  const date = String(formData.get('slotDate') ?? '').trim()
+  const slotDate = String(formData.get('slotDate') ?? '').trim()
   const startTime = String(formData.get('startTime') ?? '').trim()
-  const endTime = String(formData.get('endTime') ?? '').trim()
+  const open = formData.get('open') === 'true'
 
-  const startsAt = parseDateTime(date, startTime)
-  const endsAt = parseDateTime(date, endTime)
-
-  if (!coachId || !startsAt || !endsAt) {
-    return { error: '講師・日付・時間を入力してください' }
+  if (!coachId || !slotDate || !startTime) {
+    return { error: '枠の指定が不正です' }
   }
 
-  if (endsAt <= startsAt) {
-    return { error: '終了時刻は開始時刻より後にしてください' }
+  if (!isCoachingSlotTime(startTime)) {
+    return { error: '時刻が不正です' }
   }
 
+  const startsAt = slotStartsAtIso(slotDate, startTime)
   if (new Date(startsAt) <= new Date()) {
-    return { error: '未来の日時を指定してください' }
+    return { error: '過去の枠は変更できません' }
   }
 
   const supabase = await createClient()
-  const { error } = await supabase.from('coaching_slots').insert({
-    coach_id: coachId,
-    starts_at: startsAt,
-    ends_at: endsAt,
-  })
 
-  if (error) return { error: '予約枠の登録に失敗しました' }
+  const { data: existing } = await supabase
+    .from('coaching_slots')
+    .select('id')
+    .eq('coach_id', coachId)
+    .eq('slot_date', slotDate)
+    .eq('start_time', `${startTime}:00`)
+    .maybeSingle<{ id: string }>()
+
+  if (open) {
+    const endsAt = slotEndsAtIso(slotDate, startTime)
+    const payload = {
+      coach_id: coachId,
+      slot_date: slotDate,
+      start_time: `${startTime}:00`,
+      starts_at: startsAt,
+      ends_at: endsAt,
+      is_open: true,
+    }
+
+    const { error } = existing
+      ? await supabase.from('coaching_slots').update(payload).eq('id', existing.id)
+      : await supabase.from('coaching_slots').insert(payload)
+
+    if (error) return { error: '枠の開放に失敗しました' }
+  } else if (existing) {
+    const booked = await fetchCoachingBookingBySlotId(existing.id)
+    if (booked) return { error: '予約済みの枠は閉じられません' }
+
+    const { error } = await supabase
+      .from('coaching_slots')
+      .update({ is_open: false })
+      .eq('id', existing.id)
+
+    if (error) return { error: '枠のクローズに失敗しました' }
+  }
 
   revalidateCoachingPaths()
   return { success: true }
-}
-
-export async function deleteCoachingSlot(formData: FormData): Promise<void> {
-  if (await assertAdmin()) return
-  const id = String(formData.get('id') ?? '')
-  if (!id) return
-
-  const existing = await fetchCoachingBookingBySlotId(id)
-  if (existing) return
-
-  const supabase = await createClient()
-  await supabase.from('coaching_slots').delete().eq('id', id)
-  revalidateCoachingPaths()
 }
 
 export async function bookCoachingSlot(
@@ -189,11 +198,13 @@ export async function bookCoachingSlot(
 
   const { data: slot, error: slotError } = await supabase
     .from('coaching_slots')
-    .select('id, coach_id, starts_at')
+    .select('id, coach_id, starts_at, is_open')
     .eq('id', slotId)
-    .maybeSingle<{ id: string; coach_id: string; starts_at: string }>()
+    .maybeSingle<{ id: string; coach_id: string; starts_at: string; is_open: boolean }>()
 
   if (slotError || !slot) return { error: '予約枠が見つかりません' }
+
+  if (!slot.is_open) return { error: 'この予約枠は現在予約できません' }
 
   if (new Date(slot.starts_at) <= new Date()) {
     return { error: 'この予約枠は既に過ぎています' }

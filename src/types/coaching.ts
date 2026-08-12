@@ -12,6 +12,9 @@ export interface CoachingCoach {
 export interface CoachingSlot {
   id: string
   coach_id: string
+  slot_date: string | null
+  start_time: string | null
+  is_open: boolean
   starts_at: string
   ends_at: string
   created_at: string
@@ -40,5 +43,7 @@ export type CoachingBookingWithDetails = CoachingBooking & {
 }
 
 export type AvailableCoachingSlot = CoachingSlotWithCoach & {
+  slot_date: string
+  start_time: string
   is_available: true
 }
