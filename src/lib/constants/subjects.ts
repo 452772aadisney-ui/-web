@@ -25,6 +25,3 @@ export const EXAM_SUBJECTS = [
 ] as const
 
 export type ExamSubject = (typeof EXAM_SUBJECTS)[number]
-
-/** 科目タグの幅（最長の「数学IIBC」+ チェックボックス分） */
-export const SUBJECT_TAG_CELL_WIDTH = '8.25rem'
