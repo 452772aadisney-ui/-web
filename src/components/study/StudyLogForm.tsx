@@ -10,7 +10,10 @@ import type { Textbook } from '@/types/textbook'
 const initialState: StudyLogActionState = {}
 
 const fieldClass =
-  'w-full min-w-0 max-w-full rounded-lg border border-border bg-background px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20'
+  'block w-full min-w-0 max-w-full rounded-lg border border-border bg-background px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20'
+
+const dateFieldShellClass =
+  'w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-background focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20'
 
 interface StudyLogFormProps {
   profileSubjects: string[]
@@ -37,20 +40,22 @@ export function StudyLogForm({ profileSubjects, textbooks }: StudyLogFormProps) 
 
   return (
     <form action={formAction} className="min-w-0 space-y-4">
-      <label className="block min-w-0">
+      <label className="block w-full min-w-0">
         <span className="mb-1.5 block text-sm font-medium">
           学習日 <span className="text-error">*</span>
         </span>
-        <input
-          type="date"
-          name="studiedOn"
-          defaultValue={getTodayDateKey()}
-          required
-          className={fieldClass}
-        />
+        <div className={dateFieldShellClass}>
+          <input
+            type="date"
+            name="studiedOn"
+            defaultValue={getTodayDateKey()}
+            required
+            className="study-date-input px-3 py-2.5 outline-none"
+          />
+        </div>
       </label>
 
-      <label className="block min-w-0">
+      <label className="block w-full min-w-0">
         <span className="mb-1.5 block text-sm font-medium">
           科目 <span className="text-error">*</span>
         </span>
@@ -72,7 +77,7 @@ export function StudyLogForm({ profileSubjects, textbooks }: StudyLogFormProps) 
         </select>
       </label>
 
-      <label className="block min-w-0">
+      <label className="block w-full min-w-0">
         <span className="mb-1.5 block text-sm font-medium">
           教材 <span className="text-error">*</span>
         </span>
@@ -104,7 +109,7 @@ export function StudyLogForm({ profileSubjects, textbooks }: StudyLogFormProps) 
         )}
       </label>
 
-      <label className="block">
+      <label className="block w-full min-w-0">
         <span className="mb-1.5 block text-sm font-medium">内容</span>
         <textarea
           name="content"
@@ -114,7 +119,7 @@ export function StudyLogForm({ profileSubjects, textbooks }: StudyLogFormProps) 
         />
       </label>
 
-      <label className="block min-w-0 sm:max-w-xs">
+      <label className="block w-full min-w-0 sm:max-w-xs">
         <span className="mb-1.5 block text-sm font-medium">
           学習時間（分） <span className="text-error">*</span>
         </span>

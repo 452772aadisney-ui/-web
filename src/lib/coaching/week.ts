@@ -72,10 +72,13 @@ function toWeekDay(date: Date): WeekDay {
   }
 }
 
-/** 指定日から連続3日間（生徒向け予約画面） */
-export function getThreeDayWindow(startDate: string): WeekDay[] {
+/** 生徒向け予約画面で一度に表示する日数 */
+export const COACHING_STUDENT_WINDOW_DAYS = 4
+
+/** 指定日から連続 n 日間（生徒向け予約画面） */
+export function getDayWindow(startDate: string, days = COACHING_STUDENT_WINDOW_DAYS): WeekDay[] {
   const start = parseDateKey(startDate)
-  return Array.from({ length: 3 }, (_, index) => {
+  return Array.from({ length: days }, (_, index) => {
     const date = new Date(start)
     date.setDate(start.getDate() + index)
     return toWeekDay(date)

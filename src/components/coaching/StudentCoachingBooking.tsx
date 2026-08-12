@@ -116,7 +116,7 @@ export function StudentCoachingBooking({
       {selectedCoachId && (
         <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-bold">2. 日時を選ぶ</h2>
-          <p className="mt-1 text-sm text-muted">3日分の開放枠を表示しています。</p>
+          <p className="mt-1 text-sm text-muted">4日分の予約枠を表示しています。</p>
 
           <div className="mt-4">
             <CoachingWeekGrid
@@ -131,7 +131,7 @@ export function StudentCoachingBooking({
           </div>
 
           {availableSlots.length === 0 && (
-            <p className="mt-4 text-sm text-muted">この期間に予約可能な枠はありません。</p>
+            <p className="mt-4 text-sm text-muted">この期間に予約できる枠はありません。</p>
           )}
 
           {selectedSlot && (

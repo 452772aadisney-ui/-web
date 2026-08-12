@@ -63,13 +63,15 @@ function StudyLogEditRow({
           <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <label className="block min-w-0">
               <span className="mb-1 block text-xs font-medium">学習日</span>
-              <input
-                type="date"
-                name="studiedOn"
-                required
-                defaultValue={log.studied_on}
-                className={fieldClass}
-              />
+              <div className="overflow-hidden rounded-lg border border-border bg-background focus-within:border-primary">
+                <input
+                  type="date"
+                  name="studiedOn"
+                  required
+                  defaultValue={log.studied_on}
+                  className="study-date-input px-2 py-1.5 text-sm outline-none"
+                />
+              </div>
             </label>
             <label className="block min-w-0">
               <span className="mb-1 block text-xs font-medium">科目</span>

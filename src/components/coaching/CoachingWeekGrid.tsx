@@ -5,9 +5,10 @@ import { useTransition } from 'react'
 import { toggleCoachingSlot } from '@/app/coaching/actions'
 import { COACHING_SLOT_TIMES, buildSlotDateTime, slotDateTimeKey } from '@/lib/coaching/slot-times'
 import {
+  COACHING_STUDENT_WINDOW_DAYS,
   formatDayRange,
   formatWeekRange,
-  getThreeDayWindow,
+  getDayWindow,
   getWeekdays,
   shiftStartDate,
   shiftWeekStart,
@@ -80,7 +81,7 @@ function WeekNav({
   )
 }
 
-function ThreeDayNav({
+function StudentDayNav({
   windowStart,
   coachId,
 }: {
@@ -89,7 +90,7 @@ function ThreeDayNav({
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
-  const days = getThreeDayWindow(windowStart)
+  const days = getDayWindow(windowStart)
 
   function goWindow(offsetDays: number) {
     const next = shiftStartDate(windowStart, offsetDays)
@@ -102,20 +103,20 @@ function ThreeDayNav({
     <div className="mb-4 flex items-center justify-between gap-3">
       <button
         type="button"
-        onClick={() => goWindow(-3)}
+        onClick={() => goWindow(-COACHING_STUDENT_WINDOW_DAYS)}
         disabled={pending}
         className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-background disabled:opacity-60"
-        aria-label="前の3日"
+        aria-label={`前の${COACHING_STUDENT_WINDOW_DAYS}日`}
       >
         ←
       </button>
       <p className="text-sm font-medium">{formatDayRange(days)}</p>
       <button
         type="button"
-        onClick={() => goWindow(3)}
+        onClick={() => goWindow(COACHING_STUDENT_WINDOW_DAYS)}
         disabled={pending}
         className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-background disabled:opacity-60"
-        aria-label="次の3日"
+        aria-label={`次の${COACHING_STUDENT_WINDOW_DAYS}日`}
       >
         →
       </button>
@@ -183,7 +184,7 @@ function AdminCell({
   )
 }
 
-function StudentThreeDayGrid({
+function StudentBookingGrid({
   windowStart,
   coachId,
   availableSlots,
@@ -196,7 +197,7 @@ function StudentThreeDayGrid({
   selectedSlotId?: string | null
   onSelectSlot?: (slot: AvailableCoachingSlot) => void
 }) {
-  const days = getThreeDayWindow(windowStart)
+  const days = getDayWindow(windowStart)
   const slotsByDay = new Map<string, AvailableCoachingSlot[]>()
 
   for (const slot of availableSlots) {
@@ -211,18 +212,20 @@ function StudentThreeDayGrid({
 
   return (
     <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
-      <ThreeDayNav windowStart={windowStart} coachId={coachId} />
+      <StudentDayNav windowStart={windowStart} coachId={coachId} />
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-2 sm:gap-3">
         {days.map((day) => {
           const daySlots = slotsByDay.get(day.date) ?? []
 
           return (
             <div key={day.date} className="min-w-0">
-              <div className="mb-3 text-center text-sm font-semibold text-muted">{day.label}</div>
-              <div className="flex flex-col gap-2">
+              <div className="mb-2 text-center text-xs font-semibold text-muted sm:mb-3 sm:text-sm">
+                {day.label}
+              </div>
+              <div className="flex flex-col gap-1.5 sm:gap-2">
                 {daySlots.length === 0 ? (
-                  <div className="py-6 text-center text-xs text-muted">—</div>
+                  <div className="py-4 text-center text-xs text-muted sm:py-6">—</div>
                 ) : (
                   daySlots.map((slot) => (
                     <button
@@ -230,7 +233,7 @@ function StudentThreeDayGrid({
                       type="button"
                       onClick={() => onSelectSlot?.(slot)}
                       className={cn(
-                        'h-10 w-full rounded-full border text-sm font-medium transition',
+                        'h-9 w-full rounded-full border text-xs font-medium transition sm:h-10 sm:text-sm',
                         selectedSlotId === slot.id
                           ? 'border-primary bg-primary text-white'
                           : 'border-primary/30 bg-white text-primary hover:bg-blue-50',
@@ -261,7 +264,7 @@ export function CoachingWeekGrid({
 }: CoachingWeekGridProps) {
   if (mode === 'student') {
     return (
-      <StudentThreeDayGrid
+      <StudentBookingGrid
         windowStart={windowStart}
         coachId={coachId}
         availableSlots={availableSlots}

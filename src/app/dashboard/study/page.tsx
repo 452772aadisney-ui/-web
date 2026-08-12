@@ -38,7 +38,7 @@ export default async function StudentStudyPage() {
   return (
     <StudentPageShell title="学習記録" backHref="/dashboard" backLabel="ダッシュボード">
       <div className="space-y-6">
-        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-bold">学習を記録する</h2>
           <p className="mt-1 text-sm text-muted">
             プロフィールの使用科目と登録済み教材から選んで記録します。

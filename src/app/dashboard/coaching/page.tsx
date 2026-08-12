@@ -9,7 +9,7 @@ import {
   fetchCoachingCoaches,
   getTodayDateKey,
 } from '@/lib/coaching/queries'
-import { getThreeDayWindow } from '@/lib/coaching/week'
+import { getDayWindow } from '@/lib/coaching/week'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,7 +25,7 @@ export default async function StudentCoachingPage({
 
   const params = await searchParams
   const windowStart = params.start ?? getTodayDateKey()
-  const dateKeys = getThreeDayWindow(windowStart).map((day) => day.date)
+  const dateKeys = getDayWindow(windowStart).map((day) => day.date)
 
   const coaches = await fetchCoachingCoaches(true)
   const selectedCoachId =
@@ -43,7 +43,7 @@ export default async function StudentCoachingPage({
   return (
     <StudentPageShell title="コーチング予約" backHref="/dashboard" backLabel="ダッシュボード">
       <p className="mb-6 text-sm text-muted">
-        担当を選び、開放されている枠から予約してください。各枠は30分です。
+        担当を選び、予約枠から日時を選んで予約してください。各枠は30分です。
       </p>
       <StudentCoachingBooking
         coaches={coaches}

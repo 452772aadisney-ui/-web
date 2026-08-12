@@ -93,9 +93,22 @@ body {
   }
 
   input[type='date'] {
+    display: block;
     width: 100%;
     min-width: 0;
     max-width: 100%;
     box-sizing: border-box;
+    -webkit-min-logical-width: 0;
+  }
+
+  .study-date-input {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    border: 0;
+    background: transparent;
+    -webkit-appearance: none;
+    appearance: none;
   }
 }
