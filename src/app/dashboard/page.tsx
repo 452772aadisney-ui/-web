@@ -5,6 +5,7 @@ import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { CoachingAlertBanner } from '@/components/coaching/CoachingAlertBanner'
 import { MyPageActions } from '@/components/student/MyPageActions'
 import { MyPageAlertBanner } from '@/components/student/MyPageAlertBanner'
+import { StudentQrCode } from '@/components/student/StudentQrCode'
 import { fetchUnreadAnnouncementCount } from '@/lib/announcements/queries'
 import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
 import { getCoachingAlertState } from '@/lib/coaching/alert'
@@ -75,6 +76,13 @@ export default async function StudentDashboardPage() {
         )}
 
         <MyPageActions />
+
+        {profile.role === 'student' && profile.student_code && (
+          <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-bold">生徒ID（QRコード）</h2>
+            <StudentQrCode studentCode={profile.student_code} />
+          </section>
+        )}
       </div>
     </StudentPageShell>
   )

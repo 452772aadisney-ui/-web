@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
+import { getPersonName } from '@/lib/auth/display-name'
 import { fetchUnreadAnnouncementCount } from '@/lib/announcements/queries'
 import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
 import { HamburgerMenu } from '@/components/layout/HamburgerMenu'
@@ -49,11 +50,13 @@ export async function StudentPageShell({
     badgeCount: getHamburgerBadgeCount(item.href, unreadAnnouncementCount, unreadChatCount),
   }))
 
+  const welcomeName = profile ? getPersonName(profile) : null
+
   return (
     <div className="min-h-dvh">
       <header className="border-b border-border bg-card px-4 py-4">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             {backHref && (
               <Link href={backHref} className="text-sm text-primary hover:underline">
                 ← {backLabel ?? '戻る'}
@@ -62,7 +65,16 @@ export async function StudentPageShell({
             <p className="text-sm text-muted">受験生web</p>
             <h1 className="text-xl font-bold">{title}</h1>
           </div>
-          <HamburgerMenu items={menuItems} />
+          <div className="flex shrink-0 items-center gap-3">
+            {welcomeName && (
+              <p className="max-w-[9rem] truncate text-sm text-muted sm:max-w-none">
+                ようこそ{' '}
+                <span className="font-medium text-foreground">{welcomeName}</span>
+                さん
+              </p>
+            )}
+            <HamburgerMenu items={menuItems} />
+          </div>
         </div>
       </header>
 

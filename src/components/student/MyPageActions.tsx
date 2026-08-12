@@ -15,7 +15,7 @@ export function MyPageActions() {
     <div className="space-y-4">
       <Link
         href="/dashboard/study"
-        className="flex min-h-[5.5rem] items-center justify-center rounded-2xl border border-border bg-card px-6 py-6 text-center text-lg font-bold shadow-sm transition hover:bg-background"
+        className="flex min-h-[5.5rem] items-center justify-center rounded-2xl bg-[#1a1f36] px-6 py-6 text-center text-lg font-bold text-white shadow-sm transition hover:bg-[#252b45]"
       >
         学習を記録する
       </Link>

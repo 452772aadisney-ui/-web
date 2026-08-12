@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { StudentQrCode } from '@/components/student/StudentQrCode'
 import { getPersonName } from '@/lib/auth/display-name'
 import type { Profile } from '@/types/database'
 import type { StudentTag } from '@/types/tag'
@@ -66,13 +65,6 @@ export function StudentInfoCard({ profile, tags }: StudentInfoCardProps) {
           </Link>
         </p>
       </section>
-
-      {profile.student_code && (
-        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <h3 className="mb-4 text-lg font-bold">生徒ID（QRコード）</h3>
-          <StudentQrCode studentCode={profile.student_code} />
-        </section>
-      )}
     </div>
   )
 }
