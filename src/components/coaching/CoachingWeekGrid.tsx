@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition, type PointerEvent } from 'react'
 import {
   loadAvailableCoachingSlotsForWindow,
   loadCoachingGridForWeek,
-  toggleCoachingSlot,
+  setCoachingSlotsOpen,
+  type CoachingSlotSelection,
 } from '@/app/coaching/actions'
 import { COACHING_SLOT_TIMES, buildSlotDateTime, slotDateTimeKey } from '@/lib/coaching/slot-times'
 import {
@@ -115,64 +116,166 @@ function StudentDayNav({
   )
 }
 
-function AdminCell({
+function parseSlotKey(key: string): CoachingSlotSelection {
+  const separatorIndex = key.indexOf('_')
+  return {
+    slotDate: key.slice(0, separatorIndex),
+    startTime: key.slice(separatorIndex + 1),
+  }
+}
+
+function AdminWeekGrid({
   coachId,
-  day,
-  startTime,
-  slot,
-  onToggled,
+  weekStart,
+  gridSlots,
+  pending,
+  onRefresh,
 }: {
   coachId: string
-  day: WeekDay
-  startTime: string
-  slot?: CoachingGridSlot
-  onToggled: () => void
+  weekStart: string
+  gridSlots: CoachingGridSlot[]
+  pending: boolean
+  onRefresh: () => void
 }) {
-  const [pending, startTransition] = useTransition()
+  const weekdays = getWeekdays(weekStart)
+  const gridMap = buildGridMap(gridSlots)
+  const [drag, setDrag] = useState<{ paintOpen: boolean; keys: Set<string> } | null>(null)
+  const [saving, startSaveTransition] = useTransition()
+  const dragRef = useRef(drag)
+  dragRef.current = drag
 
-  const isPast = slot
-    ? new Date(slot.starts_at) <= new Date()
-    : buildSlotDateTime(day.date, startTime) <= new Date()
+  const getCellMeta = useCallback(
+    (slotDate: string, startTime: string) => {
+      const key = slotDateTimeKey(slotDate, startTime)
+      const slot = gridMap.get(key)
+      const isPast = slot
+        ? new Date(slot.starts_at) <= new Date()
+        : buildSlotDateTime(slotDate, startTime) <= new Date()
+      const isOpen = slot?.is_open ?? false
+      const isBooked = slot?.is_booked ?? false
 
-  if (isPast) {
-    return <div className="h-10 rounded-full bg-muted/20" />
-  }
+      return { key, isPast, isOpen, isBooked }
+    },
+    [gridMap],
+  )
 
-  const isOpen = slot?.is_open ?? false
-  const isBooked = slot?.is_booked ?? false
+  const finishDrag = useCallback(() => {
+    const currentDrag = dragRef.current
+    if (!currentDrag) return
 
-  function handleClick() {
-    if (isBooked) return
-    startTransition(async () => {
-      await toggleCoachingSlot(
-        (() => {
-          const fd = new FormData()
-          fd.set('coachId', coachId)
-          fd.set('slotDate', day.date)
-          fd.set('startTime', startTime)
-          fd.set('open', isOpen ? 'false' : 'true')
-          return fd
-        })(),
-      )
-      onToggled()
+    setDrag(null)
+
+    const selections = [...currentDrag.keys]
+      .map(parseSlotKey)
+      .filter(({ slotDate, startTime }) => {
+        const meta = getCellMeta(slotDate, startTime)
+        return !meta.isPast && !meta.isBooked
+      })
+
+    if (selections.length === 0) return
+
+    startSaveTransition(async () => {
+      await setCoachingSlotsOpen(coachId, selections, currentDrag.paintOpen)
+      onRefresh()
+    })
+  }, [coachId, getCellMeta, onRefresh])
+
+  useEffect(() => {
+    if (!drag) return
+
+    const handlePointerUp = () => finishDrag()
+
+    window.addEventListener('pointerup', handlePointerUp)
+    return () => window.removeEventListener('pointerup', handlePointerUp)
+  }, [drag, finishDrag])
+
+  function beginDrag(day: WeekDay, startTime: string, event: PointerEvent<HTMLButtonElement>) {
+    if (event.button !== 0 || saving) return
+
+    const meta = getCellMeta(day.date, startTime)
+    if (meta.isPast || meta.isBooked) return
+
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+
+    setDrag({
+      paintOpen: !meta.isOpen,
+      keys: new Set([meta.key]),
     })
   }
 
+  function extendDrag(day: WeekDay, startTime: string) {
+    setDrag((current) => {
+      if (!current) return current
+
+      const meta = getCellMeta(day.date, startTime)
+      if (meta.isPast || meta.isBooked || current.keys.has(meta.key)) return current
+
+      const keys = new Set(current.keys)
+      keys.add(meta.key)
+      return { ...current, keys }
+    })
+  }
+
+  const isBusy = pending || saving
+
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={pending || isBooked}
-      className={cn(
-        'h-10 w-full rounded-full border text-sm font-medium transition',
-        isBooked && 'cursor-not-allowed border-amber-300 bg-amber-50 text-amber-800',
-        !isBooked && isOpen && 'border-primary bg-blue-50 text-primary hover:bg-blue-100',
-        !isBooked && !isOpen && 'border-border bg-white text-muted hover:border-primary/40',
-        pending && 'opacity-60',
-      )}
-    >
-      {isBooked ? '予約済' : startTime}
-    </button>
+    <>
+      <div
+        className={cn('grid min-w-[640px] select-none gap-2 touch-none', isBusy && 'opacity-60')}
+        style={{ gridTemplateColumns: `64px repeat(${weekdays.length}, minmax(0, 1fr))` }}
+      >
+        <div />
+        {weekdays.map((day) => (
+          <div key={day.date} className="text-center text-sm font-semibold text-muted">
+            {day.label}
+          </div>
+        ))}
+
+        {COACHING_SLOT_TIMES.map((startTime) => (
+          <div key={startTime} className="contents">
+            <div className="flex items-center justify-end pr-2 text-xs text-muted">{startTime}</div>
+            {weekdays.map((day) => {
+              const meta = getCellMeta(day.date, startTime)
+              const isPainted = drag?.keys.has(meta.key) ?? false
+              const displayOpen = isPainted ? (drag?.paintOpen ?? meta.isOpen) : meta.isOpen
+
+              if (meta.isPast) {
+                return <div key={meta.key} className="h-10 rounded-full bg-muted/20" />
+              }
+
+              return (
+                <div key={meta.key} className="px-0.5">
+                  <button
+                    type="button"
+                    onPointerDown={(event) => beginDrag(day, startTime, event)}
+                    onPointerEnter={() => extendDrag(day, startTime)}
+                    disabled={isBusy || meta.isBooked}
+                    className={cn(
+                      'h-10 w-full rounded-full border text-sm font-medium transition',
+                      meta.isBooked && 'cursor-not-allowed border-amber-300 bg-amber-50 text-amber-800',
+                      !meta.isBooked &&
+                        displayOpen &&
+                        'border-primary bg-blue-50 text-primary hover:bg-blue-100',
+                      !meta.isBooked &&
+                        !displayOpen &&
+                        'border-border bg-white text-muted hover:border-primary/40',
+                      isPainted && !meta.isBooked && 'ring-2 ring-primary/30',
+                    )}
+                  >
+                    {meta.isBooked ? '予約済' : startTime}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-4 text-xs text-muted">
+        枠をクリック、またはドラッグして開放/クローズを切り替えられます。予約済みの枠は変更できません。
+      </p>
+    </>
   )
 }
 
@@ -297,9 +400,6 @@ export function CoachingWeekGrid({
     )
   }
 
-  const weekdays = getWeekdays(weekStart)
-  const gridMap = buildGridMap(gridSlots)
-
   return (
     <div className="overflow-x-auto rounded-2xl border border-border bg-white p-4 shadow-sm">
       <WeekNav
@@ -309,43 +409,13 @@ export function CoachingWeekGrid({
         onNext={() => goWeek(1)}
       />
 
-      <div
-        className={cn('grid min-w-[640px] gap-2', pending && 'opacity-60')}
-        style={{ gridTemplateColumns: `64px repeat(${weekdays.length}, minmax(0, 1fr))` }}
-      >
-        <div />
-        {weekdays.map((day) => (
-          <div key={day.date} className="text-center text-sm font-semibold text-muted">
-            {day.label}
-          </div>
-        ))}
-
-        {COACHING_SLOT_TIMES.map((startTime) => (
-          <div key={startTime} className="contents">
-            <div className="flex items-center justify-end pr-2 text-xs text-muted">{startTime}</div>
-            {weekdays.map((day) => {
-              const key = slotDateTimeKey(day.date, startTime)
-              const gridSlot = gridMap.get(key)
-
-              return (
-                <div key={key} className="px-0.5">
-                  <AdminCell
-                    coachId={coachId}
-                    day={day}
-                    startTime={startTime}
-                    slot={gridSlot}
-                    onToggled={() => refreshAdminGrid(weekStart)}
-                  />
-                </div>
-              )
-            })}
-          </div>
-        ))}
-      </div>
-
-      <p className="mt-4 text-xs text-muted">
-        枠をクリックすると開放/クローズを切り替えられます。予約済みの枠は閉じられません。
-      </p>
+      <AdminWeekGrid
+        coachId={coachId}
+        weekStart={weekStart}
+        gridSlots={gridSlots}
+        pending={pending}
+        onRefresh={() => refreshAdminGrid(weekStart)}
+      />
     </div>
   )
 }

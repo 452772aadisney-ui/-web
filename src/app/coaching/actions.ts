@@ -10,7 +10,7 @@ import {
   slotStartsAtIso,
   type CoachingGridSlot,
 } from '@/lib/coaching/queries'
-import { isCoachingSlotTime } from '@/lib/coaching/slot-times'
+import { isCoachingSlotTime, slotDateTimeKey } from '@/lib/coaching/slot-times'
 import { getDayWindow } from '@/lib/coaching/week'
 import type { AvailableCoachingSlot } from '@/types/coaching'
 
@@ -145,10 +145,111 @@ export async function loadAvailableCoachingSlotsForWindow(
   return fetchAvailableCoachingSlots(coachId, dateKeys)
 }
 
-export async function toggleCoachingSlot(formData: FormData): Promise<CoachingActionState> {
+export type CoachingSlotSelection = {
+  slotDate: string
+  startTime: string
+}
+
+async function applyCoachingSlotOpenState(
+  coachId: string,
+  slots: CoachingSlotSelection[],
+  open: boolean,
+): Promise<CoachingActionState> {
   const authError = await assertAdmin()
   if (authError) return { error: authError }
 
+  if (!coachId || slots.length === 0) return { success: true }
+
+  const validSlots = slots.filter(({ slotDate, startTime }) => {
+    if (!slotDate || !startTime || !isCoachingSlotTime(startTime)) return false
+    const startsAt = slotStartsAtIso(slotDate, startTime)
+    return new Date(startsAt) > new Date()
+  })
+
+  if (validSlots.length === 0) return { success: true }
+
+  const supabase = await createClient()
+  const dateKeys = [...new Set(validSlots.map((slot) => slot.slotDate))]
+
+  const { data: existingRows, error: existingError } = await supabase
+    .from('coaching_slots')
+    .select('id, slot_date, start_time, is_open')
+    .eq('coach_id', coachId)
+    .in('slot_date', dateKeys)
+
+  if (existingError) return { error: '枠の取得に失敗しました' }
+
+  const existingMap = new Map<string, { id: string; is_open: boolean }>()
+  for (const row of existingRows ?? []) {
+    const startTime = String(row.start_time).slice(0, 5)
+    existingMap.set(slotDateTimeKey(String(row.slot_date), startTime), {
+      id: row.id,
+      is_open: row.is_open ?? false,
+    })
+  }
+
+  if (open) {
+    const payloads = validSlots
+      .filter((slot) => {
+        const existing = existingMap.get(slotDateTimeKey(slot.slotDate, slot.startTime))
+        return !existing?.is_open
+      })
+      .map((slot) => ({
+        coach_id: coachId,
+        slot_date: slot.slotDate,
+        start_time: `${slot.startTime}:00`,
+        starts_at: slotStartsAtIso(slot.slotDate, slot.startTime),
+        ends_at: slotEndsAtIso(slot.slotDate, slot.startTime),
+        is_open: true,
+      }))
+
+    if (payloads.length > 0) {
+      const { error } = await supabase.from('coaching_slots').upsert(payloads, {
+        onConflict: 'coach_id,slot_date,start_time',
+      })
+      if (error) return { error: '枠の開放に失敗しました' }
+    }
+  } else {
+    const slotIds = validSlots
+      .map((slot) => existingMap.get(slotDateTimeKey(slot.slotDate, slot.startTime))?.id)
+      .filter((id): id is string => Boolean(id))
+
+    if (slotIds.length > 0) {
+      const { data: bookings, error: bookingsError } = await supabase
+        .from('coaching_bookings')
+        .select('slot_id')
+        .in('slot_id', slotIds)
+        .neq('status', 'cancelled')
+
+      if (bookingsError) return { error: '予約状況の確認に失敗しました' }
+
+      const bookedIds = new Set((bookings ?? []).map((booking) => booking.slot_id))
+      const closableIds = slotIds.filter((id) => !bookedIds.has(id))
+
+      if (closableIds.length > 0) {
+        const { error } = await supabase
+          .from('coaching_slots')
+          .update({ is_open: false })
+          .in('id', closableIds)
+
+        if (error) return { error: '枠のクローズに失敗しました' }
+      }
+    }
+  }
+
+  revalidateCoachingPaths()
+  return { success: true }
+}
+
+export async function setCoachingSlotsOpen(
+  coachId: string,
+  slots: CoachingSlotSelection[],
+  open: boolean,
+): Promise<CoachingActionState> {
+  return applyCoachingSlotOpenState(coachId, slots, open)
+}
+
+export async function toggleCoachingSlot(formData: FormData): Promise<CoachingActionState> {
   const coachId = String(formData.get('coachId') ?? '').trim()
   const slotDate = String(formData.get('slotDate') ?? '').trim()
   const startTime = String(formData.get('startTime') ?? '').trim()
@@ -167,46 +268,7 @@ export async function toggleCoachingSlot(formData: FormData): Promise<CoachingAc
     return { error: '過去の枠は変更できません' }
   }
 
-  const supabase = await createClient()
-
-  const { data: existing } = await supabase
-    .from('coaching_slots')
-    .select('id')
-    .eq('coach_id', coachId)
-    .eq('slot_date', slotDate)
-    .eq('start_time', `${startTime}:00`)
-    .maybeSingle<{ id: string }>()
-
-  if (open) {
-    const endsAt = slotEndsAtIso(slotDate, startTime)
-    const payload = {
-      coach_id: coachId,
-      slot_date: slotDate,
-      start_time: `${startTime}:00`,
-      starts_at: startsAt,
-      ends_at: endsAt,
-      is_open: true,
-    }
-
-    const { error } = existing
-      ? await supabase.from('coaching_slots').update(payload).eq('id', existing.id)
-      : await supabase.from('coaching_slots').insert(payload)
-
-    if (error) return { error: '枠の開放に失敗しました' }
-  } else if (existing) {
-    const booked = await fetchCoachingBookingBySlotId(existing.id)
-    if (booked) return { error: '予約済みの枠は閉じられません' }
-
-    const { error } = await supabase
-      .from('coaching_slots')
-      .update({ is_open: false })
-      .eq('id', existing.id)
-
-    if (error) return { error: '枠のクローズに失敗しました' }
-  }
-
-  revalidateCoachingPaths()
-  return { success: true }
+  return applyCoachingSlotOpenState(coachId, [{ slotDate, startTime }], open)
 }
 
 export async function bookCoachingSlot(
