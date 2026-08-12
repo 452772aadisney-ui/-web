@@ -139,6 +139,7 @@ function AdminWeekGrid({
 }) {
   const weekdays = getWeekdays(weekStart)
   const gridMap = buildGridMap(gridSlots)
+  const gridRef = useRef<HTMLDivElement>(null)
   const [drag, setDrag] = useState<{ paintOpen: boolean; keys: Set<string> } | null>(null)
   const [saving, startSaveTransition] = useTransition()
   const dragRef = useRef(drag)
@@ -163,6 +164,7 @@ function AdminWeekGrid({
     const currentDrag = dragRef.current
     if (!currentDrag) return
 
+    dragRef.current = null
     setDrag(null)
 
     const selections = [...currentDrag.keys]
@@ -175,46 +177,55 @@ function AdminWeekGrid({
     if (selections.length === 0) return
 
     startSaveTransition(async () => {
-      await setCoachingSlotsOpen(coachId, selections, currentDrag.paintOpen)
-      onRefresh()
+      const result = await setCoachingSlotsOpen(coachId, selections, currentDrag.paintOpen)
+      if (!result.error) {
+        onRefresh()
+      }
     })
   }, [coachId, getCellMeta, onRefresh])
 
-  useEffect(() => {
-    if (!drag) return
+  const paintCell = useCallback(
+    (slotDate: string, startTime: string) => {
+      const meta = getCellMeta(slotDate, startTime)
+      if (meta.isPast || meta.isBooked) return
 
-    const handlePointerUp = () => finishDrag()
+      setDrag((current) => {
+        if (!current || current.keys.has(meta.key)) return current
 
-    window.addEventListener('pointerup', handlePointerUp)
-    return () => window.removeEventListener('pointerup', handlePointerUp)
-  }, [drag, finishDrag])
+        const next = { ...current, keys: new Set([...current.keys, meta.key]) }
+        dragRef.current = next
+        return next
+      })
+    },
+    [getCellMeta],
+  )
 
   function beginDrag(day: WeekDay, startTime: string, event: PointerEvent<HTMLButtonElement>) {
-    if (event.button !== 0 || saving) return
+    if (event.button !== 0 || saving || pending) return
 
     const meta = getCellMeta(day.date, startTime)
     if (meta.isPast || meta.isBooked) return
 
     event.preventDefault()
-    event.currentTarget.setPointerCapture(event.pointerId)
 
-    setDrag({
+    const nextDrag = {
       paintOpen: !meta.isOpen,
       keys: new Set([meta.key]),
-    })
+    }
+    dragRef.current = nextDrag
+    setDrag(nextDrag)
+    gridRef.current?.setPointerCapture(event.pointerId)
   }
 
-  function extendDrag(day: WeekDay, startTime: string) {
-    setDrag((current) => {
-      if (!current) return current
+  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (!dragRef.current) return
 
-      const meta = getCellMeta(day.date, startTime)
-      if (meta.isPast || meta.isBooked || current.keys.has(meta.key)) return current
+    const target = document.elementFromPoint(event.clientX, event.clientY)
+    const cell = target?.closest('[data-slot-key]') as HTMLElement | null
+    if (!cell?.dataset.slotKey) return
 
-      const keys = new Set(current.keys)
-      keys.add(meta.key)
-      return { ...current, keys }
-    })
+    const { slotDate, startTime } = parseSlotKey(cell.dataset.slotKey)
+    paintCell(slotDate, startTime)
   }
 
   const isBusy = pending || saving
@@ -222,7 +233,11 @@ function AdminWeekGrid({
   return (
     <>
       <div
-        className={cn('grid min-w-[640px] select-none gap-2 touch-none', isBusy && 'opacity-60')}
+        ref={gridRef}
+        onPointerMove={handlePointerMove}
+        onPointerUp={finishDrag}
+        onPointerCancel={finishDrag}
+        className={cn('grid min-w-[880px] select-none gap-2 touch-none', isBusy && 'opacity-60')}
         style={{ gridTemplateColumns: `64px repeat(${weekdays.length}, minmax(0, 1fr))` }}
       >
         <div />
@@ -248,9 +263,9 @@ function AdminWeekGrid({
                 <div key={meta.key} className="px-0.5">
                   <button
                     type="button"
+                    data-slot-key={meta.key}
                     onPointerDown={(event) => beginDrag(day, startTime, event)}
-                    onPointerEnter={() => extendDrag(day, startTime)}
-                    disabled={isBusy || meta.isBooked}
+                    disabled={meta.isBooked}
                     className={cn(
                       'h-10 w-full rounded-full border text-sm font-medium transition',
                       meta.isBooked && 'cursor-not-allowed border-amber-300 bg-amber-50 text-amber-800',
@@ -261,6 +276,7 @@ function AdminWeekGrid({
                         !displayOpen &&
                         'border-border bg-white text-muted hover:border-primary/40',
                       isPainted && !meta.isBooked && 'ring-2 ring-primary/30',
+                      saving && 'pointer-events-none',
                     )}
                   >
                     {meta.isBooked ? '予約済' : startTime}
@@ -297,24 +313,32 @@ export function CoachingWeekGrid({
   const [pending, startTransition] = useTransition()
 
   useEffect(() => {
-    if (mode !== 'admin' || !coachId) return
+    if (mode !== 'admin') return
     setWeekStart(initialWeekStart)
-    setGridSlots(initialGridSlots)
-    startTransition(async () => {
-      const slots = await loadCoachingGridForWeek(coachId, initialWeekStart)
-      setGridSlots(slots)
-    })
-  }, [coachId, initialWeekStart, initialGridSlots, mode])
+  }, [coachId, initialWeekStart, mode])
 
   useEffect(() => {
-    if (mode !== 'student' || !coachId) return
-    setWindowStart(initialWindowStart)
-    setAvailableSlots(initialAvailableSlots)
+    if (mode !== 'admin' || !coachId || !weekStart) return
+
     startTransition(async () => {
-      const slots = await loadAvailableCoachingSlotsForWindow(coachId, initialWindowStart)
+      const slots = await loadCoachingGridForWeek(coachId, weekStart)
+      setGridSlots(slots)
+    })
+  }, [coachId, weekStart, mode])
+
+  useEffect(() => {
+    if (mode !== 'student') return
+    setWindowStart(initialWindowStart)
+  }, [coachId, initialWindowStart, mode])
+
+  useEffect(() => {
+    if (mode !== 'student' || !coachId || !windowStart) return
+
+    startTransition(async () => {
+      const slots = await loadAvailableCoachingSlotsForWindow(coachId, windowStart)
       setAvailableSlots(slots)
     })
-  }, [coachId, initialWindowStart, initialAvailableSlots, mode])
+  }, [coachId, windowStart, mode])
 
   function refreshAdminGrid(nextWeekStart: string) {
     startTransition(async () => {

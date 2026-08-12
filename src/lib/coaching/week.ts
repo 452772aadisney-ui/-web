@@ -33,12 +33,12 @@ export function shiftWeekStart(weekStart: string, weeks: number): string {
   return toDateKey(d)
 }
 
-/** 月〜金の5日間（イメージ画像に合わせる） */
+/** 月〜日の7日間 */
 export function getWeekdays(weekStartMonday: string): WeekDay[] {
   const start = parseDateKey(weekStartMonday)
   const days: WeekDay[] = []
 
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 7; i++) {
     const date = new Date(start)
     date.setDate(start.getDate() + i)
     const jsDay = date.getDay()
@@ -57,7 +57,7 @@ export function getWeekdays(weekStartMonday: string): WeekDay[] {
 export function formatWeekRange(weekStartMonday: string): string {
   const days = getWeekdays(weekStartMonday)
   const first = parseDateKey(days[0].date)
-  const last = parseDateKey(days[4].date)
+  const last = parseDateKey(days[6].date)
   return `${first.getMonth() + 1}/${first.getDate()} 〜 ${last.getMonth() + 1}/${last.getDate()}`
 }
 

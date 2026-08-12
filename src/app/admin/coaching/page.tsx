@@ -5,7 +5,7 @@ import { AdminPageShell } from '@/components/layout/AdminPageShell'
 import { AdminCoachingNav } from '@/components/coaching/AdminCoachingNav'
 import { AdminCoachingSlotsManager } from '@/components/coaching/AdminCoachingSlotsManager'
 import { fetchCoachingCoaches, fetchCoachingGridForWeek } from '@/lib/coaching/queries'
-import { getWeekStartMonday } from '@/lib/coaching/week'
+import { getWeekStartMonday, parseDateKey } from '@/lib/coaching/week'
 
 export default async function AdminCoachingPage({
   searchParams,
@@ -18,7 +18,9 @@ export default async function AdminCoachingPage({
   if (profile.role !== 'admin') redirect(getDashboardPathForRole('student'))
 
   const params = await searchParams
-  const weekStart = params.week ?? getWeekStartMonday()
+  const weekStart = params.week
+    ? getWeekStartMonday(parseDateKey(params.week))
+    : getWeekStartMonday()
 
   const coaches = await fetchCoachingCoaches()
 
