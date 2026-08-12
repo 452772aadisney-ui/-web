@@ -237,12 +237,12 @@ function AdminWeekGrid({
         onPointerMove={handlePointerMove}
         onPointerUp={finishDrag}
         onPointerCancel={finishDrag}
-        className={cn('grid min-w-[880px] select-none gap-2 touch-none', isBusy && 'opacity-60')}
-        style={{ gridTemplateColumns: `64px repeat(${weekdays.length}, minmax(0, 1fr))` }}
+        className={cn('grid w-full min-w-0 select-none gap-1.5 touch-none', isBusy && 'opacity-60')}
+        style={{ gridTemplateColumns: `52px repeat(${weekdays.length}, minmax(0, 1fr))` }}
       >
         <div />
         {weekdays.map((day) => (
-          <div key={day.date} className="text-center text-sm font-semibold text-muted">
+          <div key={day.date} className="truncate text-center text-xs font-semibold text-muted sm:text-sm">
             {day.label}
           </div>
         ))}
@@ -256,18 +256,18 @@ function AdminWeekGrid({
               const displayOpen = isPainted ? (drag?.paintOpen ?? meta.isOpen) : meta.isOpen
 
               if (meta.isPast) {
-                return <div key={meta.key} className="h-10 rounded-full bg-muted/20" />
+                return <div key={meta.key} className="h-9 rounded-full bg-muted/20 sm:h-10" />
               }
 
               return (
-                <div key={meta.key} className="px-0.5">
+                <div key={meta.key} className="min-w-0 px-0.5">
                   <button
                     type="button"
                     data-slot-key={meta.key}
                     onPointerDown={(event) => beginDrag(day, startTime, event)}
                     disabled={meta.isBooked}
                     className={cn(
-                      'h-10 w-full rounded-full border text-sm font-medium transition',
+                      'h-9 w-full min-w-0 rounded-full border px-1 text-xs font-medium transition sm:h-10 sm:text-sm',
                       meta.isBooked && 'cursor-not-allowed border-amber-300 bg-amber-50 text-amber-800',
                       !meta.isBooked &&
                         displayOpen &&
@@ -425,7 +425,7 @@ export function CoachingWeekGrid({
   }
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-border bg-white p-4 shadow-sm">
+    <div className="w-full min-w-0 rounded-2xl border border-border bg-white p-4 shadow-sm">
       <WeekNav
         weekStart={weekStart}
         pending={pending}

@@ -35,7 +35,7 @@ export default async function AdminCoachingPage({
     : []
 
   return (
-    <AdminPageShell title="コーチング枠設定" backHref="/admin" backLabel="管理画面">
+    <AdminPageShell title="コーチング枠設定" backHref="/admin" backLabel="管理画面" wide>
       <AdminCoachingNav />
       <p className="mb-6 text-sm text-muted">
         担当講師ごとに週間グリッドから予約枠を開放します。生徒には開放された枠だけが表示されます。

@@ -154,7 +154,7 @@ export function AdminCoachingSlotsManager({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+      <section className="min-w-0 rounded-2xl border border-border bg-card p-6 shadow-sm">
         <h2 className="text-lg font-bold">予約枠の開放</h2>
         <p className="mt-1 text-sm text-muted">
           10:00〜21:00（30分刻み）の枠から、開放する時間帯を選びます。
@@ -182,7 +182,7 @@ export function AdminCoachingSlotsManager({
             </div>
 
             {selectedCoachId && (
-              <div className="mt-6">
+              <div className="mt-6 min-w-0">
                 <CoachingWeekGrid
                   mode="admin"
                   coachId={selectedCoachId}
