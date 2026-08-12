@@ -1,8 +1,11 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
-import { useTransition } from 'react'
-import { toggleCoachingSlot } from '@/app/coaching/actions'
+import { useEffect, useState, useTransition } from 'react'
+import {
+  loadAvailableCoachingSlotsForWindow,
+  loadCoachingGridForWeek,
+  toggleCoachingSlot,
+} from '@/app/coaching/actions'
 import { COACHING_SLOT_TIMES, buildSlotDateTime, slotDateTimeKey } from '@/lib/coaching/slot-times'
 import {
   COACHING_STUDENT_WINDOW_DAYS,
@@ -23,10 +26,11 @@ interface CoachingWeekGridProps {
   coachId: string
   weekStart?: string
   windowStart?: string
-  gridSlots: CoachingGridSlot[]
+  gridSlots?: CoachingGridSlot[]
   availableSlots?: AvailableCoachingSlot[]
-  onSelectSlot?: (slot: AvailableCoachingSlot) => void
+  onSelectSlot?: (slot: AvailableCoachingSlot | null) => void
   selectedSlotId?: string | null
+  onNavigate?: () => void
 }
 
 function buildGridMap(slots: CoachingGridSlot[]) {
@@ -39,28 +43,20 @@ function buildGridMap(slots: CoachingGridSlot[]) {
 
 function WeekNav({
   weekStart,
-  coachId,
-  basePath,
+  pending,
+  onPrevious,
+  onNext,
 }: {
   weekStart: string
-  coachId: string
-  basePath: string
+  pending: boolean
+  onPrevious: () => void
+  onNext: () => void
 }) {
-  const router = useRouter()
-  const [pending, startTransition] = useTransition()
-
-  function goWeek(offset: number) {
-    const next = shiftWeekStart(weekStart, offset)
-    startTransition(() => {
-      router.push(`${basePath}?coach=${coachId}&week=${next}`)
-    })
-  }
-
   return (
     <div className="mb-4 flex items-center justify-between gap-3">
       <button
         type="button"
-        onClick={() => goWeek(-1)}
+        onClick={onPrevious}
         disabled={pending}
         className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-background disabled:opacity-60"
         aria-label="前の週"
@@ -70,7 +66,7 @@ function WeekNav({
       <p className="text-sm font-medium">{formatWeekRange(weekStart)}</p>
       <button
         type="button"
-        onClick={() => goWeek(1)}
+        onClick={onNext}
         disabled={pending}
         className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-background disabled:opacity-60"
         aria-label="次の週"
@@ -83,27 +79,22 @@ function WeekNav({
 
 function StudentDayNav({
   windowStart,
-  coachId,
+  pending,
+  onPrevious,
+  onNext,
 }: {
   windowStart: string
-  coachId: string
+  pending: boolean
+  onPrevious: () => void
+  onNext: () => void
 }) {
-  const router = useRouter()
-  const [pending, startTransition] = useTransition()
   const days = getDayWindow(windowStart)
-
-  function goWindow(offsetDays: number) {
-    const next = shiftStartDate(windowStart, offsetDays)
-    startTransition(() => {
-      router.push(`/dashboard/coaching?coach=${coachId}&start=${next}`)
-    })
-  }
 
   return (
     <div className="mb-4 flex items-center justify-between gap-3">
       <button
         type="button"
-        onClick={() => goWindow(-COACHING_STUDENT_WINDOW_DAYS)}
+        onClick={onPrevious}
         disabled={pending}
         className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-background disabled:opacity-60"
         aria-label={`前の${COACHING_STUDENT_WINDOW_DAYS}日`}
@@ -113,7 +104,7 @@ function StudentDayNav({
       <p className="text-sm font-medium">{formatDayRange(days)}</p>
       <button
         type="button"
-        onClick={() => goWindow(COACHING_STUDENT_WINDOW_DAYS)}
+        onClick={onNext}
         disabled={pending}
         className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-background disabled:opacity-60"
         aria-label={`次の${COACHING_STUDENT_WINDOW_DAYS}日`}
@@ -129,13 +120,14 @@ function AdminCell({
   day,
   startTime,
   slot,
+  onToggled,
 }: {
   coachId: string
   day: WeekDay
   startTime: string
   slot?: CoachingGridSlot
+  onToggled: () => void
 }) {
-  const router = useRouter()
   const [pending, startTransition] = useTransition()
 
   const isPast = slot
@@ -162,7 +154,7 @@ function AdminCell({
           return fd
         })(),
       )
-      router.refresh()
+      onToggled()
     })
   }
 
@@ -184,93 +176,124 @@ function AdminCell({
   )
 }
 
-function StudentBookingGrid({
-  windowStart,
-  coachId,
-  availableSlots,
-  selectedSlotId,
-  onSelectSlot,
-}: {
-  windowStart: string
-  coachId: string
-  availableSlots: AvailableCoachingSlot[]
-  selectedSlotId?: string | null
-  onSelectSlot?: (slot: AvailableCoachingSlot) => void
-}) {
-  const days = getDayWindow(windowStart)
-  const slotsByDay = new Map<string, AvailableCoachingSlot[]>()
-
-  for (const slot of availableSlots) {
-    const list = slotsByDay.get(slot.slot_date) ?? []
-    list.push(slot)
-    slotsByDay.set(slot.slot_date, list)
-  }
-
-  for (const list of slotsByDay.values()) {
-    list.sort((a, b) => a.start_time.localeCompare(b.start_time))
-  }
-
-  return (
-    <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
-      <StudentDayNav windowStart={windowStart} coachId={coachId} />
-
-      <div className="grid grid-cols-4 gap-2 sm:gap-3">
-        {days.map((day) => {
-          const daySlots = slotsByDay.get(day.date) ?? []
-
-          return (
-            <div key={day.date} className="min-w-0">
-              <div className="mb-2 text-center text-xs font-semibold text-muted sm:mb-3 sm:text-sm">
-                {day.label}
-              </div>
-              <div className="flex flex-col gap-1.5 sm:gap-2">
-                {daySlots.length === 0 ? (
-                  <div className="py-4 text-center text-xs text-muted sm:py-6">—</div>
-                ) : (
-                  daySlots.map((slot) => (
-                    <button
-                      key={slot.id}
-                      type="button"
-                      onClick={() => onSelectSlot?.(slot)}
-                      className={cn(
-                        'h-9 w-full rounded-full border text-xs font-medium transition sm:h-10 sm:text-sm',
-                        selectedSlotId === slot.id
-                          ? 'border-primary bg-primary text-white'
-                          : 'border-primary/30 bg-white text-primary hover:bg-blue-50',
-                      )}
-                    >
-                      {slot.start_time}
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 export function CoachingWeekGrid({
   mode,
   coachId,
-  weekStart = '',
-  windowStart = '',
-  gridSlots,
-  availableSlots = [],
+  weekStart: initialWeekStart = '',
+  windowStart: initialWindowStart = '',
+  gridSlots: initialGridSlots = [],
+  availableSlots: initialAvailableSlots = [],
   onSelectSlot,
   selectedSlotId,
+  onNavigate,
 }: CoachingWeekGridProps) {
+  const [weekStart, setWeekStart] = useState(initialWeekStart)
+  const [windowStart, setWindowStart] = useState(initialWindowStart)
+  const [gridSlots, setGridSlots] = useState(initialGridSlots)
+  const [availableSlots, setAvailableSlots] = useState(initialAvailableSlots)
+  const [pending, startTransition] = useTransition()
+
+  useEffect(() => {
+    if (mode !== 'admin' || !coachId) return
+    setWeekStart(initialWeekStart)
+    setGridSlots(initialGridSlots)
+    startTransition(async () => {
+      const slots = await loadCoachingGridForWeek(coachId, initialWeekStart)
+      setGridSlots(slots)
+    })
+  }, [coachId, initialWeekStart, initialGridSlots, mode])
+
+  useEffect(() => {
+    if (mode !== 'student' || !coachId) return
+    setWindowStart(initialWindowStart)
+    setAvailableSlots(initialAvailableSlots)
+    startTransition(async () => {
+      const slots = await loadAvailableCoachingSlotsForWindow(coachId, initialWindowStart)
+      setAvailableSlots(slots)
+    })
+  }, [coachId, initialWindowStart, initialAvailableSlots, mode])
+
+  function refreshAdminGrid(nextWeekStart: string) {
+    startTransition(async () => {
+      const slots = await loadCoachingGridForWeek(coachId, nextWeekStart)
+      setGridSlots(slots)
+    })
+  }
+
+  function refreshStudentSlots(nextWindowStart: string) {
+    startTransition(async () => {
+      const slots = await loadAvailableCoachingSlotsForWindow(coachId, nextWindowStart)
+      setAvailableSlots(slots)
+    })
+  }
+
+  function goWeek(offset: number) {
+    const next = shiftWeekStart(weekStart, offset)
+    setWeekStart(next)
+    onNavigate?.()
+    refreshAdminGrid(next)
+  }
+
+  function goWindow(offsetDays: number) {
+    const next = shiftStartDate(windowStart, offsetDays)
+    setWindowStart(next)
+    onNavigate?.()
+    refreshStudentSlots(next)
+  }
+
   if (mode === 'student') {
     return (
-      <StudentBookingGrid
-        windowStart={windowStart}
-        coachId={coachId}
-        availableSlots={availableSlots}
-        selectedSlotId={selectedSlotId}
-        onSelectSlot={onSelectSlot}
-      />
+      <>
+        <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
+          <StudentDayNav
+            windowStart={windowStart}
+            pending={pending}
+            onPrevious={() => goWindow(-COACHING_STUDENT_WINDOW_DAYS)}
+            onNext={() => goWindow(COACHING_STUDENT_WINDOW_DAYS)}
+          />
+
+          <div className={cn('grid grid-cols-4 gap-2 sm:gap-3', pending && 'opacity-60')}>
+            {getDayWindow(windowStart).map((day) => {
+              const daySlots = availableSlots
+                .filter((slot) => slot.slot_date === day.date)
+                .sort((a, b) => a.start_time.localeCompare(b.start_time))
+
+              return (
+                <div key={day.date} className="min-w-0">
+                  <div className="mb-2 text-center text-xs font-semibold text-muted sm:mb-3 sm:text-sm">
+                    {day.label}
+                  </div>
+                  <div className="flex flex-col gap-1.5 sm:gap-2">
+                    {daySlots.length === 0 ? (
+                      <div className="py-4 text-center text-xs text-muted sm:py-6">—</div>
+                    ) : (
+                      daySlots.map((slot) => (
+                        <button
+                          key={slot.id}
+                          type="button"
+                          onClick={() => onSelectSlot?.(slot)}
+                          className={cn(
+                            'h-9 w-full rounded-full border text-xs font-medium transition sm:h-10 sm:text-sm',
+                            selectedSlotId === slot.id
+                              ? 'border-primary bg-primary text-white'
+                              : 'border-primary/30 bg-white text-primary hover:bg-blue-50',
+                          )}
+                        >
+                          {slot.start_time}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {!pending && availableSlots.length === 0 && (
+          <p className="mt-4 text-sm text-muted">この期間に予約できる枠はありません。</p>
+        )}
+      </>
     )
   }
 
@@ -279,10 +302,15 @@ export function CoachingWeekGrid({
 
   return (
     <div className="overflow-x-auto rounded-2xl border border-border bg-white p-4 shadow-sm">
-      <WeekNav weekStart={weekStart} coachId={coachId} basePath="/admin/coaching" />
+      <WeekNav
+        weekStart={weekStart}
+        pending={pending}
+        onPrevious={() => goWeek(-1)}
+        onNext={() => goWeek(1)}
+      />
 
       <div
-        className="grid min-w-[640px] gap-2"
+        className={cn('grid min-w-[640px] gap-2', pending && 'opacity-60')}
         style={{ gridTemplateColumns: `64px repeat(${weekdays.length}, minmax(0, 1fr))` }}
       >
         <div />
@@ -306,6 +334,7 @@ export function CoachingWeekGrid({
                     day={day}
                     startTime={startTime}
                     slot={gridSlot}
+                    onToggled={() => refreshAdminGrid(weekStart)}
                   />
                 </div>
               )

@@ -4,10 +4,15 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import {
   fetchCoachingBookingBySlotId,
+  fetchCoachingGridForWeek,
+  fetchAvailableCoachingSlots,
   slotEndsAtIso,
   slotStartsAtIso,
+  type CoachingGridSlot,
 } from '@/lib/coaching/queries'
 import { isCoachingSlotTime } from '@/lib/coaching/slot-times'
+import { getDayWindow } from '@/lib/coaching/week'
+import type { AvailableCoachingSlot } from '@/types/coaching'
 
 export type CoachingActionState = {
   error?: string
@@ -118,6 +123,26 @@ export async function deleteCoachingCoach(formData: FormData): Promise<void> {
   const supabase = await createClient()
   await supabase.from('coaching_coaches').delete().eq('id', id)
   revalidateCoachingPaths()
+}
+
+export async function loadCoachingGridForWeek(
+  coachId: string,
+  weekStart: string,
+): Promise<CoachingGridSlot[]> {
+  if (await assertAdmin()) return []
+  if (!coachId || !weekStart) return []
+  return fetchCoachingGridForWeek(coachId, weekStart)
+}
+
+export async function loadAvailableCoachingSlotsForWindow(
+  coachId: string,
+  windowStart: string,
+): Promise<AvailableCoachingSlot[]> {
+  const studentResult = await assertStudent()
+  if ('error' in studentResult) return []
+  if (!coachId || !windowStart) return []
+  const dateKeys = getDayWindow(windowStart).map((day) => day.date)
+  return fetchAvailableCoachingSlots(coachId, dateKeys)
 }
 
 export async function toggleCoachingSlot(formData: FormData): Promise<CoachingActionState> {

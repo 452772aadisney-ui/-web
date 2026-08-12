@@ -1,8 +1,11 @@
 'use client'
 
-import { useActionState, useState } from 'react'
-import Link from 'next/link'
-import { bookCoachingSlot, cancelCoachingBooking, type CoachingActionState } from '@/app/coaching/actions'
+import { useActionState, useEffect, useState } from 'react'
+import {
+  bookCoachingSlot,
+  cancelCoachingBooking,
+  type CoachingActionState,
+} from '@/app/coaching/actions'
 import { CoachingWeekGrid } from '@/components/coaching/CoachingWeekGrid'
 import { formatCoachingBookingDateTime } from '@/lib/coaching/format'
 import type {
@@ -72,12 +75,17 @@ function BookingForm({
 
 export function StudentCoachingBooking({
   coaches,
-  selectedCoachId,
+  selectedCoachId: initialSelectedCoachId,
   windowStart,
   availableSlots,
   bookings,
 }: StudentCoachingBookingProps) {
+  const [selectedCoachId, setSelectedCoachId] = useState(initialSelectedCoachId)
   const [selectedSlot, setSelectedSlot] = useState<AvailableCoachingSlot | null>(null)
+
+  useEffect(() => {
+    setSelectedCoachId(initialSelectedCoachId)
+  }, [initialSelectedCoachId])
 
   const upcomingBookings = bookings.filter(
     (b) => b.status === 'scheduled' && new Date(b.slot.starts_at) > new Date(),
@@ -97,9 +105,13 @@ export function StudentCoachingBooking({
         ) : (
           <div className="mt-4 flex flex-wrap gap-2">
             {coaches.map((coach) => (
-              <Link
+              <button
                 key={coach.id}
-                href={`/dashboard/coaching?coach=${coach.id}&start=${windowStart}`}
+                type="button"
+                onClick={() => {
+                  setSelectedCoachId(coach.id)
+                  setSelectedSlot(null)
+                }}
                 className={`rounded-xl border px-4 py-3 text-sm font-medium transition ${
                   selectedCoachId === coach.id
                     ? 'border-primary bg-blue-50 text-primary'
@@ -107,7 +119,7 @@ export function StudentCoachingBooking({
                 }`}
               >
                 {coach.name}
-              </Link>
+              </button>
             ))}
           </div>
         )}
@@ -123,16 +135,14 @@ export function StudentCoachingBooking({
               mode="student"
               coachId={selectedCoachId}
               windowStart={windowStart}
-              gridSlots={[]}
-              availableSlots={availableSlots}
+              availableSlots={
+                selectedCoachId === initialSelectedCoachId ? availableSlots : []
+              }
               selectedSlotId={selectedSlot?.id ?? null}
               onSelectSlot={setSelectedSlot}
+              onNavigate={() => setSelectedSlot(null)}
             />
           </div>
-
-          {availableSlots.length === 0 && (
-            <p className="mt-4 text-sm text-muted">この期間に予約できる枠はありません。</p>
-          )}
 
           {selectedSlot && (
             <BookingForm slot={selectedSlot} onCancel={() => setSelectedSlot(null)} />

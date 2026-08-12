@@ -1,7 +1,6 @@
 'use client'
 
-import { useActionState, useState } from 'react'
-import Link from 'next/link'
+import { useActionState, useEffect, useState, type FormEvent } from 'react'
 import {
   createCoachingCoach,
   deleteCoachingCoach,
@@ -19,51 +18,76 @@ const fieldClass =
 function CoachForm({
   coach,
   onCancel,
+  onDeleted,
 }: {
   coach?: CoachingCoach
   onCancel?: () => void
+  onDeleted?: () => void
 }) {
   const action = coach ? updateCoachingCoach : createCoachingCoach
   const [state, formAction, pending] = useActionState(action, initialState)
 
+  function handleDelete(event: FormEvent<HTMLFormElement>) {
+    if (!window.confirm('本当に削除しますか？')) {
+      event.preventDefault()
+      return
+    }
+    onDeleted?.()
+  }
+
   return (
-    <form action={formAction} className="space-y-3 rounded-lg border border-border bg-background p-4">
-      {coach && <input type="hidden" name="id" value={coach.id} />}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block sm:col-span-2">
-          <span className="mb-1 block text-sm font-medium">講師名 *</span>
-          <input name="name" required defaultValue={coach?.name ?? ''} className={fieldClass} />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium">表示順</span>
-          <input
-            type="number"
-            name="sortOrder"
-            defaultValue={coach?.sort_order ?? 0}
-            className={fieldClass}
-          />
-          <p className="mt-1 text-xs text-muted">生徒の担当選択画面での並び順（小さい数字ほど先）</p>
-        </label>
-        {coach && (
-          <label className="flex items-center gap-2 self-end text-sm">
-            <input type="checkbox" name="isActive" defaultChecked={coach.is_active} />
-            予約画面に表示する
+    <div className="space-y-3 rounded-lg border border-border bg-background p-4">
+      <form action={formAction} className="space-y-3">
+        {coach && <input type="hidden" name="id" value={coach.id} />}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-sm font-medium">講師名 *</span>
+            <input name="name" required defaultValue={coach?.name ?? ''} className={fieldClass} />
           </label>
-        )}
-      </div>
-      {state.error && <p className="text-sm text-error">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">保存しました</p>}
-      <div className="flex gap-2">
-        <button type="submit" disabled={pending} className="rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-60">
-          {pending ? '保存中…' : coach ? '更新' : '追加'}
-        </button>
-        {onCancel && (
-          <button type="button" onClick={onCancel} className="text-sm text-muted">
-            キャンセル
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium">表示順</span>
+            <input
+              type="number"
+              name="sortOrder"
+              defaultValue={coach?.sort_order ?? 0}
+              className={fieldClass}
+            />
+            <p className="mt-1 text-xs text-muted">生徒の担当選択画面での並び順（小さい数字ほど先）</p>
+          </label>
+          {coach && (
+            <label className="flex items-center gap-2 self-end text-sm">
+              <input type="checkbox" name="isActive" defaultChecked={coach.is_active} />
+              予約画面に表示する
+            </label>
+          )}
+        </div>
+        {state.error && <p className="text-sm text-error">{state.error}</p>}
+        {state.success && <p className="text-sm text-green-700">保存しました</p>}
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="submit"
+            disabled={pending}
+            className="rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-60"
+          >
+            {pending ? '保存中…' : coach ? '更新' : '追加'}
           </button>
-        )}
-      </div>
-    </form>
+          {onCancel && (
+            <button type="button" onClick={onCancel} className="text-sm text-muted">
+              キャンセル
+            </button>
+          )}
+        </div>
+      </form>
+
+      {coach && (
+        <form action={deleteCoachingCoach} onSubmit={handleDelete} className="border-t border-border pt-3">
+          <input type="hidden" name="id" value={coach.id} />
+          <button type="submit" className="text-sm text-error hover:underline">
+            この講師を削除
+          </button>
+        </form>
+      )}
+    </div>
   )
 }
 
@@ -76,12 +100,18 @@ interface AdminCoachingSlotsManagerProps {
 
 export function AdminCoachingSlotsManager({
   coaches,
-  selectedCoachId,
+  selectedCoachId: initialSelectedCoachId,
   weekStart,
   gridSlots,
 }: AdminCoachingSlotsManagerProps) {
   const [editingCoachId, setEditingCoachId] = useState<string | null>(null)
+  const [selectedCoachId, setSelectedCoachId] = useState(initialSelectedCoachId)
+
   const activeCoaches = coaches.filter((c) => c.is_active)
+
+  useEffect(() => {
+    setSelectedCoachId(initialSelectedCoachId)
+  }, [initialSelectedCoachId])
 
   return (
     <div className="space-y-8">
@@ -95,7 +125,11 @@ export function AdminCoachingSlotsManager({
               {coaches.map((coach) => (
                 <li key={coach.id} className="p-4">
                   {editingCoachId === coach.id ? (
-                    <CoachForm coach={coach} onCancel={() => setEditingCoachId(null)} />
+                    <CoachForm
+                      coach={coach}
+                      onCancel={() => setEditingCoachId(null)}
+                      onDeleted={() => setEditingCoachId(null)}
+                    />
                   ) : (
                     <div className="flex items-center justify-between gap-4">
                       <div>
@@ -104,27 +138,13 @@ export function AdminCoachingSlotsManager({
                           表示順 {coach.sort_order} / {coach.is_active ? '表示中' : '非表示'}
                         </p>
                       </div>
-                      <div className="flex gap-3">
-                        <Link
-                          href={`/admin/coaching?coach=${coach.id}&week=${weekStart}`}
-                          className="text-xs text-primary hover:underline"
-                        >
-                          枠を編集
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => setEditingCoachId(coach.id)}
-                          className="text-xs text-primary hover:underline"
-                        >
-                          編集
-                        </button>
-                        <form action={deleteCoachingCoach}>
-                          <input type="hidden" name="id" value={coach.id} />
-                          <button type="submit" className="text-xs text-error hover:underline">
-                            削除
-                          </button>
-                        </form>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditingCoachId(coach.id)}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        編集
+                      </button>
                     </div>
                   )}
                 </li>
@@ -146,9 +166,10 @@ export function AdminCoachingSlotsManager({
           <>
             <div className="mt-4 flex flex-wrap gap-2">
               {activeCoaches.map((coach) => (
-                <Link
+                <button
                   key={coach.id}
-                  href={`/admin/coaching?coach=${coach.id}&week=${weekStart}`}
+                  type="button"
+                  onClick={() => setSelectedCoachId(coach.id)}
                   className={`rounded-xl border px-4 py-2 text-sm font-medium transition ${
                     selectedCoachId === coach.id
                       ? 'border-primary bg-blue-50 text-primary'
@@ -156,7 +177,7 @@ export function AdminCoachingSlotsManager({
                   }`}
                 >
                   {coach.name}
-                </Link>
+                </button>
               ))}
             </div>
 
@@ -166,7 +187,7 @@ export function AdminCoachingSlotsManager({
                   mode="admin"
                   coachId={selectedCoachId}
                   weekStart={weekStart}
-                  gridSlots={gridSlots}
+                  gridSlots={selectedCoachId === initialSelectedCoachId ? gridSlots : []}
                 />
               </div>
             )}
