@@ -52,3 +52,17 @@ export function getCoachingAlertState(
     hasUpcoming,
   }
 }
+
+export function getNextCoachingBooking(
+  bookings: CoachingBookingWithDetails[],
+  now = new Date(),
+): CoachingBookingWithDetails | null {
+  const upcoming = bookings
+    .filter((booking) => booking.status === 'scheduled' && new Date(booking.slot.starts_at) > now)
+    .sort(
+      (a, b) =>
+        new Date(a.slot.starts_at).getTime() - new Date(b.slot.starts_at).getTime(),
+    )
+
+  return upcoming[0] ?? null
+}

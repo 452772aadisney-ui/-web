@@ -1,4 +1,5 @@
 import { cache } from 'react'
+import { unreadSinceTimestamp } from '@/lib/account/content-cutoff'
 import { createClient } from '@/lib/supabase/server'
 
 const EPOCH = '1970-01-01T00:00:00.000Z'
@@ -8,9 +9,9 @@ export const fetchUnreadChatCount = cache(async (userId: string): Promise<number
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, created_at')
     .eq('id', userId)
-    .maybeSingle<{ role: string }>()
+    .maybeSingle<{ role: string; created_at: string }>()
 
   if (!profile) return 0
 
@@ -24,7 +25,7 @@ export const fetchUnreadChatCount = cache(async (userId: string): Promise<number
   )
 
   if (profile.role === 'student') {
-    const since = readMap.get(userId) ?? EPOCH
+    const since = unreadSinceTimestamp(readMap.get(userId), profile.created_at)
     const { count } = await supabase
       .from('chat_messages')
       .select('*', { count: 'exact', head: true })

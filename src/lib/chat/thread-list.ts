@@ -1,4 +1,5 @@
 import { cache } from 'react'
+import { unreadSinceTimestamp } from '@/lib/account/content-cutoff'
 import { createClient } from '@/lib/supabase/server'
 import { fetchStudentList } from '@/lib/study/queries'
 import type { ChatMessage } from '@/types/chat'
@@ -30,9 +31,12 @@ async function countUnreadForThread(
   viewerId: string,
   studentId: string,
   readMap: Map<string, string>,
+  accountCreatedAt?: string,
 ): Promise<number> {
   const supabase = await createClient()
-  const since = readMap.get(studentId) ?? EPOCH
+  const since = accountCreatedAt
+    ? unreadSinceTimestamp(readMap.get(studentId), accountCreatedAt)
+    : readMap.get(studentId) ?? EPOCH
   const { count } = await supabase
     .from('chat_messages')
     .select('*', { count: 'exact', head: true })
@@ -99,7 +103,14 @@ export const fetchAdminChatThreads = cache(async (adminUserId: string): Promise<
 export const fetchStudentChatThread = cache(
   async (studentId: string): Promise<ChatThreadSummary> => {
     const supabase = await createClient()
-    const readMap = await fetchReadMap(studentId)
+    const [{ data: profile }, readMap] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('created_at')
+        .eq('id', studentId)
+        .maybeSingle<{ created_at: string }>(),
+      fetchReadMap(studentId),
+    ])
 
     const { data: latest } = await supabase
       .from('chat_messages')
@@ -109,7 +120,12 @@ export const fetchStudentChatThread = cache(
       .limit(1)
       .maybeSingle<ChatMessage>()
 
-    const unreadCount = await countUnreadForThread(studentId, studentId, readMap)
+    const unreadCount = await countUnreadForThread(
+      studentId,
+      studentId,
+      readMap,
+      profile?.created_at,
+    )
 
     return {
       studentId,

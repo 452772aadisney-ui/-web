@@ -8,7 +8,7 @@ import { MyPageAlertBanner } from '@/components/student/MyPageAlertBanner'
 import { StudentQrCode } from '@/components/student/StudentQrCode'
 import { fetchUnreadAnnouncementCount } from '@/lib/announcements/queries'
 import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
-import { getCoachingAlertState } from '@/lib/coaching/alert'
+import { getCoachingAlertState, getNextCoachingBooking } from '@/lib/coaching/alert'
 import { fetchCoachingBookingsForStudent } from '@/lib/coaching/queries'
 
 export default async function StudentDashboardPage() {
@@ -43,14 +43,21 @@ export default async function StudentDashboardPage() {
     )
   }
 
-  const [coachingAlert, unreadAnnouncementCount, unreadChatCount] =
+  const coachingBookings =
+    profile.role === 'student' ? await fetchCoachingBookingsForStudent(profile.id) : []
+
+  const coachingAlert =
+    profile.role === 'student' ? getCoachingAlertState(coachingBookings) : null
+  const nextCoaching =
+    profile.role === 'student' ? getNextCoachingBooking(coachingBookings) : null
+
+  const [unreadAnnouncementCount, unreadChatCount] =
     profile.role === 'student'
       ? await Promise.all([
-          getCoachingAlertState(await fetchCoachingBookingsForStudent(profile.id)),
           fetchUnreadAnnouncementCount(profile.id).catch(() => 0),
           fetchUnreadChatCount(profile.id).catch(() => 0),
         ])
-      : [null, 0, 0]
+      : [0, 0]
 
   return (
     <StudentPageShell title="マイページ">
@@ -73,7 +80,7 @@ export default async function StudentDashboardPage() {
           />
         )}
 
-        <MyPageActions />
+        <MyPageActions nextCoaching={nextCoaching} />
 
         {profile.role === 'student' && profile.student_code && (
           <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">

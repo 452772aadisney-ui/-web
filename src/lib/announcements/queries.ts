@@ -1,4 +1,5 @@
 import { cache } from 'react'
+import { isUnreadEligibleContent } from '@/lib/account/content-cutoff'
 import { createClient } from '@/lib/supabase/server'
 import type { Announcement, AnnouncementRead, AnnouncementWithTargets } from '@/types/announcement'
 
@@ -131,12 +132,26 @@ export async function fetchAllAnnouncementReads(): Promise<AnnouncementRead[]> {
 
 export const fetchUnreadAnnouncementCount = cache(async (studentId: string): Promise<number> => {
   try {
+    const supabase = await createClient()
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('created_at')
+      .eq('id', studentId)
+      .maybeSingle<{ created_at: string }>()
+
+    const accountCreatedAt = profile?.created_at
+    if (!accountCreatedAt) return 0
+
     const [announcements, reads] = await Promise.all([
       fetchAnnouncementsForStudent(studentId),
       fetchAnnouncementReadsForStudent(studentId),
     ])
     const readIds = new Set(reads.map((r) => r.announcement_id))
-    return announcements.filter((a) => !readIds.has(a.id)).length
+    return announcements.filter(
+      (announcement) =>
+        isUnreadEligibleContent(announcement.created_at, accountCreatedAt) &&
+        !readIds.has(announcement.id),
+    ).length
   } catch (error) {
     console.error('[announcements] unread count failed:', error)
     return 0

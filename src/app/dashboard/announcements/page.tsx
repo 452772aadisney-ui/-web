@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { isUnreadEligibleContent } from '@/lib/account/content-cutoff'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { AnnouncementList } from '@/components/announcements/AnnouncementList'
@@ -22,10 +23,12 @@ export default async function StudentAnnouncementsPage() {
 
   const readMap = new Map(reads.map((r) => [r.announcement_id, r.read_at]))
 
-  const withStatus: AnnouncementWithReadStatus[] = announcements.map((a) => ({
-    ...a,
-    read: readMap.has(a.id),
-    read_at: readMap.get(a.id),
+  const withStatus: AnnouncementWithReadStatus[] = announcements.map((announcement) => ({
+    ...announcement,
+    read:
+      readMap.has(announcement.id) ||
+      !isUnreadEligibleContent(announcement.created_at, profile.created_at),
+    read_at: readMap.get(announcement.id),
   }))
 
   const unreadCount = withStatus.filter((a) => !a.read).length
