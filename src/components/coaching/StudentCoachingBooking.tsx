@@ -1,6 +1,7 @@
 'use client'
 
-import { useActionState, useEffect, useState } from 'react'
+import { useActionState, useEffect, useState, type FormEvent, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   bookCoachingSlot,
   cancelCoachingBooking,
@@ -52,16 +53,17 @@ function BookingForm({
   const [state, formAction, pending] = useActionState(bookCoachingSlot, initialState)
   const confirmLabel = formatBookingConfirmLabel(slot)
 
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!window.confirm(`${confirmLabel} で予約をします。よろしいですか？`)) {
+      return
+    }
+    formAction(new FormData(event.currentTarget))
+  }
+
   return (
     <form
-      action={formAction}
-      onSubmit={(event) => {
-        if (
-          !window.confirm(`${confirmLabel} で予約をします。よろしいですか？`)
-        ) {
-          event.preventDefault()
-        }
-      }}
+      onSubmit={handleSubmit}
       className="mt-4 space-y-3 rounded-lg border border-primary/30 bg-blue-50/40 p-4"
     >
       <input type="hidden" name="slotId" value={slot.id} />
@@ -88,7 +90,7 @@ function BookingForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-60"
+          className="min-h-11 rounded-lg bg-primary px-4 py-2.5 text-sm text-white disabled:opacity-60"
         >
           {pending ? '予約中…' : 'この枠で予約する'}
         </button>
@@ -96,6 +98,43 @@ function BookingForm({
           戻る
         </button>
       </div>
+    </form>
+  )
+}
+
+function CancelBookingForm({
+  booking,
+  confirmLabel,
+}: {
+  booking: CoachingBookingWithDetails
+  confirmLabel: string
+}) {
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!window.confirm(`${confirmLabel} の予約をキャンセルします。よろしいですか？`)) {
+      return
+    }
+
+    const formData = new FormData(event.currentTarget)
+    startTransition(async () => {
+      await cancelCoachingBooking(formData)
+      router.refresh()
+    })
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-3">
+      <input type="hidden" name="bookingId" value={booking.id} />
+      <button
+        type="submit"
+        disabled={pending}
+        className="min-h-11 text-sm text-error hover:underline disabled:opacity-60"
+      >
+        {pending ? 'キャンセル中…' : 'キャンセル'}
+      </button>
     </form>
   )
 }
@@ -197,29 +236,16 @@ export function StudentCoachingBooking({
                 {booking.student_note && (
                   <p className="mt-2 text-sm">伝言: {booking.student_note}</p>
                 )}
-                <form
-                  action={cancelCoachingBooking}
-                  className="mt-3"
-                  onSubmit={(event) => {
-                    const confirmLabel = formatBookingConfirmLabel({
-                      coach: booking.coach,
-                      slot_date: booking.slot.slot_date ?? booking.slot.starts_at.slice(0, 10),
-                      start_time: booking.slot.start_time,
-                      starts_at: booking.slot.starts_at,
-                      ends_at: booking.slot.ends_at,
-                    })
-                    if (
-                      !window.confirm(`${confirmLabel} の予約をキャンセルします。よろしいですか？`)
-                    ) {
-                      event.preventDefault()
-                    }
-                  }}
-                >
-                  <input type="hidden" name="bookingId" value={booking.id} />
-                  <button type="submit" className="text-xs text-error hover:underline">
-                    キャンセル
-                  </button>
-                </form>
+                <CancelBookingForm
+                  booking={booking}
+                  confirmLabel={formatBookingConfirmLabel({
+                    coach: booking.coach,
+                    slot_date: booking.slot.slot_date ?? booking.slot.starts_at.slice(0, 10),
+                    start_time: booking.slot.start_time,
+                    starts_at: booking.slot.starts_at,
+                    ends_at: booking.slot.ends_at,
+                  })}
+                />
               </li>
             ))}
           </ul>
