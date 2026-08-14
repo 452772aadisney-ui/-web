@@ -13,21 +13,21 @@ export function StudyDayFeedbackCard({ feedback, className }: StudyDayFeedbackCa
   return (
     <div
       className={cn(
-        'rounded-xl border border-amber-200 bg-amber-50/80 p-4',
+        'rounded-xl border border-amber-200 bg-amber-50/80 p-3',
         className,
       )}
     >
-      <p className="text-sm font-semibold text-amber-900">先生からのフィードバック</p>
-      <div className="mt-3 flex items-start gap-3">
-        <span className="text-3xl leading-none" aria-hidden>
+      <p className="text-xs font-semibold text-amber-900">先生からのフィードバック</p>
+      <div className="mt-2 flex items-start gap-2">
+        <span className="text-xl leading-none" aria-hidden>
           {stamp?.emoji ?? '⭐'}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="font-bold text-amber-950">{stamp?.label ?? 'フィードバック'}</p>
+          <p className="text-sm font-medium text-amber-950">{stamp?.label ?? 'フィードバック'}</p>
           {feedback.comment.trim() ? (
-            <p className="mt-2 whitespace-pre-wrap text-sm text-amber-950">{feedback.comment}</p>
+            <p className="mt-1.5 whitespace-pre-wrap text-sm text-amber-950">{feedback.comment}</p>
           ) : (
-            <p className="mt-2 text-sm text-amber-800">スタンプが送られました。</p>
+            <p className="mt-1.5 text-xs text-amber-800">スタンプが送られました。</p>
           )}
         </div>
       </div>

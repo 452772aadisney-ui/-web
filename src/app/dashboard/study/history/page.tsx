@@ -60,6 +60,31 @@ export default async function StudentStudyHistoryPage({
     <StudentPageShell title="学習履歴" backHref="/dashboard" backLabel="マイページ">
       <div className="space-y-6">
         <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <h2 className="mb-2 text-lg font-bold">記録一覧</h2>
+          <StudyLogDayNav
+            selectedDate={selectedDate}
+            dayTotalMinutes={dayMinutes}
+            basePath="/dashboard/study/history"
+          />
+          <StudyLogTable
+            logs={dayLogs}
+            profileSubjects={profileSubjects}
+            textbooks={textbooks}
+            editable
+            hideStudiedOnColumn
+            emptyMessage="この日の学習記録はありません。"
+          />
+          {feedback && (
+            <>
+              {feedback.comment.trim() && (
+                <StudyFeedbackReadMarker feedbackId={feedback.id} />
+              )}
+              <StudyDayFeedbackCard feedback={feedback} className="mt-4" />
+            </>
+          )}
+        </section>
+
+        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
             <div>
               <h2 className="text-lg font-bold">日別学習量（直近14日）</h2>
@@ -82,31 +107,6 @@ export default async function StudentStudyHistoryPage({
         <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-bold">科目別の学習割合</h2>
           <SubjectStudyPieChart data={pieData} />
-        </section>
-
-        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="mb-2 text-lg font-bold">記録一覧</h2>
-          <StudyLogDayNav
-            selectedDate={selectedDate}
-            dayTotalMinutes={dayMinutes}
-            basePath="/dashboard/study/history"
-          />
-          {feedback && (
-            <>
-              {feedback.comment.trim() && (
-                <StudyFeedbackReadMarker feedbackId={feedback.id} />
-              )}
-              <StudyDayFeedbackCard feedback={feedback} className="mb-4" />
-            </>
-          )}
-          <StudyLogTable
-            logs={dayLogs}
-            profileSubjects={profileSubjects}
-            textbooks={textbooks}
-            editable
-            hideStudiedOnColumn
-            emptyMessage="この日の学習記録はありません。"
-          />
         </section>
 
         <p className="text-sm text-muted">
