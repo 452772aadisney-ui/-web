@@ -93,6 +93,7 @@ export default async function StudentDashboardPage() {
         <MyPageActions
           nextCoaching={nextCoaching}
           unreadStudyFeedbackCount={unreadStudyFeedbackCount}
+          unreadAnnouncementCount={unreadAnnouncementCount}
           unreadChatCount={unreadChatCount}
         />
 

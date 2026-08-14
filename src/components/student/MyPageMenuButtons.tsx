@@ -9,6 +9,7 @@ export const MYPAGE_MENU_ICONS = {
   calendar: '/icons/mypage/calendar.png',
   todo: '/icons/mypage/todo.png',
   message: '/icons/mypage/message.png',
+  announcements: '/icons/mypage/announcements.png',
 } as const
 
 interface MyPagePrimaryActionButtonProps {
