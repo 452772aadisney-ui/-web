@@ -100,3 +100,60 @@ export async function deleteCoachingBookingCalendarEvent(
     console.error('[google-calendar] event delete failed:', error)
   }
 }
+
+export async function updateCoachingBookingCalendarEvent(input: {
+  eventId: string
+  studentId: string
+  coachId: string
+  startsAt: string
+  endsAt: string
+  studentNote: string
+}): Promise<void> {
+  const trimmed = input.eventId.trim()
+  if (!trimmed) return
+
+  const client = getGoogleCalendarClient()
+  if (!client) {
+    console.warn('[google-calendar] credentials are not configured; update skipped')
+    return
+  }
+
+  const supabase = await createClient()
+
+  const [{ data: student }, { data: coach }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('full_name, display_name')
+      .eq('id', input.studentId)
+      .maybeSingle<{ full_name: string; display_name: string }>(),
+    supabase
+      .from('coaching_coaches')
+      .select('name')
+      .eq('id', input.coachId)
+      .maybeSingle<{ name: string }>(),
+  ])
+
+  const studentName = student ? getPersonName(student) : '生徒'
+  const coachName = coach?.name ?? '未設定'
+
+  try {
+    await client.calendar.events.patch({
+      calendarId: client.calendarId,
+      eventId: trimmed,
+      requestBody: {
+        summary: `【コーチング】${studentName}さん`,
+        description: buildEventDescription(coachName, input.studentNote),
+        start: {
+          dateTime: input.startsAt,
+          timeZone: 'Asia/Tokyo',
+        },
+        end: {
+          dateTime: input.endsAt,
+          timeZone: 'Asia/Tokyo',
+        },
+      },
+    })
+  } catch (error) {
+    console.error('[google-calendar] event patch failed:', error)
+  }
+}

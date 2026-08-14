@@ -138,6 +138,98 @@ export async function notifyCoachingBookingCancelled(input: {
   })
 }
 
+export async function notifyCoachingBookingRescheduled(input: {
+  studentId: string
+  oldSlotId: string
+  newSlotId: string
+  oldCoachId: string
+  newCoachId: string
+  oldStartsAt: string
+  newStartsAt: string
+  studentNote: string
+  rescheduledBy: 'student' | 'admin'
+}): Promise<void> {
+  const supabase = await createClient()
+
+  const [
+    { data: student },
+    { data: oldCoach },
+    { data: newCoach },
+    { data: oldSlot },
+    { data: newSlot },
+  ] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('full_name, display_name')
+      .eq('id', input.studentId)
+      .maybeSingle<{ full_name: string; display_name: string }>(),
+    supabase
+      .from('coaching_coaches')
+      .select('name')
+      .eq('id', input.oldCoachId)
+      .maybeSingle<{ name: string }>(),
+    supabase
+      .from('coaching_coaches')
+      .select('name')
+      .eq('id', input.newCoachId)
+      .maybeSingle<{ name: string }>(),
+    supabase
+      .from('coaching_slots')
+      .select('ends_at, slot_date, start_time')
+      .eq('id', input.oldSlotId)
+      .maybeSingle<{ ends_at: string; slot_date: string | null; start_time: string | null }>(),
+    supabase
+      .from('coaching_slots')
+      .select('ends_at, slot_date, start_time')
+      .eq('id', input.newSlotId)
+      .maybeSingle<{ ends_at: string; slot_date: string | null; start_time: string | null }>(),
+  ])
+
+  const studentName = student ? getPersonName(student) : '生徒'
+  const oldCoachName = oldCoach?.name ?? 'コーチ'
+  const newCoachName = newCoach?.name ?? 'コーチ'
+  const oldDatetime = oldSlot
+    ? formatCoachingBookingDateTime(
+        oldSlot.slot_date,
+        oldSlot.start_time,
+        input.oldStartsAt,
+        oldSlot.ends_at,
+      )
+    : new Date(input.oldStartsAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+  const newDatetime = newSlot
+    ? formatCoachingBookingDateTime(
+        newSlot.slot_date,
+        newSlot.start_time,
+        input.newStartsAt,
+        newSlot.ends_at,
+      )
+    : new Date(input.newStartsAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+
+  const rescheduledByLabel = input.rescheduledBy === 'admin' ? '管理者' : '生徒'
+
+  const lines = [
+    `**生徒:** ${studentName}`,
+    `**変更前:** ${oldDatetime}（${oldCoachName}）`,
+    `**変更後:** ${newDatetime}（${newCoachName}）`,
+    `**変更者:** ${rescheduledByLabel}`,
+  ]
+
+  if (input.studentNote.trim()) {
+    lines.push(`**伝達事項:** ${input.studentNote.trim()}`)
+  }
+
+  await sendDiscordWebhook({
+    embeds: [
+      {
+        title: 'コーチング予約が変更されました',
+        description: lines.join('\n'),
+        url: `${getAppBaseUrl()}/admin/coaching/bookings`,
+        color: 0x3b82f6,
+      },
+    ],
+  })
+}
+
 export async function notifyStudentChatMessage(input: {
   studentId: string
   body: string
