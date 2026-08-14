@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { notifyCoachingBookingCreated } from '@/lib/discord/notifications'
+import { createCoachingBookingCalendarEvent } from '@/lib/google-calendar/events'
 import { createClient } from '@/lib/supabase/server'
 import {
   fetchCoachingBookingBySlotId,
@@ -324,8 +325,15 @@ export async function bookCoachingSlot(
       startsAt: slot.starts_at,
       studentNote,
     })
+    await createCoachingBookingCalendarEvent({
+      studentId: studentResult.userId,
+      slotId,
+      coachId: slot.coach_id,
+      startsAt: slot.starts_at,
+      studentNote,
+    })
   } catch (notificationError) {
-    console.error('[coaching] discord notification failed:', notificationError)
+    console.error('[coaching] booking notification failed:', notificationError)
   }
 
   revalidateCoachingPaths()
