@@ -1,0 +1,75 @@
+import Image from 'next/image'
+import Link from 'next/link'
+import { cn } from '@/lib/utils'
+
+export const MYPAGE_MENU_ICONS = {
+  recordStudy: '/icons/mypage/record-study.png',
+  studyHistory: '/icons/mypage/study-history.png',
+  bookshelf: '/icons/mypage/bookshelf.png',
+  calendar: '/icons/mypage/calendar.png',
+  todo: '/icons/mypage/todo.png',
+  message: '/icons/mypage/message.png',
+} as const
+
+interface MyPagePrimaryActionButtonProps {
+  href: string
+  label: string
+  iconSrc: string
+}
+
+export function MyPagePrimaryActionButton({
+  href,
+  label,
+  iconSrc,
+}: MyPagePrimaryActionButtonProps) {
+  return (
+    <Link
+      href={href}
+      className="flex min-h-[5.5rem] items-center justify-center gap-3 rounded-2xl bg-[#1a1f36] px-6 py-6 text-lg font-bold text-white shadow-sm transition hover:bg-[#252b45]"
+    >
+      <Image
+        src={iconSrc}
+        alt=""
+        width={32}
+        height={32}
+        className="h-8 w-8 shrink-0 brightness-0 invert"
+        aria-hidden
+      />
+      {label}
+    </Link>
+  )
+}
+
+interface MyPageIconMenuButtonProps {
+  href: string
+  label: string
+  iconSrc: string
+  badgeCount?: number
+  className?: string
+}
+
+export function MyPageIconMenuButton({
+  href,
+  label,
+  iconSrc,
+  badgeCount,
+  className,
+}: MyPageIconMenuButtonProps) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        'relative flex min-h-[5.75rem] flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card px-3 py-4 text-center shadow-sm transition hover:bg-background',
+        className,
+      )}
+    >
+      <Image src={iconSrc} alt="" width={40} height={40} className="h-10 w-10" aria-hidden />
+      <span className="text-sm font-medium leading-tight">{label}</span>
+      {badgeCount != null && badgeCount > 0 && (
+        <span className="absolute right-2 top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+          {badgeCount > 99 ? '99+' : badgeCount}
+        </span>
+      )}
+    </Link>
+  )
+}

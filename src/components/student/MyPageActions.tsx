@@ -1,23 +1,58 @@
 import Link from 'next/link'
 import { formatCoachingBookingDateTime } from '@/lib/coaching/format'
 import type { CoachingBookingWithDetails } from '@/types/coaching'
+import {
+  MYPAGE_MENU_ICONS,
+  MyPageIconMenuButton,
+  MyPagePrimaryActionButton,
+} from '@/components/student/MyPageMenuButtons'
 
-const secondaryActions = [
-  { href: '/dashboard/study/history', label: '学習履歴を見る' },
-  { href: '/dashboard/bookshelf', label: '本棚を見る' },
-  { href: '/dashboard/calendar', label: 'カレンダーを確認する' },
-  { href: '/dashboard/todo', label: 'ToDoリストを確認する' },
-  { href: '/dashboard/coaching', label: 'コーチングを予約する' },
+const iconMenuActions = [
+  {
+    href: '/dashboard/study/history',
+    label: '学習履歴',
+    iconSrc: MYPAGE_MENU_ICONS.studyHistory,
+    badgeKey: 'studyHistory' as const,
+  },
+  {
+    href: '/dashboard/bookshelf',
+    label: '本棚',
+    iconSrc: MYPAGE_MENU_ICONS.bookshelf,
+  },
+  {
+    href: '/dashboard/calendar',
+    label: 'カレンダー',
+    iconSrc: MYPAGE_MENU_ICONS.calendar,
+  },
+  {
+    href: '/dashboard/todo',
+    label: 'ToDo',
+    iconSrc: MYPAGE_MENU_ICONS.todo,
+  },
+  {
+    href: '/dashboard/chat',
+    label: 'メッセージ',
+    iconSrc: MYPAGE_MENU_ICONS.message,
+    badgeKey: 'chat' as const,
+  },
 ] as const
-
-const actionClass =
-  'flex min-h-[4.5rem] items-center justify-center rounded-2xl border border-border bg-card px-4 py-4 text-center text-sm font-medium shadow-sm transition hover:bg-background'
 
 interface MyPageActionsProps {
   nextCoaching?: CoachingBookingWithDetails | null
+  unreadStudyFeedbackCount?: number
+  unreadChatCount?: number
 }
 
-export function MyPageActions({ nextCoaching }: MyPageActionsProps) {
+export function MyPageActions({
+  nextCoaching,
+  unreadStudyFeedbackCount = 0,
+  unreadChatCount = 0,
+}: MyPageActionsProps) {
+  const badgeCounts = {
+    studyHistory: unreadStudyFeedbackCount,
+    chat: unreadChatCount,
+  }
+
   return (
     <div className="space-y-4">
       {nextCoaching && (
@@ -41,19 +76,41 @@ export function MyPageActions({ nextCoaching }: MyPageActionsProps) {
         </section>
       )}
 
-      <Link
+      <MyPagePrimaryActionButton
         href="/dashboard/study"
-        className="flex min-h-[5.5rem] items-center justify-center rounded-2xl bg-[#1a1f36] px-6 py-6 text-center text-lg font-bold text-white shadow-sm transition hover:bg-[#252b45]"
-      >
-        学習を記録する
-      </Link>
+        label="学習を記録する"
+        iconSrc={MYPAGE_MENU_ICONS.recordStudy}
+      />
 
-      <div className="grid grid-cols-2 gap-3">
-        {secondaryActions.map((action) => (
-          <Link key={action.href} href={action.href} className={actionClass}>
-            {action.label}
-          </Link>
-        ))}
+      <div className="space-y-3">
+        <div className="grid grid-cols-3 gap-3">
+          {iconMenuActions.slice(0, 3).map((action) => (
+            <MyPageIconMenuButton
+              key={action.href}
+              href={action.href}
+              label={action.label}
+              iconSrc={action.iconSrc}
+              badgeCount={
+                'badgeKey' in action && action.badgeKey === 'studyHistory'
+                  ? badgeCounts.studyHistory
+                  : undefined
+              }
+            />
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-3 px-[8%]">
+          {iconMenuActions.slice(3).map((action) => (
+            <MyPageIconMenuButton
+              key={action.href}
+              href={action.href}
+              label={action.label}
+              iconSrc={action.iconSrc}
+              badgeCount={
+                'badgeKey' in action && action.badgeKey === 'chat' ? badgeCounts.chat : undefined
+              }
+            />
+          ))}
+        </div>
       </div>
     </div>
   )

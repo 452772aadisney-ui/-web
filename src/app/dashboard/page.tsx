@@ -90,7 +90,11 @@ export default async function StudentDashboardPage() {
           />
         )}
 
-        <MyPageActions nextCoaching={nextCoaching} />
+        <MyPageActions
+          nextCoaching={nextCoaching}
+          unreadStudyFeedbackCount={unreadStudyFeedbackCount}
+          unreadChatCount={unreadChatCount}
+        />
 
         {profile.role === 'student' && profile.student_code && (
           <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
