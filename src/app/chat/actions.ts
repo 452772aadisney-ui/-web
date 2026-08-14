@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { notifyStudentChatMessage } from '@/lib/discord/notifications'
 import { notifyChatMessageReceived } from '@/lib/email/notifications'
 import { createClient } from '@/lib/supabase/server'
 import type { ChatMessage } from '@/types/chat'
@@ -68,14 +69,20 @@ export async function sendChatMessage(
   }
 
   try {
+    const senderRole = profile.role === 'admin' ? 'admin' : 'student'
+
     await notifyChatMessageReceived({
       studentId,
       senderId: user.id,
-      senderRole: profile.role === 'admin' ? 'admin' : 'student',
+      senderRole,
       body: trimmed,
     })
+
+    if (senderRole === 'student') {
+      await notifyStudentChatMessage({ studentId, body: trimmed })
+    }
   } catch (error) {
-    console.error('[chat] email notification failed:', error)
+    console.error('[chat] notification failed:', error)
   }
 
   revalidatePath('/dashboard/chat')

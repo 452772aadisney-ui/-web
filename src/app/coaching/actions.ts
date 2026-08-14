@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { notifyCoachingBookingCreated } from '@/lib/discord/notifications'
 import { createClient } from '@/lib/supabase/server'
 import {
   fetchCoachingBookingBySlotId,
@@ -313,6 +314,18 @@ export async function bookCoachingSlot(
   if (error) {
     if (error.code === '23505') return { error: 'この予約枠は既に埋まっています' }
     return { error: '予約に失敗しました' }
+  }
+
+  try {
+    await notifyCoachingBookingCreated({
+      studentId: studentResult.userId,
+      slotId,
+      coachId: slot.coach_id,
+      startsAt: slot.starts_at,
+      studentNote,
+    })
+  } catch (notificationError) {
+    console.error('[coaching] discord notification failed:', notificationError)
   }
 
   revalidateCoachingPaths()
