@@ -30,3 +30,31 @@ export function formatChartDate(dateKey: string, isToday = false): string {
 export function getTodayDateKey(): string {
   return toLocalDateKey(new Date())
 }
+
+/** 日本時間（JST）の YYYY-MM-DD */
+export function getJstDateKey(date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(date)
+}
+
+export function shiftDateKey(dateKey: string, days: number): string {
+  const [year, month, day] = dateKey.split('-').map(Number)
+  const date = new Date(year, month - 1, day)
+  date.setDate(date.getDate() + days)
+  return toLocalDateKey(date)
+}
+
+export function formatStudyDateLabel(dateKey: string, todayKey: string): string {
+  const yesterdayKey = shiftDateKey(todayKey, -1)
+  if (dateKey === todayKey) return '今日'
+  if (dateKey === yesterdayKey) return '昨日'
+
+  const [year, month, day] = dateKey.split('-').map(Number)
+  const weekday = new Date(year, month - 1, day).toLocaleDateString('ja-JP', {
+    weekday: 'short',
+  })
+  return `${Number(month)}月${Number(day)}日（${weekday}）`
+}
+
+export function isValidDateKey(value: string | undefined): value is string {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value))
+}

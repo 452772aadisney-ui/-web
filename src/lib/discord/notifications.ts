@@ -2,6 +2,10 @@ import { getPersonName } from '@/lib/auth/display-name'
 import { formatCoachingBookingDateTime } from '@/lib/coaching/format'
 import { sendDiscordWebhook } from '@/lib/discord/send'
 import { getAppBaseUrl } from '@/lib/email/config'
+import {
+  formatDailyStudyDigestDescription,
+  type DailyStudyDigestReport,
+} from '@/lib/study/digest'
 import { createClient } from '@/lib/supabase/server'
 
 function truncatePreview(text: string, maxLength = 200): string {
@@ -154,6 +158,19 @@ export async function notifyStudentChatMessage(input: {
         description: truncatePreview(input.body),
         url: `${getAppBaseUrl()}/admin/chat/${input.studentId}`,
         color: 0x2563eb,
+      },
+    ],
+  })
+}
+
+export async function notifyDailyStudyDigest(report: DailyStudyDigestReport): Promise<void> {
+  await sendDiscordWebhook({
+    embeds: [
+      {
+        title: `学習記録サマリー（${report.dateLabel}）`,
+        description: formatDailyStudyDigestDescription(report),
+        url: `${getAppBaseUrl()}/admin/students`,
+        color: 0x16a34a,
       },
     ],
   })

@@ -17,6 +17,8 @@ interface StudyLogTableProps {
   profileSubjects: string[]
   textbooks: Textbook[]
   editable?: boolean
+  hideStudiedOnColumn?: boolean
+  emptyMessage?: string
 }
 
 function formatStudiedOn(date: string): string {
@@ -35,15 +37,22 @@ function formatDateTime(iso: string): string {
   })
 }
 
+function tableColSpan(editable: boolean, hideStudiedOnColumn: boolean): number {
+  const dataCols = hideStudiedOnColumn ? 5 : 6
+  return dataCols + (editable ? 1 : 0)
+}
+
 function StudyLogEditRow({
   log,
   profileSubjects,
   textbooks,
+  hideStudiedOnColumn,
   onCancel,
 }: {
   log: StudyLog
   profileSubjects: string[]
   textbooks: Textbook[]
+  hideStudiedOnColumn: boolean
   onCancel: () => void
 }) {
   const [state, formAction, pending] = useActionState(updateStudyLog, initialState)
@@ -56,7 +65,7 @@ function StudyLogEditRow({
 
   return (
     <tr>
-      <td colSpan={editableColSpan(true)} className="bg-blue-50/40 px-3 py-4">
+      <td colSpan={tableColSpan(true, hideStudiedOnColumn)} className="bg-blue-50/40 px-3 py-4">
         <form action={formAction} className="space-y-3">
           <input type="hidden" name="logId" value={log.id} />
 
@@ -152,22 +161,18 @@ function StudyLogEditRow({
   )
 }
 
-function editableColSpan(editable: boolean) {
-  return editable ? 7 : 6
-}
-
 export function StudyLogTable({
   logs,
   profileSubjects,
   textbooks,
   editable = false,
+  hideStudiedOnColumn = false,
+  emptyMessage = '学習記録はまだありません。',
 }: StudyLogTableProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
 
   if (logs.length === 0) {
-    return (
-      <p className="py-8 text-center text-sm text-muted">学習記録はまだありません。</p>
-    )
+    return <p className="py-8 text-center text-sm text-muted">{emptyMessage}</p>
   }
 
   return (
@@ -175,7 +180,7 @@ export function StudyLogTable({
       <table className="w-full min-w-[640px] text-left text-sm">
         <thead>
           <tr className="border-b border-border text-muted">
-            <th className="px-3 py-2 font-medium">学習日</th>
+            {!hideStudiedOnColumn && <th className="px-3 py-2 font-medium">学習日</th>}
             <th className="px-3 py-2 font-medium">科目</th>
             <th className="px-3 py-2 font-medium">テキスト</th>
             <th className="px-3 py-2 font-medium">内容</th>
@@ -192,11 +197,14 @@ export function StudyLogTable({
                 log={log}
                 profileSubjects={profileSubjects}
                 textbooks={textbooks}
+                hideStudiedOnColumn={hideStudiedOnColumn}
                 onCancel={() => setEditingId(null)}
               />
             ) : (
               <tr key={log.id} className="border-b border-border/60">
-                <td className="px-3 py-3 whitespace-nowrap">{formatStudiedOn(log.studied_on)}</td>
+                {!hideStudiedOnColumn && (
+                  <td className="px-3 py-3 whitespace-nowrap">{formatStudiedOn(log.studied_on)}</td>
+                )}
                 <td className="px-3 py-3 whitespace-nowrap">{log.subject}</td>
                 <td className="px-3 py-3">{log.textbook_name}</td>
                 <td className="px-3 py-3 text-muted">{log.content || '—'}</td>
