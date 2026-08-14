@@ -71,11 +71,10 @@ export function MyPageActions({
 
   return (
     <div className="space-y-4">
-      {nextCoaching && (
+      {nextCoaching ? (
         <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <h2 className="text-sm font-semibold text-muted">次回コーチング予定</h2>
-          <p className="mt-2 font-bold">{nextCoaching.coach.name}</p>
-          <p className="mt-1 text-sm text-muted">
+          <h2 className="text-center text-sm font-semibold text-muted">次回コーチング予定</h2>
+          <p className="mt-3 text-center text-lg font-bold">
             {formatCoachingBookingDateTime(
               nextCoaching.slot.slot_date,
               nextCoaching.slot.start_time,
@@ -83,12 +82,28 @@ export function MyPageActions({
               nextCoaching.slot.ends_at,
             )}
           </p>
-          <Link
-            href="/dashboard/coaching"
-            className="mt-3 inline-block text-sm font-medium text-primary hover:underline"
-          >
-            コーチング詳細を見る →
-          </Link>
+          <p className="mt-1 text-center text-sm text-muted">{nextCoaching.coach.name}</p>
+          <div className="mt-3 text-center">
+            <Link
+              href="/dashboard/coaching"
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              コーチング予定を変更する →
+            </Link>
+          </div>
+        </section>
+      ) : (
+        <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <h2 className="text-center text-sm font-semibold text-muted">次回コーチング予定</h2>
+          <p className="mt-3 text-center font-medium">次回コーチングを予約してください</p>
+          <div className="mt-3 text-center">
+            <Link
+              href="/dashboard/coaching"
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              コーチングを予約する →
+            </Link>
+          </div>
         </section>
       )}
 

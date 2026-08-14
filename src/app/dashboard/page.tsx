@@ -4,7 +4,6 @@ import { getCurrentProfileWithError } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { CoachingAlertBanner } from '@/components/coaching/CoachingAlertBanner'
 import { MyPageActions } from '@/components/student/MyPageActions'
-import { MyPageAlertBanner } from '@/components/student/MyPageAlertBanner'
 import { StudentQrCode } from '@/components/student/StudentQrCode'
 import { fetchUnreadAnnouncementCount } from '@/lib/announcements/queries'
 import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
@@ -65,30 +64,6 @@ export default async function StudentDashboardPage() {
     <StudentPageShell title="マイページ">
       <div className="space-y-6">
         {coachingAlert?.showAlert && <CoachingAlertBanner message={coachingAlert.message} />}
-
-        {unreadAnnouncementCount > 0 && (
-          <MyPageAlertBanner
-            title="未読のお知らせがあります"
-            href="/dashboard/announcements"
-            actionLabel="お知らせを見る"
-          />
-        )}
-
-        {unreadChatCount > 0 && (
-          <MyPageAlertBanner
-            title="未読のメッセージがあります"
-            href="/dashboard/chat"
-            actionLabel="メッセージを見る"
-          />
-        )}
-
-        {unreadStudyFeedbackCount > 0 && (
-          <MyPageAlertBanner
-            title="学習記録にコメントが届いています"
-            href="/dashboard/study/history"
-            actionLabel="学習履歴を見る"
-          />
-        )}
 
         <MyPageActions
           nextCoaching={nextCoaching}
