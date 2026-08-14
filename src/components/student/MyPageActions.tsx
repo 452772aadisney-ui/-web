@@ -7,7 +7,7 @@ import {
   MyPagePrimaryActionButton,
 } from '@/components/student/MyPageMenuButtons'
 
-type MenuBadgeKey = 'studyHistory' | 'announcements' | 'chat'
+type MenuBadgeKey = 'studyHistory' | 'announcements' | 'chat' | 'bookshelf'
 
 const iconMenuActions: Array<{
   href: string
@@ -25,6 +25,7 @@ const iconMenuActions: Array<{
     href: '/dashboard/bookshelf',
     label: '本棚',
     iconSrc: MYPAGE_MENU_ICONS.bookshelf,
+    badgeKey: 'bookshelf',
   },
   {
     href: '/dashboard/calendar',
@@ -55,6 +56,7 @@ interface MyPageActionsProps {
   unreadStudyFeedbackCount?: number
   unreadAnnouncementCount?: number
   unreadChatCount?: number
+  unseenTextbookCount?: number
 }
 
 export function MyPageActions({
@@ -62,11 +64,13 @@ export function MyPageActions({
   unreadStudyFeedbackCount = 0,
   unreadAnnouncementCount = 0,
   unreadChatCount = 0,
+  unseenTextbookCount = 0,
 }: MyPageActionsProps) {
   const badgeCounts: Record<MenuBadgeKey, number> = {
     studyHistory: unreadStudyFeedbackCount,
     announcements: unreadAnnouncementCount,
     chat: unreadChatCount,
+    bookshelf: unseenTextbookCount,
   }
 
   return (

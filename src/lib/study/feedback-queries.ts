@@ -107,6 +107,13 @@ export async function fetchStudentDailyStudySummaries(
   return summaries
 }
 
+export async function fetchIncompleteStudyFeedbackCount(
+  studiedOn: string,
+): Promise<number> {
+  const summaries = await fetchStudentDailyStudySummaries(studiedOn)
+  return summaries.filter((summary) => !summary.feedback).length
+}
+
 export const fetchUnreadStudyFeedbackCount = cache(
   async (studentId: string): Promise<number> => {
     const supabase = await createClient()

@@ -18,6 +18,7 @@ export async function fetchTextbooksForStudent(studentId: string): Promise<Textb
   return data.map((book) => ({
     ...(book as Textbook),
     usage_tags: (book as Textbook).usage_tags ?? [],
+    is_seen_by_student: (book as Textbook).is_seen_by_student ?? true,
   }))
 }
 

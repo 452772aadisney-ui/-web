@@ -8,6 +8,7 @@ import { StudentQrCode } from '@/components/student/StudentQrCode'
 import { fetchUnreadAnnouncementCount } from '@/lib/announcements/queries'
 import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
 import { fetchUnreadStudyFeedbackCount } from '@/lib/study/feedback-queries'
+import { fetchUnseenTextbookCount } from '@/lib/textbooks/catalog-queries'
 import { getCoachingAlertState, getNextCoachingBooking } from '@/lib/coaching/alert'
 import { fetchCoachingBookingsForStudent } from '@/lib/coaching/queries'
 
@@ -51,14 +52,15 @@ export default async function StudentDashboardPage() {
   const nextCoaching =
     profile.role === 'student' ? getNextCoachingBooking(coachingBookings) : null
 
-  const [unreadAnnouncementCount, unreadChatCount, unreadStudyFeedbackCount] =
+  const [unreadAnnouncementCount, unreadChatCount, unreadStudyFeedbackCount, unseenTextbookCount] =
     profile.role === 'student'
       ? await Promise.all([
           fetchUnreadAnnouncementCount(profile.id).catch(() => 0),
           fetchUnreadChatCount(profile.id).catch(() => 0),
           fetchUnreadStudyFeedbackCount(profile.id).catch(() => 0),
+          fetchUnseenTextbookCount(profile.id).catch(() => 0),
         ])
-      : [0, 0, 0]
+      : [0, 0, 0, 0]
 
   return (
     <StudentPageShell title="マイページ">
@@ -70,6 +72,7 @@ export default async function StudentDashboardPage() {
           unreadStudyFeedbackCount={unreadStudyFeedbackCount}
           unreadAnnouncementCount={unreadAnnouncementCount}
           unreadChatCount={unreadChatCount}
+          unseenTextbookCount={unseenTextbookCount}
         />
 
         {profile.role === 'student' && profile.student_code && (

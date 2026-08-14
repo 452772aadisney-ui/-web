@@ -2,6 +2,8 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
+import { getJstDateKey } from '@/lib/study/dates'
+import { fetchIncompleteStudyFeedbackCount } from '@/lib/study/feedback-queries'
 import {
   ADMIN_HAMBURGER_ITEMS,
   type HamburgerMenuItem,
@@ -28,6 +30,9 @@ export async function AdminPageShell({
 }: AdminPageShellProps) {
   const profile = await getCurrentProfile()
   const unreadChatCount = profile ? await fetchUnreadChatCount(profile.id) : 0
+  const incompleteStudyFeedbackCount = profile
+    ? await fetchIncompleteStudyFeedbackCount(getJstDateKey())
+    : 0
 
   const menuItems: HamburgerMenuItem[] = ADMIN_HAMBURGER_ITEMS.map((item) => ({ ...item }))
   const containerClass = wide ? 'max-w-6xl' : 'max-w-3xl'
@@ -49,7 +54,12 @@ export async function AdminPageShell({
         </div>
       </header>
 
-      {showMainNav && <AdminMainNav unreadChatCount={unreadChatCount} />}
+      {showMainNav && (
+        <AdminMainNav
+          unreadChatCount={unreadChatCount}
+          incompleteStudyFeedbackCount={incompleteStudyFeedbackCount}
+        />
+      )}
 
       <main className={`mx-auto ${containerClass} px-4 py-8`}>{children}</main>
     </div>

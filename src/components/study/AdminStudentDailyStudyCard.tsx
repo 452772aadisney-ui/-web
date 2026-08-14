@@ -22,9 +22,39 @@ function formatLogSummary(log: StudyLog): string {
   return `${log.subject} ${formatDuration(log.duration_minutes)}${log.textbook_name ? `（${log.textbook_name}）` : ''}`
 }
 
+function CompletedStudyCard({ summary }: { summary: StudentDailyStudySummary }) {
+  return (
+    <section className="rounded-2xl border border-border bg-card px-6 py-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-lg font-bold">{getPersonName(summary.student)}</h3>
+        <p className="text-sm font-medium">合計 {formatDuration(summary.totalMinutes)}</p>
+      </div>
+    </section>
+  )
+}
+
 export function AdminStudentDailyStudyCard({ summary, studiedOn }: AdminStudentDailyStudyCardProps) {
-  const [state, formAction, pending] = useActionState(upsertStudyDayFeedback, initialState)
   const feedback = summary.feedback
+
+  if (feedback) {
+    return <CompletedStudyCard summary={summary} />
+  }
+
+  return (
+    <IncompleteStudyCard summary={summary} studiedOn={studiedOn} feedback={feedback} />
+  )
+}
+
+function IncompleteStudyCard({
+  summary,
+  studiedOn,
+  feedback,
+}: {
+  summary: StudentDailyStudySummary
+  studiedOn: string
+  feedback: StudyDayFeedback | null
+}) {
+  const [state, formAction, pending] = useActionState(upsertStudyDayFeedback, initialState)
   const defaultStamp = feedback?.stamp ?? STUDY_FEEDBACK_STAMPS[0].id
 
   return (
@@ -34,18 +64,14 @@ export function AdminStudentDailyStudyCard({ summary, studiedOn }: AdminStudentD
           <h3 className="text-lg font-bold">{getPersonName(summary.student)}</h3>
           <p className="text-sm text-muted">{summary.student.email}</p>
         </div>
-        <p className="text-sm font-medium">
-          合計 {formatDuration(summary.totalMinutes)}
-        </p>
+        <p className="text-sm font-medium">合計 {formatDuration(summary.totalMinutes)}</p>
       </div>
 
       <ul className="mt-4 space-y-2 text-sm">
         {summary.logs.map((log) => (
           <li key={log.id} className="rounded-lg bg-background px-3 py-2">
             <span className="font-medium">{formatLogSummary(log)}</span>
-            {log.content.trim() && (
-              <p className="mt-1 text-muted">{log.content}</p>
-            )}
+            {log.content.trim() && <p className="mt-1 text-muted">{log.content}</p>}
           </li>
         ))}
       </ul>
@@ -96,7 +122,7 @@ export function AdminStudentDailyStudyCard({ summary, studiedOn }: AdminStudentD
           disabled={pending}
           className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
         >
-          {pending ? '保存中…' : feedback ? 'フィードバックを更新' : 'フィードバックを送信'}
+          {pending ? '保存中…' : 'フィードバックを送信'}
         </button>
       </form>
     </section>

@@ -1,8 +1,13 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { requireProfile } from '@/app/profile/actions'
-import { TextbookManager } from '@/components/textbooks/TextbookManager'
+import { StudentBookshelfManager } from '@/components/textbooks/StudentBookshelfManager'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
+import {
+  fetchStudentCatalogIds,
+  fetchTextbookCatalogForStudent,
+  markTextbooksAsSeen,
+} from '@/lib/textbooks/catalog-queries'
 import { fetchTextbooksForStudent } from '@/lib/study/queries'
 
 export default async function BookshelfPage() {
@@ -12,7 +17,14 @@ export default async function BookshelfPage() {
     redirect('/dashboard')
   }
 
-  const textbooks = await fetchTextbooksForStudent(profile.id)
+  const [textbooks, catalog, registeredCatalogIds] = await Promise.all([
+    fetchTextbooksForStudent(profile.id),
+    fetchTextbookCatalogForStudent(profile.id),
+    fetchStudentCatalogIds(profile.id),
+  ])
+
+  await markTextbooksAsSeen(profile.id)
+
   const profileSubjects = profile.subjects ?? []
 
   return (
@@ -21,13 +33,15 @@ export default async function BookshelfPage() {
         <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-bold">教材登録</h2>
           <p className="mt-1 text-sm text-muted">
-            学習記録で選べるテキスト・参考書を登録します。科目タグはプロフィールの使用科目から選べます。
+            管理者本棚のリストから選ぶか、新規に参考書を作成できます。科目タグはプロフィールの使用科目から選べます。
           </p>
           <div className="mt-6">
-            <TextbookManager
+            <StudentBookshelfManager
               studentId={profile.id}
               profileSubjects={profileSubjects}
               textbooks={textbooks}
+              catalog={catalog}
+              registeredCatalogIds={[...registeredCatalogIds]}
               editHref="/dashboard/profile"
             />
           </div>

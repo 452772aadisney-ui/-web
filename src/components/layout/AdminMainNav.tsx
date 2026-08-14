@@ -6,21 +6,34 @@ import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
   { href: '/admin/students', label: '生徒一覧' },
-  { href: '/admin/study-daily', label: '日別学習管理' },
+  {
+    href: '/admin/study-daily',
+    label: '日別学習管理',
+    badgeKey: 'studyDaily' as const,
+  },
   { href: '/admin/schedule', label: 'スケジュール' },
   { href: '/admin/coaching', label: 'コーチング' },
+  { href: '/admin/bookshelf', label: '本棚' },
   { href: '/admin/textbooks', label: '参考書登録' },
-  { href: '/admin/chat', label: 'メッセージ', showBadge: true },
+  { href: '/admin/chat', label: 'メッセージ', badgeKey: 'chat' as const },
   { href: '/admin/announcements', label: 'お知らせ' },
-  { href: '/admin/tags', label: 'タグ管理' },
 ] as const
 
 interface AdminMainNavProps {
   unreadChatCount: number
+  incompleteStudyFeedbackCount: number
 }
 
-export function AdminMainNav({ unreadChatCount }: AdminMainNavProps) {
+export function AdminMainNav({
+  unreadChatCount,
+  incompleteStudyFeedbackCount,
+}: AdminMainNavProps) {
   const pathname = usePathname()
+
+  function getBadgeCount(badgeKey: 'chat' | 'studyDaily'): number {
+    if (badgeKey === 'chat') return unreadChatCount
+    return incompleteStudyFeedbackCount
+  }
 
   return (
     <nav className="border-b border-border bg-card px-4 py-3">
@@ -36,10 +49,13 @@ export function AdminMainNav({ unreadChatCount }: AdminMainNavProps) {
               (pathname?.startsWith('/admin/schedule') ?? false)) ||
             (item.href === '/admin/coaching' &&
               (pathname?.startsWith('/admin/coaching') ?? false)) ||
+            (item.href === '/admin/bookshelf' &&
+              (pathname?.startsWith('/admin/bookshelf') ?? false)) ||
             (item.href === '/admin/textbooks' &&
               (pathname?.startsWith('/admin/textbooks') ?? false)) ||
-            (item.href === '/admin/chat' &&
-              (pathname?.startsWith('/admin/chat') ?? false))
+            (item.href === '/admin/chat' && (pathname?.startsWith('/admin/chat') ?? false))
+
+          const badgeCount = 'badgeKey' in item ? getBadgeCount(item.badgeKey) : 0
 
           return (
             <Link
@@ -53,9 +69,9 @@ export function AdminMainNav({ unreadChatCount }: AdminMainNavProps) {
               )}
             >
               {item.label}
-              {'showBadge' in item && item.showBadge && unreadChatCount > 0 && (
+              {'badgeKey' in item && badgeCount > 0 && (
                 <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
-                  {unreadChatCount > 99 ? '99+' : unreadChatCount}
+                  {badgeCount > 99 ? '99+' : badgeCount}
                 </span>
               )}
             </Link>

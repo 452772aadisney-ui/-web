@@ -19,5 +19,6 @@ export const STUDENT_HAMBURGER_ITEMS = [
 
 export const ADMIN_HAMBURGER_ITEMS = [
   { href: '/admin', label: '管理画面' },
+  { href: '/admin/tags', label: 'タグ管理' },
   { href: '/admin/profile', label: 'プロフィールを編集' },
 ] as const

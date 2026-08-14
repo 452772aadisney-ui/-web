@@ -31,6 +31,11 @@ export default async function AdminStudyDailyPage({
   }
 
   const summaries = await fetchStudentDailyStudySummaries(selectedDate)
+  const sortedSummaries = [...summaries].sort((a, b) => {
+    const aComplete = a.feedback ? 1 : 0
+    const bComplete = b.feedback ? 1 : 0
+    return aComplete - bComplete
+  })
 
   return (
     <AdminPageShell title="日別学習管理" backHref="/admin" backLabel="管理画面">
@@ -42,13 +47,13 @@ export default async function AdminStudyDailyPage({
 
         <AdminStudyDailyDateNav selectedDate={selectedDate} />
 
-        {summaries.length === 0 ? (
+        {sortedSummaries.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted">
             この日の学習記録はまだありません。
           </p>
         ) : (
           <div className="space-y-6">
-            {summaries.map((summary) => (
+            {sortedSummaries.map((summary) => (
               <AdminStudentDailyStudyCard
                 key={summary.student.id}
                 summary={summary}
