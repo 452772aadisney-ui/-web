@@ -70,6 +70,70 @@ export async function notifyCoachingBookingCreated(input: {
   })
 }
 
+export async function notifyCoachingBookingCancelled(input: {
+  studentId: string
+  slotId: string
+  coachId: string
+  startsAt: string
+  studentNote: string
+  cancelledBy: 'student' | 'admin'
+}): Promise<void> {
+  const supabase = await createClient()
+
+  const [{ data: student }, { data: coach }, { data: slot }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('full_name, display_name')
+      .eq('id', input.studentId)
+      .maybeSingle<{ full_name: string; display_name: string }>(),
+    supabase
+      .from('coaching_coaches')
+      .select('name')
+      .eq('id', input.coachId)
+      .maybeSingle<{ name: string }>(),
+    supabase
+      .from('coaching_slots')
+      .select('ends_at, slot_date, start_time')
+      .eq('id', input.slotId)
+      .maybeSingle<{ ends_at: string; slot_date: string | null; start_time: string | null }>(),
+  ])
+
+  const studentName = student ? getPersonName(student) : '生徒'
+  const coachName = coach?.name ?? 'コーチ'
+  const datetime = slot
+    ? formatCoachingBookingDateTime(
+        slot.slot_date,
+        slot.start_time,
+        input.startsAt,
+        slot.ends_at,
+      )
+    : new Date(input.startsAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+
+  const cancelledByLabel = input.cancelledBy === 'admin' ? '管理者' : '生徒'
+
+  const lines = [
+    `**生徒:** ${studentName}`,
+    `**コーチ:** ${coachName}`,
+    `**日時:** ${datetime}`,
+    `**キャンセル:** ${cancelledByLabel}`,
+  ]
+
+  if (input.studentNote.trim()) {
+    lines.push(`**伝達事項:** ${input.studentNote.trim()}`)
+  }
+
+  await sendDiscordWebhook({
+    embeds: [
+      {
+        title: 'コーチング予約がキャンセルされました',
+        description: lines.join('\n'),
+        url: `${getAppBaseUrl()}/admin/coaching/bookings`,
+        color: 0xef4444,
+      },
+    ],
+  })
+}
+
 export async function notifyStudentChatMessage(input: {
   studentId: string
   body: string

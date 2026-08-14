@@ -20,11 +20,11 @@ export async function createCoachingBookingCalendarEvent(input: {
   coachId: string
   startsAt: string
   studentNote: string
-}): Promise<void> {
+}): Promise<string | null> {
   const client = getGoogleCalendarClient()
   if (!client) {
     console.warn('[google-calendar] credentials are not configured; event skipped')
-    return
+    return null
   }
 
   const supabase = await createClient()
@@ -49,14 +49,14 @@ export async function createCoachingBookingCalendarEvent(input: {
 
   if (!slot?.ends_at) {
     console.error('[google-calendar] slot end time not found:', input.slotId)
-    return
+    return null
   }
 
   const studentName = student ? getPersonName(student) : '生徒'
   const coachName = coach?.name ?? '未設定'
 
   try {
-    await client.calendar.events.insert({
+    const response = await client.calendar.events.insert({
       calendarId: client.calendarId,
       requestBody: {
         summary: `【コーチング】${studentName}さん`,
@@ -71,7 +71,32 @@ export async function createCoachingBookingCalendarEvent(input: {
         },
       },
     })
+
+    return response.data.id ?? null
   } catch (error) {
     console.error('[google-calendar] event insert failed:', error)
+    return null
+  }
+}
+
+export async function deleteCoachingBookingCalendarEvent(
+  eventId: string | null | undefined,
+): Promise<void> {
+  const trimmed = eventId?.trim()
+  if (!trimmed) return
+
+  const client = getGoogleCalendarClient()
+  if (!client) {
+    console.warn('[google-calendar] credentials are not configured; delete skipped')
+    return
+  }
+
+  try {
+    await client.calendar.events.delete({
+      calendarId: client.calendarId,
+      eventId: trimmed,
+    })
+  } catch (error) {
+    console.error('[google-calendar] event delete failed:', error)
   }
 }

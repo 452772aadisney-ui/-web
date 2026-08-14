@@ -27,6 +27,7 @@ export interface CoachingBooking {
   coach_id: string
   student_note: string
   status: CoachingBookingStatus
+  google_calendar_event_id: string | null
   booked_at: string
   created_at: string
   updated_at: string

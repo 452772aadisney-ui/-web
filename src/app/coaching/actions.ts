@@ -1,8 +1,11 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { notifyCoachingBookingCreated } from '@/lib/discord/notifications'
-import { createCoachingBookingCalendarEvent } from '@/lib/google-calendar/events'
+import { notifyCoachingBookingCreated, notifyCoachingBookingCancelled } from '@/lib/discord/notifications'
+import {
+  createCoachingBookingCalendarEvent,
+  deleteCoachingBookingCalendarEvent,
+} from '@/lib/google-calendar/events'
 import { createClient } from '@/lib/supabase/server'
 import {
   fetchCoachingBookingBySlotId,
@@ -304,16 +307,20 @@ export async function bookCoachingSlot(
   const existing = await fetchCoachingBookingBySlotId(slotId)
   if (existing) return { error: 'この予約枠は既に埋まっています' }
 
-  const { error } = await supabase.from('coaching_bookings').insert({
-    slot_id: slotId,
-    student_id: studentResult.userId,
-    coach_id: slot.coach_id,
-    student_note: studentNote,
-    status: 'scheduled',
-  })
+  const { data: created, error } = await supabase
+    .from('coaching_bookings')
+    .insert({
+      slot_id: slotId,
+      student_id: studentResult.userId,
+      coach_id: slot.coach_id,
+      student_note: studentNote,
+      status: 'scheduled',
+    })
+    .select('id')
+    .single<{ id: string }>()
 
-  if (error) {
-    if (error.code === '23505') return { error: 'この予約枠は既に埋まっています' }
+  if (error || !created) {
+    if (error?.code === '23505') return { error: 'この予約枠は既に埋まっています' }
     return { error: '予約に失敗しました' }
   }
 
@@ -325,13 +332,21 @@ export async function bookCoachingSlot(
       startsAt: slot.starts_at,
       studentNote,
     })
-    await createCoachingBookingCalendarEvent({
+
+    const calendarEventId = await createCoachingBookingCalendarEvent({
       studentId: studentResult.userId,
       slotId,
       coachId: slot.coach_id,
       startsAt: slot.starts_at,
       studentNote,
     })
+
+    if (calendarEventId) {
+      await supabase
+        .from('coaching_bookings')
+        .update({ google_calendar_event_id: calendarEventId })
+        .eq('id', created.id)
+    }
   } catch (notificationError) {
     console.error('[coaching] booking notification failed:', notificationError)
   }
@@ -364,12 +379,18 @@ async function cancelCoachingBookingAction(formData: FormData): Promise<Coaching
 
   const { data: booking, error: fetchError } = await supabase
     .from('coaching_bookings')
-    .select('id, student_id, status, coaching_slots(starts_at)')
+    .select(
+      'id, student_id, coach_id, slot_id, student_note, status, google_calendar_event_id, coaching_slots(starts_at)',
+    )
     .eq('id', bookingId)
     .maybeSingle<{
       id: string
       student_id: string
+      coach_id: string
+      slot_id: string
+      student_note: string
       status: string
+      google_calendar_event_id: string | null
       coaching_slots: { starts_at: string }
     }>()
 
@@ -391,6 +412,20 @@ async function cancelCoachingBookingAction(formData: FormData): Promise<Coaching
     .eq('id', bookingId)
 
   if (error) return { error: 'キャンセルに失敗しました' }
+
+  try {
+    await notifyCoachingBookingCancelled({
+      studentId: booking.student_id,
+      slotId: booking.slot_id,
+      coachId: booking.coach_id,
+      startsAt: booking.coaching_slots.starts_at,
+      studentNote: booking.student_note,
+      cancelledBy: isAdmin ? 'admin' : 'student',
+    })
+    await deleteCoachingBookingCalendarEvent(booking.google_calendar_event_id)
+  } catch (notificationError) {
+    console.error('[coaching] cancellation notification failed:', notificationError)
+  }
 
   revalidateCoachingPaths()
   return { success: true }
