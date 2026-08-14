@@ -18,7 +18,11 @@ export function StudyLogDayNav({ selectedDate, dayTotalMinutes }: StudyLogDayNav
 
   return (
     <div className="mb-4 flex items-center justify-between gap-3">
-      <Link href={`/dashboard/study?date=${prevDate}`} className={navButtonClass}>
+      <Link
+        href={`/dashboard/study?date=${prevDate}`}
+        scroll={false}
+        className={navButtonClass}
+      >
         ← 前日
       </Link>
 
@@ -28,7 +32,11 @@ export function StudyLogDayNav({ selectedDate, dayTotalMinutes }: StudyLogDayNav
       </div>
 
       {canGoNext ? (
-        <Link href={`/dashboard/study?date=${nextDate}`} className={navButtonClass}>
+        <Link
+          href={`/dashboard/study?date=${nextDate}`}
+          scroll={false}
+          className={navButtonClass}
+        >
           翌日 →
         </Link>
       ) : (
