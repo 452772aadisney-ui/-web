@@ -111,6 +111,7 @@ export async function fetchAdminBookshelfOverview(): Promise<AdminBookshelfOverv
   ])
 
   const usersByCatalogId = new Map<string, TextbookUser[]>()
+  const textbookIdsByCatalogId = new Map<string, Record<string, string>>()
   const studentOnlyGroups = new Map<string, AdminBookshelfStudentEntry>()
 
   for (const book of textbooks) {
@@ -123,6 +124,10 @@ export async function fetchAdminBookshelfOverview(): Promise<AdminBookshelfOverv
       const list = usersByCatalogId.get(book.catalog_id) ?? []
       list.push(user)
       usersByCatalogId.set(book.catalog_id, list)
+
+      const ids = textbookIdsByCatalogId.get(book.catalog_id) ?? {}
+      ids[book.student_id] = book.id
+      textbookIdsByCatalogId.set(book.catalog_id, ids)
       continue
     }
 
@@ -130,6 +135,7 @@ export async function fetchAdminBookshelfOverview(): Promise<AdminBookshelfOverv
     const existing = studentOnlyGroups.get(key)
     if (existing) {
       existing.users.push(user)
+      existing.textbookIdsByStudent[book.student_id] = book.id
       continue
     }
 
@@ -139,6 +145,7 @@ export async function fetchAdminBookshelfOverview(): Promise<AdminBookshelfOverv
       subjects: book.subjects ?? [],
       usage_tags: book.usage_tags ?? [],
       users: [user],
+      textbookIdsByStudent: { [book.student_id]: book.id },
     })
   }
 
@@ -147,6 +154,8 @@ export async function fetchAdminBookshelfOverview(): Promise<AdminBookshelfOverv
       const item = mapCatalog(row)
       return {
         ...item,
+        isManagedCatalog: true,
+        textbookIdsByStudent: textbookIdsByCatalogId.get(item.id) ?? {},
         users: dedupeUsers(usersByCatalogId.get(item.id) ?? []).sort((a, b) =>
           a.student_name.localeCompare(b.student_name, 'ja'),
         ),
@@ -171,6 +180,8 @@ export async function fetchAdminBookshelfOverview(): Promise<AdminBookshelfOverv
       created_by: null,
       created_at: '',
       updated_at: '',
+      isManagedCatalog: false,
+      textbookIdsByStudent: textbookIdsByCatalogId.get(catalogId) ?? {},
       users: dedupeUsers(users).sort((a, b) =>
         a.student_name.localeCompare(b.student_name, 'ja'),
       ),

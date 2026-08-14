@@ -24,6 +24,8 @@ export interface TextbookUser {
 
 export interface TextbookCatalogWithUsers extends TextbookCatalog {
   users: TextbookUser[]
+  textbookIdsByStudent: Record<string, string>
+  isManagedCatalog: boolean
 }
 
 export interface AdminBookshelfStudentEntry {
@@ -32,6 +34,7 @@ export interface AdminBookshelfStudentEntry {
   subjects: string[]
   usage_tags: string[]
   users: TextbookUser[]
+  textbookIdsByStudent: Record<string, string>
 }
 
 export interface AdminBookshelfOverview {
