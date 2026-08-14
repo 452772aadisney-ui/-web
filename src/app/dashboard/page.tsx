@@ -8,6 +8,7 @@ import { MyPageAlertBanner } from '@/components/student/MyPageAlertBanner'
 import { StudentQrCode } from '@/components/student/StudentQrCode'
 import { fetchUnreadAnnouncementCount } from '@/lib/announcements/queries'
 import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
+import { fetchUnreadStudyFeedbackCount } from '@/lib/study/feedback-queries'
 import { getCoachingAlertState, getNextCoachingBooking } from '@/lib/coaching/alert'
 import { fetchCoachingBookingsForStudent } from '@/lib/coaching/queries'
 
@@ -51,13 +52,14 @@ export default async function StudentDashboardPage() {
   const nextCoaching =
     profile.role === 'student' ? getNextCoachingBooking(coachingBookings) : null
 
-  const [unreadAnnouncementCount, unreadChatCount] =
+  const [unreadAnnouncementCount, unreadChatCount, unreadStudyFeedbackCount] =
     profile.role === 'student'
       ? await Promise.all([
           fetchUnreadAnnouncementCount(profile.id).catch(() => 0),
           fetchUnreadChatCount(profile.id).catch(() => 0),
+          fetchUnreadStudyFeedbackCount(profile.id).catch(() => 0),
         ])
-      : [0, 0]
+      : [0, 0, 0]
 
   return (
     <StudentPageShell title="マイページ">
@@ -77,6 +79,14 @@ export default async function StudentDashboardPage() {
             title="未読のメッセージがあります"
             href="/dashboard/chat"
             actionLabel="メッセージを見る"
+          />
+        )}
+
+        {unreadStudyFeedbackCount > 0 && (
+          <MyPageAlertBanner
+            title="学習記録にコメントが届いています"
+            href="/dashboard/study/history"
+            actionLabel="学習履歴を見る"
           />
         )}
 

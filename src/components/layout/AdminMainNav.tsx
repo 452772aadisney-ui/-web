@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
   { href: '/admin/students', label: '生徒一覧' },
+  { href: '/admin/study-daily', label: '日別学習管理' },
   { href: '/admin/schedule', label: 'スケジュール' },
   { href: '/admin/coaching', label: 'コーチング' },
   { href: '/admin/textbooks', label: '参考書登録' },
@@ -29,6 +30,8 @@ export function AdminMainNav({ unreadChatCount }: AdminMainNavProps) {
             pathname === item.href ||
             (item.href === '/admin/students' &&
               (pathname?.startsWith('/admin/students') ?? false)) ||
+            (item.href === '/admin/study-daily' &&
+              (pathname?.startsWith('/admin/study-daily') ?? false)) ||
             (item.href === '/admin/schedule' &&
               (pathname?.startsWith('/admin/schedule') ?? false)) ||
             (item.href === '/admin/coaching' &&

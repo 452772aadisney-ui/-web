@@ -1,6 +1,7 @@
 import { getPersonName } from '@/lib/auth/display-name'
 import { getAppBaseUrl } from '@/lib/email/config'
 import { sendEmailToMany } from '@/lib/email/send'
+import { getStudyFeedbackStamp } from '@/lib/study/feedback'
 import {
   buildProfileTagMap,
   resolveAnnouncementAudience,
@@ -164,5 +165,44 @@ export async function notifyChatMessageReceived(input: {
       '',
       `確認する: ${baseUrl}/admin/chat/${input.studentId}`,
     ].join('\n'),
+  })
+}
+
+export async function notifyStudyFeedbackReceived(input: {
+  studentId: string
+  studiedOn: string
+  stamp: string
+  comment: string
+}): Promise<void> {
+  const supabase = await createClient()
+  const { data: student } = await supabase
+    .from('profiles')
+    .select('email')
+    .eq('id', input.studentId)
+    .maybeSingle<{ email: string }>()
+
+  const email = student?.email?.trim()
+  if (!email) return
+
+  const stamp = getStudyFeedbackStamp(input.stamp)
+  const baseUrl = getAppBaseUrl()
+  const url = `${baseUrl}/dashboard/study/history?date=${input.studiedOn}`
+
+  const lines = [
+    '学習履歴に先生からフィードバックが届きました。',
+    '',
+    `対象日: ${input.studiedOn}`,
+    `スタンプ: ${stamp?.emoji ?? ''} ${stamp?.label ?? ''}`,
+  ]
+
+  if (input.comment.trim()) {
+    lines.push('', input.comment.trim())
+  }
+
+  lines.push('', `確認する: ${url}`)
+
+  await sendEmailToMany([email], {
+    subject: '【受験生web】学習記録にコメントが届きました',
+    text: lines.join('\n'),
   })
 }

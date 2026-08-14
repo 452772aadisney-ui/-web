@@ -96,7 +96,9 @@ export async function createStudyLog(
   }
 
   revalidatePath('/dashboard/study')
+  revalidatePath('/dashboard/study/history')
   revalidatePath('/admin/students')
+  revalidatePath('/admin/study-daily')
 
   return { success: true }
 }
@@ -136,7 +138,9 @@ export async function updateStudyLog(
   }
 
   revalidatePath('/dashboard/study')
+  revalidatePath('/dashboard/study/history')
   revalidatePath('/admin/students')
+  revalidatePath('/admin/study-daily')
 
   return { success: true }
 }
@@ -156,4 +160,6 @@ export async function deleteStudyLog(formData: FormData): Promise<void> {
   await supabase.from('study_logs').delete().eq('id', logId).eq('student_id', user.id)
 
   revalidatePath('/dashboard/study')
+  revalidatePath('/dashboard/study/history')
+  revalidatePath('/admin/study-daily')
 }

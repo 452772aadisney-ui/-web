@@ -1,18 +1,11 @@
 import Link from 'next/link'
-import { formatDuration } from '@/lib/study/chart-data'
 import { formatStudyDateLabel, getJstDateKey, shiftDateKey } from '@/lib/study/dates'
 
-interface StudyLogDayNavProps {
+interface AdminStudyDailyDateNavProps {
   selectedDate: string
-  dayTotalMinutes: number
-  basePath?: string
 }
 
-export function StudyLogDayNav({
-  selectedDate,
-  dayTotalMinutes,
-  basePath = '/dashboard/study/history',
-}: StudyLogDayNavProps) {
+export function AdminStudyDailyDateNav({ selectedDate }: AdminStudyDailyDateNavProps) {
   const todayKey = getJstDateKey()
   const prevDate = shiftDateKey(selectedDate, -1)
   const nextDate = shiftDateKey(selectedDate, 1)
@@ -22,9 +15,9 @@ export function StudyLogDayNav({
     'inline-flex min-h-11 min-w-[4.5rem] items-center justify-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-card'
 
   return (
-    <div className="mb-4 flex items-center justify-between gap-3">
+    <div className="mb-6 flex items-center justify-between gap-3">
       <Link
-        href={`${basePath}?date=${prevDate}`}
+        href={`/admin/study-daily?date=${prevDate}`}
         scroll={false}
         className={navButtonClass}
       >
@@ -33,12 +26,12 @@ export function StudyLogDayNav({
 
       <div className="min-w-0 flex-1 text-center">
         <p className="text-base font-bold">{formatStudyDateLabel(selectedDate, todayKey)}</p>
-        <p className="mt-1 text-sm text-muted">合計 {formatDuration(dayTotalMinutes)}</p>
+        <p className="mt-1 text-sm text-muted">{selectedDate}</p>
       </div>
 
       {canGoNext ? (
         <Link
-          href={`${basePath}?date=${nextDate}`}
+          href={`/admin/study-daily?date=${nextDate}`}
           scroll={false}
           className={navButtonClass}
         >

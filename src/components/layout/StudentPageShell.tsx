@@ -4,6 +4,7 @@ import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { getPersonName } from '@/lib/auth/display-name'
 import { fetchUnreadAnnouncementCount } from '@/lib/announcements/queries'
 import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
+import { fetchUnreadStudyFeedbackCount } from '@/lib/study/feedback-queries'
 import { HamburgerMenu } from '@/components/layout/HamburgerMenu'
 import {
   STUDENT_HAMBURGER_ITEMS,
@@ -21,12 +22,16 @@ function getHamburgerBadgeCount(
   href: string,
   unreadAnnouncementCount: number,
   unreadChatCount: number,
+  unreadStudyFeedbackCount: number,
 ): number | undefined {
   if (href === '/dashboard/announcements' && unreadAnnouncementCount > 0) {
     return unreadAnnouncementCount
   }
   if (href === '/dashboard/chat' && unreadChatCount > 0) {
     return unreadChatCount
+  }
+  if (href === '/dashboard/study/history' && unreadStudyFeedbackCount > 0) {
+    return unreadStudyFeedbackCount
   }
   return undefined
 }
@@ -38,16 +43,22 @@ export async function StudentPageShell({
   children,
 }: StudentPageShellProps) {
   const profile = await getCurrentProfile()
-  const [unreadAnnouncementCount, unreadChatCount] = profile
+  const [unreadAnnouncementCount, unreadChatCount, unreadStudyFeedbackCount] = profile
     ? await Promise.all([
         fetchUnreadAnnouncementCount(profile.id).catch(() => 0),
         fetchUnreadChatCount(profile.id).catch(() => 0),
+        fetchUnreadStudyFeedbackCount(profile.id).catch(() => 0),
       ])
-    : [0, 0]
+    : [0, 0, 0]
 
   const menuItems: HamburgerMenuItem[] = STUDENT_HAMBURGER_ITEMS.map((item) => ({
     ...item,
-    badgeCount: getHamburgerBadgeCount(item.href, unreadAnnouncementCount, unreadChatCount),
+    badgeCount: getHamburgerBadgeCount(
+      item.href,
+      unreadAnnouncementCount,
+      unreadChatCount,
+      unreadStudyFeedbackCount,
+    ),
   }))
 
   const welcomeName = profile ? getPersonName(profile) : null

@@ -3,6 +3,7 @@ import { formatCoachingBookingDateTime } from '@/lib/coaching/format'
 import type { CoachingBookingWithDetails } from '@/types/coaching'
 
 const secondaryActions = [
+  { href: '/dashboard/study/history', label: '学習履歴を見る' },
   { href: '/dashboard/bookshelf', label: '本棚を見る' },
   { href: '/dashboard/calendar', label: 'カレンダーを確認する' },
   { href: '/dashboard/todo', label: 'ToDoリストを確認する' },
