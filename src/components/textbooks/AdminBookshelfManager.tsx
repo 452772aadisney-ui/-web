@@ -114,9 +114,7 @@ function CatalogCreateForm() {
   const [state, formAction, pending] = useActionState(createTextbookCatalogEntry, initialState)
 
   return (
-    <form action={formAction} className="space-y-4 rounded-lg border border-border bg-background p-4">
-      <h3 className="font-medium">参考書を本棚に追加</h3>
-
+    <form action={formAction} className="space-y-4">
       <label className="block">
         <span className="mb-1.5 block text-sm font-medium">
           参考書名 <span className="text-error">*</span>
@@ -526,14 +524,15 @@ export function AdminBookshelfManager({
       </div>
 
       {activeTab === 'register' ? (
-        <div className="space-y-8">
-          <section className="space-y-4">
-            <h3 className="text-sm font-bold">本棚に追加</h3>
+        <div className="space-y-6">
+          <section className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <h3 className="text-lg font-bold">本棚に追加</h3>
+            <p className="text-sm text-muted">本棚マスタに参考書を登録します。公開設定もここで行います。</p>
             <CatalogCreateForm />
           </section>
 
-          <section className="space-y-4">
-            <h3 className="text-sm font-bold">生徒に登録</h3>
+          <section className="space-y-4 rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <h3 className="text-lg font-bold">生徒に登録</h3>
             <p className="text-sm text-muted">
               本棚の参考書から選ぶか新規入力して、複数の生徒に直接登録できます。
             </p>
@@ -544,17 +543,17 @@ export function AdminBookshelfManager({
         <div className="space-y-6">
           <section className="space-y-3">
             <h3 className="text-sm font-bold">科目を選択</h3>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
               {TEXTBOOK_SUBJECT_CATEGORIES.map((category) => (
                 <button
                   key={category.label}
                   type="button"
                   onClick={() => switchSubject(category.label)}
                   className={cn(
-                    'rounded-lg px-3 py-2 text-sm transition',
+                    'flex h-14 w-full items-center justify-center rounded-lg px-2 text-center text-xs leading-tight sm:text-sm',
                     selectedSubject === category.label
                       ? 'bg-primary text-white'
-                      : 'border border-border hover:bg-background',
+                      : 'border border-border bg-background hover:bg-card',
                   )}
                 >
                   {category.label}
