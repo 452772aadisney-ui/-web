@@ -8,7 +8,6 @@ import {
 } from '@/lib/google-calendar/events'
 import { createClient } from '@/lib/supabase/server'
 import {
-  fetchCoachingBookingBySlotId,
   fetchCoachingGridForWeek,
   fetchAvailableCoachingSlots,
   slotEndsAtIso,
@@ -304,24 +303,57 @@ export async function bookCoachingSlot(
     return { error: 'この予約枠は既に過ぎています' }
   }
 
-  const existing = await fetchCoachingBookingBySlotId(slotId)
-  if (existing) return { error: 'この予約枠は既に埋まっています' }
-
-  const { data: created, error } = await supabase
+  const { data: slotBooking } = await supabase
     .from('coaching_bookings')
-    .insert({
-      slot_id: slotId,
-      student_id: studentResult.userId,
-      coach_id: slot.coach_id,
-      student_note: studentNote,
-      status: 'scheduled',
-    })
-    .select('id')
-    .single<{ id: string }>()
+    .select('id, status')
+    .eq('slot_id', slotId)
+    .maybeSingle<{ id: string; status: string }>()
 
-  if (error || !created) {
-    if (error?.code === '23505') return { error: 'この予約枠は既に埋まっています' }
-    return { error: '予約に失敗しました' }
+  if (slotBooking?.status === 'scheduled') {
+    return { error: 'この予約枠は既に埋まっています' }
+  }
+
+  let bookingId: string
+
+  if (slotBooking?.status === 'cancelled') {
+    const { data: updated, error: updateError } = await supabase
+      .from('coaching_bookings')
+      .update({
+        student_id: studentResult.userId,
+        coach_id: slot.coach_id,
+        student_note: studentNote,
+        status: 'scheduled',
+        google_calendar_event_id: null,
+        booked_at: new Date().toISOString(),
+      })
+      .eq('id', slotBooking.id)
+      .select('id')
+      .single<{ id: string }>()
+
+    if (updateError || !updated) {
+      return { error: '予約に失敗しました' }
+    }
+
+    bookingId = updated.id
+  } else {
+    const { data: created, error } = await supabase
+      .from('coaching_bookings')
+      .insert({
+        slot_id: slotId,
+        student_id: studentResult.userId,
+        coach_id: slot.coach_id,
+        student_note: studentNote,
+        status: 'scheduled',
+      })
+      .select('id')
+      .single<{ id: string }>()
+
+    if (error || !created) {
+      if (error?.code === '23505') return { error: 'この予約枠は既に埋まっています' }
+      return { error: '予約に失敗しました' }
+    }
+
+    bookingId = created.id
   }
 
   try {
@@ -345,7 +377,7 @@ export async function bookCoachingSlot(
       await supabase
         .from('coaching_bookings')
         .update({ google_calendar_event_id: calendarEventId })
-        .eq('id', created.id)
+        .eq('id', bookingId)
     }
   } catch (notificationError) {
     console.error('[coaching] booking notification failed:', notificationError)

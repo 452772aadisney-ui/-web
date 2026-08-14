@@ -60,7 +60,6 @@ export default async function StudentDashboardPage() {
         {unreadAnnouncementCount > 0 && (
           <MyPageAlertBanner
             title="未読のお知らせがあります"
-            message={`未読のお知らせが${unreadAnnouncementCount}件あります。内容を確認してください。`}
             href="/dashboard/announcements"
             actionLabel="お知らせを見る"
           />
@@ -69,7 +68,6 @@ export default async function StudentDashboardPage() {
         {unreadChatCount > 0 && (
           <MyPageAlertBanner
             title="未読のメッセージがあります"
-            message={`未読のメッセージが${unreadChatCount}件あります。返信を確認してください。`}
             href="/dashboard/chat"
             actionLabel="メッセージを見る"
           />

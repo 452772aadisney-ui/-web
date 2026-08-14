@@ -26,6 +26,22 @@ interface StudentCoachingBookingProps {
   bookings: CoachingBookingWithDetails[]
 }
 
+function formatBookingConfirmLabel(slot: {
+  coach: { name: string }
+  slot_date: string | null | undefined
+  start_time: string | null | undefined
+  starts_at: string
+  ends_at: string
+}): string {
+  const datetime = formatCoachingBookingDateTime(
+    slot.slot_date,
+    slot.start_time,
+    slot.starts_at,
+    slot.ends_at,
+  )
+  return `${datetime} 担当：${slot.coach.name}`
+}
+
 function BookingForm({
   slot,
   onCancel,
@@ -34,9 +50,20 @@ function BookingForm({
   onCancel: () => void
 }) {
   const [state, formAction, pending] = useActionState(bookCoachingSlot, initialState)
+  const confirmLabel = formatBookingConfirmLabel(slot)
 
   return (
-    <form action={formAction} className="mt-4 space-y-3 rounded-lg border border-primary/30 bg-blue-50/40 p-4">
+    <form
+      action={formAction}
+      onSubmit={(event) => {
+        if (
+          !window.confirm(`${confirmLabel} で予約をします。よろしいですか？`)
+        ) {
+          event.preventDefault()
+        }
+      }}
+      className="mt-4 space-y-3 rounded-lg border border-primary/30 bg-blue-50/40 p-4"
+    >
       <input type="hidden" name="slotId" value={slot.id} />
       <p className="text-sm font-medium">
         {slot.coach.name} / {formatCoachingBookingDateTime(
@@ -170,7 +197,24 @@ export function StudentCoachingBooking({
                 {booking.student_note && (
                   <p className="mt-2 text-sm">伝言: {booking.student_note}</p>
                 )}
-                <form action={cancelCoachingBooking} className="mt-3">
+                <form
+                  action={cancelCoachingBooking}
+                  className="mt-3"
+                  onSubmit={(event) => {
+                    const confirmLabel = formatBookingConfirmLabel({
+                      coach: booking.coach,
+                      slot_date: booking.slot.slot_date ?? booking.slot.starts_at.slice(0, 10),
+                      start_time: booking.slot.start_time,
+                      starts_at: booking.slot.starts_at,
+                      ends_at: booking.slot.ends_at,
+                    })
+                    if (
+                      !window.confirm(`${confirmLabel} の予約をキャンセルします。よろしいですか？`)
+                    ) {
+                      event.preventDefault()
+                    }
+                  }}
+                >
                   <input type="hidden" name="bookingId" value={booking.id} />
                   <button type="submit" className="text-xs text-error hover:underline">
                     キャンセル
