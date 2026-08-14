@@ -3,8 +3,6 @@ import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { getDashboardPathForRole } from '@/lib/auth/routes'
 import { getPersonName } from '@/lib/auth/display-name'
 import { AdminPageShell } from '@/components/layout/AdminPageShell'
-import { EmailTestPanel } from '@/components/admin/EmailTestPanel'
-import { getEmailFrom, isEmailConfigured } from '@/lib/email/config'
 
 export default async function AdminDashboardPage() {
   const profile = await getCurrentProfile()
@@ -33,12 +31,6 @@ export default async function AdminDashboardPage() {
       <p className="mt-6 text-sm text-muted">
         上部メニューから各機能にアクセスできます。右上のメニューからプロフィール編集やログアウトができます。
       </p>
-
-      <EmailTestPanel
-        configured={isEmailConfigured()}
-        fromAddress={getEmailFrom()}
-        adminEmail={profile.email}
-      />
     </AdminPageShell>
   )
 }

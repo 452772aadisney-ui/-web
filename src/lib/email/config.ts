@@ -12,7 +12,3 @@ export function getEmailFrom(): string | null {
   const from = process.env.EMAIL_FROM?.trim()
   return from || null
 }
-
-export function isEmailConfigured(): boolean {
-  return Boolean(process.env.RESEND_API_KEY?.trim() && getEmailFrom())
-}
