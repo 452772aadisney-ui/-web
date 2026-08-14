@@ -3,6 +3,7 @@
 import { getPersonName } from '@/lib/auth/display-name'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { sendChatMessage } from '@/app/chat/actions'
 import { markChatAsRead } from '@/lib/chat/unread'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
@@ -96,27 +97,19 @@ export function ChatRoom({
     setSending(true)
     setError(null)
 
-    const { data, error: insertError } = await supabase
-      .from('chat_messages')
-      .insert({
-        student_id: studentId,
-        sender_id: currentUserId,
-        body: trimmed,
-      })
-      .select('*')
-      .single<ChatMessage>()
+    const result = await sendChatMessage(studentId, trimmed)
 
     setSending(false)
 
-    if (insertError || !data) {
-      setError('送信に失敗しました')
+    if (result.error || !result.message) {
+      setError(result.error ?? '送信に失敗しました')
       return
     }
 
     setBody('')
     setMessages((prev) => {
-      if (prev.some((m) => m.id === data.id)) return prev
-      return [...prev, data]
+      if (prev.some((m) => m.id === result.message!.id)) return prev
+      return [...prev, result.message!]
     })
   }
 

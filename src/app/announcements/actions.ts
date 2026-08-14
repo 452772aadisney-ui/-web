@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { notifyStudentsOfNewAnnouncement } from '@/lib/email/notifications'
 import { createClient } from '@/lib/supabase/server'
 
 export type AnnouncementActionState = {
@@ -115,6 +116,18 @@ export async function createAnnouncement(
   if (error || !created) return { error: '投稿に失敗しました' }
 
   await saveAnnouncementTargets(supabase, created.id, targetAll, tagIds, studentIds)
+
+  try {
+    await notifyStudentsOfNewAnnouncement({
+      announcementId: created.id,
+      title,
+      targetAll,
+      tagIds,
+      studentIds,
+    })
+  } catch (error) {
+    console.error('[announcements] email notification failed:', error)
+  }
 
   revalidateAnnouncementPaths()
   return { success: true }
