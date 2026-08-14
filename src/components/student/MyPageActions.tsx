@@ -82,35 +82,33 @@ export function MyPageActions({
         iconSrc={MYPAGE_MENU_ICONS.recordStudy}
       />
 
-      <div className="space-y-3">
-        <div className="grid grid-cols-3 gap-3">
-          {iconMenuActions.slice(0, 3).map((action) => (
-            <MyPageIconMenuButton
-              key={action.href}
-              href={action.href}
-              label={action.label}
-              iconSrc={action.iconSrc}
-              badgeCount={
-                'badgeKey' in action && action.badgeKey === 'studyHistory'
-                  ? badgeCounts.studyHistory
-                  : undefined
-              }
-            />
-          ))}
-        </div>
-        <div className="grid grid-cols-2 gap-3 px-[8%]">
-          {iconMenuActions.slice(3).map((action) => (
-            <MyPageIconMenuButton
-              key={action.href}
-              href={action.href}
-              label={action.label}
-              iconSrc={action.iconSrc}
-              badgeCount={
-                'badgeKey' in action && action.badgeKey === 'chat' ? badgeCounts.chat : undefined
-              }
-            />
-          ))}
-        </div>
+      <div className="grid grid-cols-6 gap-3">
+        {iconMenuActions.slice(0, 3).map((action) => (
+          <MyPageIconMenuButton
+            key={action.href}
+            href={action.href}
+            label={action.label}
+            iconSrc={action.iconSrc}
+            badgeCount={
+              'badgeKey' in action && action.badgeKey === 'studyHistory'
+                ? badgeCounts.studyHistory
+                : undefined
+            }
+            className="col-span-2"
+          />
+        ))}
+        {iconMenuActions.slice(3).map((action, index) => (
+          <MyPageIconMenuButton
+            key={action.href}
+            href={action.href}
+            label={action.label}
+            iconSrc={action.iconSrc}
+            badgeCount={
+              'badgeKey' in action && action.badgeKey === 'chat' ? badgeCounts.chat : undefined
+            }
+            className={index === 0 ? 'col-span-2 col-start-2' : 'col-span-2'}
+          />
+        ))}
       </div>
     </div>
   )
