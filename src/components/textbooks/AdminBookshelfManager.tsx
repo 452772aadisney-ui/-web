@@ -1,6 +1,7 @@
 'use client'
 
-import { useActionState, useEffect, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { useActionState, useEffect, useMemo, useState, useTransition } from 'react'
 import {
   createTextbookCatalogEntry,
   deleteAdminBookshelfStudentEntry,
@@ -9,18 +10,28 @@ import {
   updateAdminBookshelfStudentEntry,
   type CatalogActionState,
 } from '@/app/admin/bookshelf/actions'
+import { AdminBulkTextbookRegister } from '@/components/textbooks/AdminBulkTextbookRegister'
 import { AdminStudentCheckboxGroups } from '@/components/textbooks/AdminStudentCheckboxGroups'
 import { UsageTagFields, inputClass } from '@/components/textbooks/TextbookFormFields'
+import {
+  TEXTBOOK_SUBJECT_CATEGORIES,
+  catalogMatchesCategory,
+  type TextbookSubjectCategoryLabel,
+} from '@/lib/constants/textbook-subject-categories'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
+import { cn } from '@/lib/utils'
 import type { StudentListGroup } from '@/lib/tags/grade-order'
 import type {
   AdminBookshelfOverview,
   AdminBookshelfStudentEntry,
+  TextbookCatalog,
   TextbookCatalogWithUsers,
   TextbookUser,
 } from '@/types/textbook'
 
 const initialState: CatalogActionState = {}
+
+type BookshelfTab = 'register' | 'browse'
 
 type EditingCatalog = TextbookCatalogWithUsers & { kind: 'catalog' }
 type EditingStudent = AdminBookshelfStudentEntry & { kind: 'student' }
@@ -29,6 +40,9 @@ type EditingItem = EditingCatalog | EditingStudent
 interface AdminBookshelfManagerProps {
   overview: AdminBookshelfOverview
   studentGroups: StudentListGroup[]
+  catalog: TextbookCatalog[]
+  initialTab: BookshelfTab
+  initialSubject: TextbookSubjectCategoryLabel
 }
 
 function PencilIcon() {
@@ -426,50 +440,157 @@ function BookshelfGrid({
   )
 }
 
-export function AdminBookshelfManager({ overview, studentGroups }: AdminBookshelfManagerProps) {
+export function AdminBookshelfManager({
+  overview,
+  studentGroups,
+  catalog,
+  initialTab,
+  initialSubject,
+}: AdminBookshelfManagerProps) {
+  const router = useRouter()
+  const [activeTab, setActiveTab] = useState<BookshelfTab>(initialTab)
+  const [selectedSubject, setSelectedSubject] = useState<TextbookSubjectCategoryLabel>(initialSubject)
   const [editingItem, setEditingItem] = useState<EditingItem | null>(null)
 
-  const publicCatalog = overview.catalog.filter((item) => item.visibility === 'public')
-  const privateCatalog = overview.catalog.filter((item) => item.visibility === 'private')
-  const catalogWithUsers = overview.catalog.filter((item) => item.users.length > 0)
-  const totalRegistrations =
-    overview.studentEntries.reduce((sum, entry) => sum + entry.users.length, 0) +
-    catalogWithUsers.reduce((sum, item) => sum + item.users.length, 0)
+  function switchTab(tab: BookshelfTab) {
+    setActiveTab(tab)
+    const params = new URLSearchParams()
+    params.set('tab', tab)
+    if (tab === 'browse') {
+      params.set('subject', selectedSubject)
+    }
+    router.replace(`/admin/bookshelf?${params.toString()}`, { scroll: false })
+  }
+
+  function switchSubject(subject: TextbookSubjectCategoryLabel) {
+    setSelectedSubject(subject)
+    const params = new URLSearchParams()
+    params.set('tab', 'browse')
+    params.set('subject', subject)
+    router.replace(`/admin/bookshelf?${params.toString()}`, { scroll: false })
+  }
+
+  const filteredPublicCatalog = useMemo(
+    () =>
+      overview.catalog.filter(
+        (item) =>
+          item.visibility === 'public' && catalogMatchesCategory(item.subjects, selectedSubject),
+      ),
+    [overview.catalog, selectedSubject],
+  )
+
+  const filteredPrivateCatalog = useMemo(
+    () =>
+      overview.catalog.filter(
+        (item) =>
+          item.visibility === 'private' && catalogMatchesCategory(item.subjects, selectedSubject),
+      ),
+    [overview.catalog, selectedSubject],
+  )
+
+  const filteredStudentEntries = useMemo(
+    () =>
+      overview.studentEntries.filter((item) =>
+        catalogMatchesCategory(item.subjects, selectedSubject),
+      ),
+    [overview.studentEntries, selectedSubject],
+  )
 
   return (
-    <div className="space-y-8">
-      <CatalogCreateForm />
+    <div className="space-y-6">
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => switchTab('register')}
+          className={cn(
+            'rounded-lg px-4 py-2 text-sm font-medium transition',
+            activeTab === 'register'
+              ? 'bg-primary text-white'
+              : 'border border-border hover:bg-background',
+          )}
+        >
+          参考書を登録
+        </button>
+        <button
+          type="button"
+          onClick={() => switchTab('browse')}
+          className={cn(
+            'rounded-lg px-4 py-2 text-sm font-medium transition',
+            activeTab === 'browse'
+              ? 'bg-primary text-white'
+              : 'border border-border hover:bg-background',
+          )}
+        >
+          本棚を見る
+        </button>
+      </div>
 
-      <section className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted">
-        登録済み教材: {totalRegistrations}件（生徒の本棚に登録されている参考書を集計）
-      </section>
+      {activeTab === 'register' ? (
+        <div className="space-y-8">
+          <section className="space-y-4">
+            <h3 className="text-sm font-bold">本棚に追加</h3>
+            <CatalogCreateForm />
+          </section>
 
-      <section className="space-y-3">
-        <h3 className="text-sm font-bold text-muted">公開の参考書</h3>
-        <BookshelfGrid
-          items={publicCatalog.map((item) => ({ type: 'catalog' as const, item }))}
-          onEditCatalog={(item) => setEditingItem({ ...item, kind: 'catalog' })}
-          onEditStudent={() => undefined}
-        />
-      </section>
+          <section className="space-y-4">
+            <h3 className="text-sm font-bold">生徒に登録</h3>
+            <p className="text-sm text-muted">
+              本棚の参考書から選ぶか新規入力して、複数の生徒に直接登録できます。
+            </p>
+            <AdminBulkTextbookRegister studentGroups={studentGroups} catalog={catalog} />
+          </section>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <section className="space-y-3">
+            <h3 className="text-sm font-bold">科目を選択</h3>
+            <div className="flex flex-wrap gap-2">
+              {TEXTBOOK_SUBJECT_CATEGORIES.map((category) => (
+                <button
+                  key={category.label}
+                  type="button"
+                  onClick={() => switchSubject(category.label)}
+                  className={cn(
+                    'rounded-lg px-3 py-2 text-sm transition',
+                    selectedSubject === category.label
+                      ? 'bg-primary text-white'
+                      : 'border border-border hover:bg-background',
+                  )}
+                >
+                  {category.label}
+                </button>
+              ))}
+            </div>
+          </section>
 
-      <section className="space-y-3">
-        <h3 className="text-sm font-bold text-muted">非公開の参考書</h3>
-        <BookshelfGrid
-          items={privateCatalog.map((item) => ({ type: 'catalog' as const, item }))}
-          onEditCatalog={(item) => setEditingItem({ ...item, kind: 'catalog' })}
-          onEditStudent={() => undefined}
-        />
-      </section>
+          <section className="space-y-3">
+            <h3 className="text-sm font-bold">公開の参考書</h3>
+            <BookshelfGrid
+              items={filteredPublicCatalog.map((item) => ({ type: 'catalog' as const, item }))}
+              onEditCatalog={(item) => setEditingItem({ ...item, kind: 'catalog' })}
+              onEditStudent={() => undefined}
+            />
+          </section>
 
-      <section className="space-y-3">
-        <h3 className="text-sm font-bold text-muted">生徒が登録した参考書</h3>
-        <BookshelfGrid
-          items={overview.studentEntries.map((item) => ({ type: 'student' as const, item }))}
-          onEditCatalog={() => undefined}
-          onEditStudent={(item) => setEditingItem({ ...item, kind: 'student' })}
-        />
-      </section>
+          <section className="space-y-3">
+            <h3 className="text-sm font-bold">非公開の参考書</h3>
+            <BookshelfGrid
+              items={filteredPrivateCatalog.map((item) => ({ type: 'catalog' as const, item }))}
+              onEditCatalog={(item) => setEditingItem({ ...item, kind: 'catalog' })}
+              onEditStudent={() => undefined}
+            />
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="text-sm font-bold">生徒が登録した参考書</h3>
+            <BookshelfGrid
+              items={filteredStudentEntries.map((item) => ({ type: 'student' as const, item }))}
+              onEditCatalog={() => undefined}
+              onEditStudent={(item) => setEditingItem({ ...item, kind: 'student' })}
+            />
+          </section>
+        </div>
+      )}
 
       {editingItem && (
         <EditBookshelfModal

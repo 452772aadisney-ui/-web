@@ -14,7 +14,6 @@ const NAV_ITEMS = [
   { href: '/admin/schedule', label: 'スケジュール' },
   { href: '/admin/coaching', label: 'コーチング' },
   { href: '/admin/bookshelf', label: '本棚' },
-  { href: '/admin/textbooks', label: '参考書登録' },
   { href: '/admin/chat', label: 'メッセージ', badgeKey: 'chat' as const },
   { href: '/admin/announcements', label: 'お知らせ' },
 ] as const
@@ -51,8 +50,6 @@ export function AdminMainNav({
               (pathname?.startsWith('/admin/coaching') ?? false)) ||
             (item.href === '/admin/bookshelf' &&
               (pathname?.startsWith('/admin/bookshelf') ?? false)) ||
-            (item.href === '/admin/textbooks' &&
-              (pathname?.startsWith('/admin/textbooks') ?? false)) ||
             (item.href === '/admin/chat' && (pathname?.startsWith('/admin/chat') ?? false))
 
           const badgeCount = 'badgeKey' in item ? getBadgeCount(item.badgeKey) : 0

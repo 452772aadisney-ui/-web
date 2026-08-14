@@ -5,13 +5,13 @@ import {
   createTextbooksForStudents,
   type TextbookActionState,
 } from '@/app/textbooks/actions'
+import { AdminStudentCheckboxGroups } from '@/components/textbooks/AdminStudentCheckboxGroups'
 import {
   TextbookDateFields,
   UsageTagFields,
   inputClass,
 } from '@/components/textbooks/TextbookFormFields'
-import { getPersonName } from '@/lib/auth/display-name'
-import { groupStudentsByGrade, type StudentListGroup } from '@/lib/tags/grade-order'
+import type { StudentListGroup } from '@/lib/tags/grade-order'
 import type { TextbookCatalog } from '@/types/textbook'
 
 const initialState: TextbookActionState = {}
@@ -62,45 +62,6 @@ export function AdminBulkTextbookRegister({
 
   return (
     <form action={formAction} className="space-y-6">
-      <section className="space-y-4">
-        <h3 className="text-sm font-bold">生徒を選択</h3>
-        <p className="text-xs text-muted">学年ごとに表示しています。複数人を同時に選択できます。</p>
-
-        {studentGroups.map((group) => {
-          const allSelected = group.students.every((student) => selectedIds.has(student.id))
-          return (
-            <div key={group.gradeLabel} className="rounded-lg border border-border p-4">
-              <label className="mb-3 flex items-center gap-2 text-sm font-medium">
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  onChange={() => toggleGroup(group)}
-                  className="accent-primary"
-                />
-                {group.gradeLabel}（全員選択）
-              </label>
-              <ul className="space-y-2">
-                {group.students.map((student) => (
-                  <li key={student.id}>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        name="studentIds"
-                        value={student.id}
-                        checked={selectedIds.has(student.id)}
-                        onChange={() => toggleStudent(student.id)}
-                        className="accent-primary"
-                      />
-                      {getPersonName(student)}
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )
-        })}
-      </section>
-
       <section className="space-y-4 rounded-lg border border-border bg-background p-4">
         <h3 className="font-medium">参考書の内容</h3>
 
@@ -162,6 +123,17 @@ export function AdminBulkTextbookRegister({
 
         <UsageTagFields selectedUsageTags={selectedCatalog?.usage_tags} />
         <TextbookDateFields />
+      </section>
+
+      <section className="space-y-3">
+        <h3 className="text-sm font-bold">生徒を選択</h3>
+        <p className="text-xs text-muted">学年ごとに表示しています。複数人を同時に選択できます。</p>
+        <AdminStudentCheckboxGroups
+          studentGroups={studentGroups}
+          selectedIds={selectedIds}
+          onToggleStudent={toggleStudent}
+          onToggleGroup={toggleGroup}
+        />
       </section>
 
       {state.error && <p className="text-sm text-error">{state.error}</p>}
