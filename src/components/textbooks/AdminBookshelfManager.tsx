@@ -9,13 +9,29 @@ import {
 } from '@/app/admin/bookshelf/actions'
 import { UsageTagFields, inputClass } from '@/components/textbooks/TextbookFormFields'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
-import type { TextbookCatalog, TextbookCatalogUsage } from '@/types/textbook'
+import type {
+  AdminBookshelfOverview,
+  AdminBookshelfStudentEntry,
+  TextbookCatalogWithUsers,
+  TextbookUser,
+} from '@/types/textbook'
 
 const initialState: CatalogActionState = {}
 
 interface AdminBookshelfManagerProps {
-  catalog: TextbookCatalog[]
-  usage: TextbookCatalogUsage[]
+  overview: AdminBookshelfOverview
+}
+
+function UsersList({ users }: { users: TextbookUser[] }) {
+  if (users.length === 0) {
+    return <p className="mt-2 text-xs text-muted">利用中の生徒はいません</p>
+  }
+
+  return (
+    <p className="mt-2 text-xs text-muted">
+      利用中（{users.length}人）: {users.map((user) => user.student_name).join('、')}
+    </p>
+  )
 }
 
 function CatalogCreateForm() {
@@ -101,7 +117,7 @@ function VisibilityToggle({
   visibility,
 }: {
   catalogId: string
-  visibility: TextbookCatalog['visibility']
+  visibility: TextbookCatalogWithUsers['visibility']
 }) {
   const [pending, startTransition] = useTransition()
 
@@ -110,7 +126,7 @@ function VisibilityToggle({
       value={visibility}
       disabled={pending}
       onChange={(event) => {
-        const next = event.target.value as TextbookCatalog['visibility']
+        const next = event.target.value as TextbookCatalogWithUsers['visibility']
         startTransition(async () => {
           await updateTextbookCatalogVisibility(catalogId, next)
         })
@@ -123,68 +139,98 @@ function VisibilityToggle({
   )
 }
 
-export function AdminBookshelfManager({ catalog, usage }: AdminBookshelfManagerProps) {
-  const usageByCatalog = new Map<string, TextbookCatalogUsage[]>()
-  for (const row of usage) {
-    const list = usageByCatalog.get(row.catalog_id) ?? []
-    list.push(row)
-    usageByCatalog.set(row.catalog_id, list)
-  }
+function CatalogItem({ item }: { item: TextbookCatalogWithUsers }) {
+  return (
+    <li className="rounded-lg border border-border px-4 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-medium">{item.name}</p>
+            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+              管理者登録
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            {item.subjects.join('・')}
+            {item.usage_tags.length > 0 ? ` / ${item.usage_tags.join('・')}` : ''}
+          </p>
+          <UsersList users={item.users} />
+        </div>
+        <div className="flex items-center gap-2">
+          <VisibilityToggle catalogId={item.id} visibility={item.visibility} />
+          <DeleteCatalogButton catalogId={item.id} />
+        </div>
+      </div>
+    </li>
+  )
+}
 
-  const publicCatalog = catalog.filter((item) => item.visibility === 'public')
-  const privateCatalog = catalog.filter((item) => item.visibility === 'private')
+function StudentEntryItem({ item }: { item: AdminBookshelfStudentEntry }) {
+  return (
+    <li className="rounded-lg border border-border px-4 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-medium">{item.name}</p>
+            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+              生徒登録
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            {item.subjects.join('・')}
+            {item.usage_tags.length > 0 ? ` / ${item.usage_tags.join('・')}` : ''}
+          </p>
+          <UsersList users={item.users} />
+        </div>
+      </div>
+    </li>
+  )
+}
 
-  function renderCatalogList(items: TextbookCatalog[], title: string) {
-    if (items.length === 0) {
-      return (
-        <section className="space-y-3">
-          <h3 className="text-sm font-bold text-muted">{title}</h3>
-          <p className="text-sm text-muted">登録されている参考書はありません。</p>
-        </section>
-      )
-    }
-
+function renderCatalogSection(items: TextbookCatalogWithUsers[], title: string) {
+  if (items.length === 0) {
     return (
       <section className="space-y-3">
         <h3 className="text-sm font-bold text-muted">{title}</h3>
-        <ul className="space-y-3">
-          {items.map((item) => {
-            const users = usageByCatalog.get(item.id) ?? []
-            return (
-              <li key={item.id} className="rounded-lg border border-border px-4 py-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium">{item.name}</p>
-                    <p className="mt-1 text-xs text-muted">
-                      {item.subjects.join('・')}
-                      {item.usage_tags.length > 0 ? ` / ${item.usage_tags.join('・')}` : ''}
-                    </p>
-                    {users.length > 0 ? (
-                      <p className="mt-2 text-xs text-muted">
-                        利用中: {users.map((user) => user.student_name).join('、')}
-                      </p>
-                    ) : (
-                      <p className="mt-2 text-xs text-muted">利用中の生徒はいません</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <VisibilityToggle catalogId={item.id} visibility={item.visibility} />
-                    <DeleteCatalogButton catalogId={item.id} />
-                  </div>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+        <p className="text-sm text-muted">登録されている参考書はありません。</p>
       </section>
     )
   }
 
   return (
+    <section className="space-y-3">
+      <h3 className="text-sm font-bold text-muted">{title}</h3>
+      <ul className="space-y-3">
+        {items.map((item) => (
+          <CatalogItem key={item.id} item={item} />
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+export function AdminBookshelfManager({ overview }: AdminBookshelfManagerProps) {
+  const publicCatalog = overview.catalog.filter((item) => item.visibility === 'public')
+  const privateCatalog = overview.catalog.filter((item) => item.visibility === 'private')
+
+  return (
     <div className="space-y-8">
       <CatalogCreateForm />
-      {renderCatalogList(publicCatalog, '公開の参考書')}
-      {renderCatalogList(privateCatalog, '非公開の参考書')}
+      {renderCatalogSection(publicCatalog, '公開の参考書（管理者登録）')}
+      {renderCatalogSection(privateCatalog, '非公開の参考書（管理者登録）')}
+
+      <section className="space-y-3">
+        <h3 className="text-sm font-bold text-muted">生徒が登録した参考書</h3>
+        {overview.studentEntries.length === 0 ? (
+          <p className="text-sm text-muted">生徒が独自に登録した参考書はありません。</p>
+        ) : (
+          <ul className="space-y-3">
+            {overview.studentEntries.map((item) => (
+              <StudentEntryItem key={item.key} item={item} />
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   )
 }

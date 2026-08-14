@@ -17,6 +17,28 @@ export interface TextbookCatalogUsage {
   student_name: string
 }
 
+export interface TextbookUser {
+  student_id: string
+  student_name: string
+}
+
+export interface TextbookCatalogWithUsers extends TextbookCatalog {
+  users: TextbookUser[]
+}
+
+export interface AdminBookshelfStudentEntry {
+  key: string
+  name: string
+  subjects: string[]
+  usage_tags: string[]
+  users: TextbookUser[]
+}
+
+export interface AdminBookshelfOverview {
+  catalog: TextbookCatalogWithUsers[]
+  studentEntries: AdminBookshelfStudentEntry[]
+}
+
 export interface Textbook {
   id: string
   student_id: string
