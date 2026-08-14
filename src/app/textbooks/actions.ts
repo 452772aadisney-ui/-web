@@ -184,11 +184,10 @@ export async function createTextbooksForStudents(
       usageTags = catalog.usage_tags
     }
   } else {
-    const subjectValues = String(formData.get('subjects') ?? '')
-      .split(',')
-      .map((value) => value.trim())
+    subjects = formData
+      .getAll('subjects')
+      .map((value) => String(value).trim())
       .filter(Boolean)
-    subjects = subjectValues
   }
 
   if (!name) return { error: '教材名を入力してください' }

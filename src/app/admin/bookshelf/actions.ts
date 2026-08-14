@@ -30,6 +30,12 @@ async function assertAdmin(): Promise<{ userId: string } | { error: string }> {
 }
 
 function parseSubjects(formData: FormData): string[] {
+  const fromMulti = formData
+    .getAll('subjects')
+    .map((value) => String(value).trim())
+    .filter(Boolean)
+  if (fromMulti.length > 0) return fromMulti
+
   return String(formData.get('subjects') ?? '')
     .split(',')
     .map((value) => value.trim())

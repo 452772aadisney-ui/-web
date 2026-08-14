@@ -9,6 +9,7 @@ import { AdminStudentCheckboxGroups } from '@/components/textbooks/AdminStudentC
 import {
   TextbookDateFields,
   UsageTagFields,
+  ExamSubjectMultiSelect,
   inputClass,
 } from '@/components/textbooks/TextbookFormFields'
 import type { StudentListGroup } from '@/lib/tags/grade-order'
@@ -114,10 +115,7 @@ export function AdminBulkTextbookRegister({
               <span className="mb-1.5 block text-sm font-medium">教材名</span>
               <input type="text" name="name" required={mode === 'manual'} className={inputClass} />
             </label>
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium">科目タグ（カンマ区切り）</span>
-              <input type="text" name="subjects" required={mode === 'manual'} className={inputClass} />
-            </label>
+            <ExamSubjectMultiSelect />
           </>
         )}
 

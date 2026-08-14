@@ -12,13 +12,12 @@ import {
 } from '@/app/admin/bookshelf/actions'
 import { AdminBulkTextbookRegister } from '@/components/textbooks/AdminBulkTextbookRegister'
 import { AdminStudentCheckboxGroups } from '@/components/textbooks/AdminStudentCheckboxGroups'
-import { UsageTagFields, inputClass } from '@/components/textbooks/TextbookFormFields'
+import { UsageTagFields, ExamSubjectMultiSelect, inputClass } from '@/components/textbooks/TextbookFormFields'
 import {
   TEXTBOOK_SUBJECT_CATEGORIES,
   catalogMatchesCategory,
   type TextbookSubjectCategoryLabel,
 } from '@/lib/constants/textbook-subject-categories'
-import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
 import { cn } from '@/lib/utils'
 import type { StudentListGroup } from '@/lib/tags/grade-order'
 import type {
@@ -122,19 +121,7 @@ function CatalogCreateForm() {
         <input type="text" name="name" required placeholder="例: チャート式 数学IA" className={inputClass} />
       </label>
 
-      <label className="block">
-        <span className="mb-1.5 block text-sm font-medium">
-          科目タグ <span className="text-error">*</span>
-        </span>
-        <p className="mb-2 text-xs text-muted">カンマ区切りで入力（例: 数学IA, 数学IIBC）</p>
-        <input
-          type="text"
-          name="subjects"
-          required
-          placeholder={EXAM_SUBJECTS.slice(0, 4).join(', ')}
-          className={inputClass}
-        />
-      </label>
+      <ExamSubjectMultiSelect />
 
       <UsageTagFields />
 
