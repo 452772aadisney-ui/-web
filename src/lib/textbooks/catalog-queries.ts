@@ -22,16 +22,6 @@ function mapCatalog(row: Record<string, unknown>): TextbookCatalog {
   }
 }
 
-function mapProfileName(
-  profile:
-    | { full_name: string; display_name: string }
-    | { full_name: string; display_name: string }[]
-    | null,
-): string {
-  const profileRow = Array.isArray(profile) ? profile[0] : profile
-  return profileRow ? getPersonName(profileRow) : '不明'
-}
-
 function dedupeUsers(users: TextbookUser[]): TextbookUser[] {
   const seen = new Set<string>()
   return users.filter((user) => {
@@ -52,39 +42,73 @@ type TextbookRow = {
   usage_tags: string[]
   catalog_id: string | null
   student_id: string
-  profiles:
-    | { full_name: string; display_name: string }
-    | { full_name: string; display_name: string }[]
-    | null
 }
 
-async function fetchAllTextbooksWithProfiles(): Promise<TextbookRow[]> {
+async function fetchAllTextbooksForAdmin(): Promise<TextbookRow[]> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('textbooks')
-    .select(
-      'id, name, subjects, usage_tags, catalog_id, student_id, profiles(full_name, display_name)',
-    )
+    .select('id, name, subjects, usage_tags, catalog_id, student_id')
     .order('name')
 
   if (error) {
     console.error('[textbooks] admin overview fetch failed:', error.message)
-    return []
+
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from('textbooks')
+      .select('id, name, subjects, usage_tags, student_id')
+      .order('name')
+
+    if (fallbackError) {
+      console.error('[textbooks] admin overview fallback failed:', fallbackError.message)
+      return []
+    }
+
+    return ((fallbackData ?? []) as Omit<TextbookRow, 'catalog_id'>[]).map((book) => ({
+      ...book,
+      catalog_id: null,
+    }))
   }
 
   return (data ?? []) as TextbookRow[]
+}
+
+async function fetchStudentNamesById(studentIds: string[]): Promise<Map<string, string>> {
+  if (studentIds.length === 0) return new Map()
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, display_name')
+    .in('id', studentIds)
+
+  if (error) {
+    console.error('[textbooks] admin profile fetch failed:', error.message)
+    return new Map()
+  }
+
+  return new Map(
+    (data ?? []).map((profile) => [
+      profile.id as string,
+      getPersonName(profile as { full_name: string; display_name: string }),
+    ]),
+  )
 }
 
 export async function fetchAdminBookshelfOverview(): Promise<AdminBookshelfOverview> {
   const supabase = await createClient()
   const [{ data: catalogRows, error: catalogError }, textbooks] = await Promise.all([
     supabase.from('textbook_catalog').select('*').order('name'),
-    fetchAllTextbooksWithProfiles(),
+    fetchAllTextbooksForAdmin(),
   ])
 
   if (catalogError) {
     console.error('[textbook-catalog] fetch failed:', catalogError.message)
   }
+
+  const studentNameById = await fetchStudentNamesById([
+    ...new Set(textbooks.map((book) => book.student_id)),
+  ])
 
   const usersByCatalogId = new Map<string, TextbookUser[]>()
   const studentOnlyGroups = new Map<string, AdminBookshelfStudentEntry>()
@@ -92,7 +116,7 @@ export async function fetchAdminBookshelfOverview(): Promise<AdminBookshelfOverv
   for (const book of textbooks) {
     const user: TextbookUser = {
       student_id: book.student_id,
-      student_name: mapProfileName(book.profiles),
+      student_name: studentNameById.get(book.student_id) ?? '不明',
     }
 
     if (book.catalog_id) {
@@ -123,10 +147,35 @@ export async function fetchAdminBookshelfOverview(): Promise<AdminBookshelfOverv
       const item = mapCatalog(row)
       return {
         ...item,
-        users: dedupeUsers(usersByCatalogId.get(item.id) ?? []),
+        users: dedupeUsers(usersByCatalogId.get(item.id) ?? []).sort((a, b) =>
+          a.student_name.localeCompare(b.student_name, 'ja'),
+        ),
       }
     },
   )
+
+  const catalogIds = new Set(catalog.map((item) => item.id))
+
+  for (const [catalogId, users] of usersByCatalogId.entries()) {
+    if (catalogIds.has(catalogId)) continue
+
+    const sample = textbooks.find((book) => book.catalog_id === catalogId)
+    if (!sample) continue
+
+    catalog.push({
+      id: catalogId,
+      name: sample.name,
+      subjects: sample.subjects ?? [],
+      usage_tags: sample.usage_tags ?? [],
+      visibility: 'private',
+      created_by: null,
+      created_at: '',
+      updated_at: '',
+      users: dedupeUsers(users).sort((a, b) =>
+        a.student_name.localeCompare(b.student_name, 'ja'),
+      ),
+    })
+  }
 
   const studentEntries = [...studentOnlyGroups.values()]
     .map((entry) => ({
@@ -137,7 +186,10 @@ export async function fetchAdminBookshelfOverview(): Promise<AdminBookshelfOverv
     }))
     .sort((a, b) => a.name.localeCompare(b.name, 'ja'))
 
-  return { catalog, studentEntries }
+  return {
+    catalog: catalog.sort((a, b) => a.name.localeCompare(b.name, 'ja')),
+    studentEntries,
+  }
 }
 
 export async function fetchTextbookCatalog(): Promise<TextbookCatalog[]> {
@@ -211,11 +263,16 @@ export async function markTextbooksAsSeen(studentId: string): Promise<void> {
 
 export async function fetchStudentCatalogIds(studentId: string): Promise<Set<string>> {
   const supabase = await createClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('textbooks')
     .select('catalog_id')
     .eq('student_id', studentId)
     .not('catalog_id', 'is', null)
+
+  if (error) {
+    console.error('[textbooks] student catalog ids failed:', error.message)
+    return new Set()
+  }
 
   return new Set(
     ((data ?? []) as { catalog_id: string | null }[])

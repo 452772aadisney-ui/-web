@@ -212,10 +212,19 @@ function renderCatalogSection(items: TextbookCatalogWithUsers[], title: string) 
 export function AdminBookshelfManager({ overview }: AdminBookshelfManagerProps) {
   const publicCatalog = overview.catalog.filter((item) => item.visibility === 'public')
   const privateCatalog = overview.catalog.filter((item) => item.visibility === 'private')
+  const catalogWithUsers = overview.catalog.filter((item) => item.users.length > 0)
+  const totalRegistrations =
+    overview.studentEntries.reduce((sum, entry) => sum + entry.users.length, 0) +
+    catalogWithUsers.reduce((sum, item) => sum + item.users.length, 0)
 
   return (
     <div className="space-y-8">
       <CatalogCreateForm />
+
+      <section className="rounded-lg border border-border bg-background px-4 py-3 text-sm text-muted">
+        登録済み教材: {totalRegistrations}件（生徒の本棚に登録されている参考書を集計）
+      </section>
+
       {renderCatalogSection(publicCatalog, '公開の参考書（管理者登録）')}
       {renderCatalogSection(privateCatalog, '非公開の参考書（管理者登録）')}
 
