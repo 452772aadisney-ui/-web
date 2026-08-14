@@ -45,3 +45,36 @@ export async function fetchAllProfileTagAssignments(): Promise<
   const { data } = await supabase.from('profile_student_tags').select('profile_id, tag_id')
   return data ?? []
 }
+
+export async function fetchGradeTagNamesByStudentId(): Promise<Map<string, string>> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('profile_student_tags')
+    .select('profile_id, student_tags(category, name)')
+
+  const map = new Map<string, string>()
+
+  for (const row of data ?? []) {
+    const rawTag = row.student_tags
+    if (!rawTag || Array.isArray(rawTag)) continue
+    const tag = rawTag as Pick<StudentTag, 'category' | 'name'>
+    if (tag.category !== '学年') continue
+    if (!map.has(row.profile_id)) {
+      map.set(row.profile_id, tag.name)
+    }
+  }
+
+  return map
+}
+
+export async function resolveGradeTagId(gradeTagName: string): Promise<string | null> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('student_tags')
+    .select('id')
+    .eq('category', '学年')
+    .eq('name', gradeTagName)
+    .maybeSingle()
+
+  return data?.id ?? null
+}

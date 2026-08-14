@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import { signUp, type AuthActionState } from '@/app/auth/actions'
 import { AuthCard, AuthLink } from '@/components/auth/AuthCard'
+import { GRADE_TAG_NAMES } from '@/lib/tags/grade-order'
 
 const initialState: AuthActionState = {}
 
@@ -31,6 +32,27 @@ export function SignUpForm() {
             className="w-full rounded-lg border border-border bg-background px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </label>
+
+        <fieldset className="block">
+          <legend className="mb-2 text-sm font-medium">学年</legend>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {GRADE_TAG_NAMES.map((grade) => (
+              <label
+                key={grade}
+                className="flex cursor-pointer items-center justify-center rounded-lg border border-border bg-background px-3 py-2.5 text-sm has-checked:border-primary has-checked:bg-primary/5"
+              >
+                <input
+                  type="radio"
+                  name="gradeTagName"
+                  value={grade}
+                  required
+                  className="sr-only"
+                />
+                {grade}
+              </label>
+            ))}
+          </div>
+        </fieldset>
 
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium">メールアドレス</span>

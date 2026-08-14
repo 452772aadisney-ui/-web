@@ -3,6 +3,8 @@
 import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { resolveGradeTagId } from '@/lib/tags/queries'
+import { isGradeTagName } from '@/lib/tags/grade-order'
 import { getDashboardPathForRole } from '@/lib/auth/routes'
 import type { Profile } from '@/types/database'
 
@@ -54,9 +56,19 @@ export async function signUp(
   const email = String(formData.get('email') ?? '').trim()
   const password = String(formData.get('password') ?? '')
   const passwordConfirm = String(formData.get('passwordConfirm') ?? '')
+  const gradeTagName = String(formData.get('gradeTagName') ?? '').trim()
 
   if (!fullName || !email || !password) {
     return { error: 'すべての項目を入力してください' }
+  }
+
+  if (!isGradeTagName(gradeTagName)) {
+    return { error: '学年を選択してください' }
+  }
+
+  const gradeTagId = await resolveGradeTagId(gradeTagName)
+  if (!gradeTagId) {
+    return { error: '学年の設定に失敗しました。しばらくしてからお試しください' }
   }
 
   if (password.length < 8) {
@@ -74,6 +86,7 @@ export async function signUp(
     options: {
       data: {
         full_name: fullName,
+        grade_tag_id: gradeTagId,
       },
     },
   })
