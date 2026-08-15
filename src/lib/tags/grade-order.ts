@@ -1,4 +1,4 @@
-export const GRADE_TAG_NAMES = ['高1', '高2', '高3', '浪人'] as const
+export const GRADE_TAG_NAMES = ['高1', '高2', '高3', '浪人', '既卒'] as const
 
 export type GradeTagName = (typeof GRADE_TAG_NAMES)[number]
 

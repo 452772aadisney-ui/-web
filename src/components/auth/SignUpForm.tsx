@@ -36,7 +36,7 @@ export function SignUpForm() {
 
         <fieldset className="block">
           <legend className="mb-2 text-sm font-medium">学年</legend>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {GRADE_TAG_NAMES.map((grade) => (
               <label
                 key={grade}
