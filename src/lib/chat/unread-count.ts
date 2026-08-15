@@ -1,17 +1,15 @@
 import { cache } from 'react'
-import { unreadSinceTimestamp } from '@/lib/account/content-cutoff'
+import { adminUnreadCutoff, unreadSinceTimestamp } from '@/lib/account/content-cutoff'
 import { createClient } from '@/lib/supabase/server'
-
-const EPOCH = '1970-01-01T00:00:00.000Z'
 
 export const fetchUnreadChatCount = cache(async (userId: string): Promise<number> => {
   const supabase = await createClient()
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, created_at')
+    .select('role, created_at, admin_since')
     .eq('id', userId)
-    .maybeSingle<{ role: string; created_at: string }>()
+    .maybeSingle<{ role: string; created_at: string; admin_since: string | null }>()
 
   if (!profile) return 0
 
@@ -44,9 +42,11 @@ export const fetchUnreadChatCount = cache(async (userId: string): Promise<number
   const studentIds = [...new Set((threads ?? []).map((row) => row.student_id as string))]
   if (studentIds.length === 0) return 0
 
+  const adminCutoff = adminUnreadCutoff(profile.admin_since, profile.created_at)
+
   const counts = await Promise.all(
     studentIds.map(async (studentId) => {
-      const since = readMap.get(studentId) ?? EPOCH
+      const since = unreadSinceTimestamp(readMap.get(studentId), adminCutoff)
       const { count } = await supabase
         .from('chat_messages')
         .select('*', { count: 'exact', head: true })

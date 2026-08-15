@@ -7,6 +7,13 @@ export function isUnreadEligibleContent(
   return new Date(contentCreatedAt) >= new Date(accountCreatedAt)
 }
 
+export function adminUnreadCutoff(
+  adminSince: string | null | undefined,
+  accountCreatedAt: string,
+): string {
+  return adminSince ?? accountCreatedAt
+}
+
 export function unreadSinceTimestamp(
   lastReadAt: string | undefined,
   accountCreatedAt: string,

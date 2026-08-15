@@ -10,6 +10,7 @@ export interface Profile {
   subjects: string[]
   student_code: string | null
   role: UserRole
+  admin_since: string | null
   created_at: string
   updated_at: string
 }
@@ -37,6 +38,7 @@ export interface Database {
           subjects?: string[]
           student_code?: string | null
           role?: UserRole
+          admin_since?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -49,6 +51,7 @@ export interface Database {
           subjects?: string[]
           student_code?: string | null
           role?: UserRole
+          admin_since?: string | null
           updated_at?: string
         }
         Relationships: []
