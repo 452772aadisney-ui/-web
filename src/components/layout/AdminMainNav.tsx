@@ -8,7 +8,7 @@ const NAV_ITEMS = [
   { href: '/admin/students', label: '生徒一覧' },
   {
     href: '/admin/study-daily',
-    label: '日別学習管理',
+    label: '毎日管理',
     badgeKey: 'studyDaily' as const,
   },
   { href: '/admin/schedule', label: 'スケジュール' },

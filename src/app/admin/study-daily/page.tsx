@@ -38,7 +38,7 @@ export default async function AdminStudyDailyPage({
   })
 
   return (
-    <AdminPageShell title="日別学習管理" backHref="/admin" backLabel="管理画面">
+    <AdminPageShell title="毎日管理" backHref="/admin" backLabel="管理画面">
       <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <h2 className="text-lg font-bold">学習記録の確認とフィードバック</h2>
         <p className="mt-1 text-sm text-muted">
