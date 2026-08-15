@@ -90,6 +90,7 @@ async function assertCanManageStudent(studentId: string): Promise<string | null>
 function revalidateTextbookPaths(studentId: string) {
   revalidatePath('/dashboard/profile')
   revalidatePath('/dashboard/bookshelf')
+  revalidatePath('/dashboard/textbooks/register')
   revalidatePath('/dashboard/study')
   revalidatePath('/dashboard/calendar')
   revalidatePath('/dashboard')

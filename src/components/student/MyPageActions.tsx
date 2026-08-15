@@ -28,6 +28,11 @@ const iconMenuActions: Array<{
     badgeKey: 'bookshelf',
   },
   {
+    href: '/dashboard/textbooks/register',
+    label: '教材登録',
+    iconSrc: MYPAGE_MENU_ICONS.textbookRegister,
+  },
+  {
     href: '/dashboard/calendar',
     label: 'カレンダー',
     iconSrc: MYPAGE_MENU_ICONS.calendar,

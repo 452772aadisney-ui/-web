@@ -126,8 +126,8 @@ export default async function StudentStudyHistoryPage({
             学習を記録する
           </Link>
           から追加できます。教材の追加は{' '}
-          <Link href="/dashboard/bookshelf" className="text-primary hover:underline">
-            本棚
+          <Link href="/dashboard/textbooks/register" className="text-primary hover:underline">
+            教材登録
           </Link>
           から行えます。
         </p>

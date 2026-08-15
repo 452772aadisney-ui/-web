@@ -34,6 +34,7 @@ interface StudentBookshelfManagerProps {
   catalog: TextbookCatalog[]
   registeredCatalogIds: string[]
   editHref?: string
+  variant: 'list' | 'register'
 }
 
 function TextbookEditForm({
@@ -236,16 +237,96 @@ function CreateRegisterForm({
   )
 }
 
-export function StudentBookshelfManager({
+function StudentTextbookList({
   studentId,
   profileSubjects,
   textbooks,
+}: {
+  studentId: string
+  profileSubjects: string[]
+  textbooks: Textbook[]
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  if (textbooks.length === 0) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-muted">登録された参考書はまだありません。</p>
+        <Link href="/dashboard/textbooks/register" className="text-sm font-medium text-primary hover:underline">
+          教材を登録する →
+        </Link>
+      </div>
+    )
+  }
+
+  return (
+    <ul className="space-y-3">
+      {textbooks.map((book) => (
+        <li key={book.id} className="rounded-lg border border-border">
+          {editingId === book.id ? (
+            <div className="p-4">
+              <TextbookEditForm
+                book={book}
+                studentId={studentId}
+                profileSubjects={profileSubjects}
+                onCancel={() => setEditingId(null)}
+              />
+            </div>
+          ) : (
+            <div className="flex items-start justify-between gap-4 px-4 py-3">
+              <div>
+                <p className="font-medium">{book.name}</p>
+                <p className="mt-1 text-xs text-muted">
+                  {book.subjects.join('・')}
+                  {book.usage_tags.length > 0 ? ` / ${book.usage_tags.join('・')}` : ''}
+                </p>
+                <p className="mt-1 text-xs text-muted">
+                  期間: {formatTextbookPeriod(book.start_date, book.planned_end_date)}
+                </p>
+                {!book.is_seen_by_student && (
+                  <span className="mt-2 inline-block rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">
+                    新規
+                  </span>
+                )}
+              </div>
+              <div className="flex shrink-0 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingId(book.id)}
+                  className="text-xs text-primary hover:underline"
+                >
+                  編集
+                </button>
+                <form action={deleteTextbook}>
+                  <input type="hidden" name="textbookId" value={book.id} />
+                  <input type="hidden" name="studentId" value={studentId} />
+                  <button type="submit" className="text-xs text-error hover:underline">
+                    削除
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function StudentTextbookRegister({
+  studentId,
+  profileSubjects,
   catalog,
   registeredCatalogIds,
   editHref,
-}: StudentBookshelfManagerProps) {
+}: {
+  studentId: string
+  profileSubjects: string[]
+  catalog: TextbookCatalog[]
+  registeredCatalogIds: string[]
+  editHref?: string
+}) {
   const [mode, setMode] = useState<RegisterMode>('catalog')
-  const [editingId, setEditingId] = useState<string | null>(null)
 
   if (profileSubjects.length === 0) {
     return (
@@ -299,61 +380,36 @@ export function StudentBookshelfManager({
       ) : (
         <CreateRegisterForm studentId={studentId} profileSubjects={profileSubjects} />
       )}
-
-      {textbooks.length === 0 ? (
-        <p className="text-sm text-muted">登録された教材はまだありません。</p>
-      ) : (
-        <ul className="space-y-3">
-          {textbooks.map((book) => (
-            <li key={book.id} className="rounded-lg border border-border">
-              {editingId === book.id ? (
-                <div className="p-4">
-                  <TextbookEditForm
-                    book={book}
-                    studentId={studentId}
-                    profileSubjects={profileSubjects}
-                    onCancel={() => setEditingId(null)}
-                  />
-                </div>
-              ) : (
-                <div className="flex items-start justify-between gap-4 px-4 py-3">
-                  <div>
-                    <p className="font-medium">{book.name}</p>
-                    <p className="mt-1 text-xs text-muted">
-                      {book.subjects.join('・')}
-                      {book.usage_tags.length > 0 ? ` / ${book.usage_tags.join('・')}` : ''}
-                    </p>
-                    <p className="mt-1 text-xs text-muted">
-                      期間: {formatTextbookPeriod(book.start_date, book.planned_end_date)}
-                    </p>
-                    {!book.is_seen_by_student && (
-                      <span className="mt-2 inline-block rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">
-                        新規
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setEditingId(book.id)}
-                      className="text-xs text-primary hover:underline"
-                    >
-                      編集
-                    </button>
-                    <form action={deleteTextbook}>
-                      <input type="hidden" name="textbookId" value={book.id} />
-                      <input type="hidden" name="studentId" value={studentId} />
-                      <button type="submit" className="text-xs text-error hover:underline">
-                        削除
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
+  )
+}
+
+export function StudentBookshelfManager({
+  studentId,
+  profileSubjects,
+  textbooks,
+  catalog,
+  registeredCatalogIds,
+  editHref,
+  variant,
+}: StudentBookshelfManagerProps) {
+  if (variant === 'list') {
+    return (
+      <StudentTextbookList
+        studentId={studentId}
+        profileSubjects={profileSubjects}
+        textbooks={textbooks}
+      />
+    )
+  }
+
+  return (
+    <StudentTextbookRegister
+      studentId={studentId}
+      profileSubjects={profileSubjects}
+      catalog={catalog}
+      registeredCatalogIds={registeredCatalogIds}
+      editHref={editHref}
+    />
   )
 }

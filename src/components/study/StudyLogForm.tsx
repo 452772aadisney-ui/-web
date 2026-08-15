@@ -104,8 +104,8 @@ export function StudyLogForm({ profileSubjects, textbooks }: StudyLogFormProps) 
         {selectedSubject && filteredTextbooks.length === 0 && (
           <p className="mt-2 text-xs text-amber-700">
             この科目の教材がありません。{' '}
-            <Link href="/dashboard/bookshelf" className="underline">
-              本棚
+            <Link href="/dashboard/textbooks/register" className="underline">
+              教材登録
             </Link>
             で教材を登録してください。
           </p>

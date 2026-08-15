@@ -3,11 +3,7 @@ import { redirect } from 'next/navigation'
 import { requireProfile } from '@/app/profile/actions'
 import { StudentBookshelfManager } from '@/components/textbooks/StudentBookshelfManager'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
-import {
-  fetchStudentCatalogIds,
-  fetchTextbookCatalogForStudent,
-  markTextbooksAsSeen,
-} from '@/lib/textbooks/catalog-queries'
+import { markTextbooksAsSeen } from '@/lib/textbooks/catalog-queries'
 import { fetchTextbooksForStudent } from '@/lib/study/queries'
 
 export default async function BookshelfPage() {
@@ -17,11 +13,7 @@ export default async function BookshelfPage() {
     redirect('/dashboard')
   }
 
-  const [textbooks, catalog, registeredCatalogIds] = await Promise.all([
-    fetchTextbooksForStudent(profile.id),
-    fetchTextbookCatalogForStudent(profile.id),
-    fetchStudentCatalogIds(profile.id),
-  ])
+  const textbooks = await fetchTextbooksForStudent(profile.id)
 
   await markTextbooksAsSeen(profile.id)
 
@@ -31,29 +23,30 @@ export default async function BookshelfPage() {
     <StudentPageShell title="本棚" backHref="/dashboard" backLabel="マイページ">
       <div className="space-y-6">
         <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="text-lg font-bold">教材登録</h2>
-          <p className="mt-1 text-sm text-muted">
-            管理者本棚のリストから選ぶか、新規に参考書を作成できます。科目タグはプロフィールの使用科目から選べます。
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold">登録済みの参考書</h2>
+              <p className="mt-1 text-sm text-muted">現在登録されている参考書の一覧です。</p>
+            </div>
+            <Link
+              href="/dashboard/textbooks/register"
+              className="rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-background"
+            >
+              教材を登録
+            </Link>
+          </div>
           <div className="mt-6">
             <StudentBookshelfManager
+              variant="list"
               studentId={profile.id}
               profileSubjects={profileSubjects}
               textbooks={textbooks}
-              catalog={catalog}
-              registeredCatalogIds={[...registeredCatalogIds]}
+              catalog={[]}
+              registeredCatalogIds={[]}
               editHref="/dashboard/profile"
             />
           </div>
         </section>
-
-        <p className="text-sm text-muted">
-          使用科目の変更は{' '}
-          <Link href="/dashboard/profile" className="text-primary hover:underline">
-            プロフィール編集
-          </Link>
-          から行えます。
-        </p>
       </div>
     </StudentPageShell>
   )

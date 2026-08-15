@@ -9,6 +9,7 @@ export const STUDENT_HAMBURGER_ITEMS = [
   { href: '/dashboard/study', label: '学習を記録する' },
   { href: '/dashboard/study/history', label: '学習履歴' },
   { href: '/dashboard/bookshelf', label: '本棚' },
+  { href: '/dashboard/textbooks/register', label: '教材登録' },
   { href: '/dashboard/calendar', label: 'カレンダー' },
   { href: '/dashboard/todo', label: 'ToDoリスト' },
   { href: '/dashboard/coaching', label: 'コーチング' },

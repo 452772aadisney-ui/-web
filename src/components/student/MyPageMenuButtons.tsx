@@ -6,6 +6,7 @@ export const MYPAGE_MENU_ICONS = {
   recordStudy: '/icons/mypage/record-study.png',
   studyHistory: '/icons/mypage/study-history.png',
   bookshelf: '/icons/mypage/bookshelf.png',
+  textbookRegister: '/icons/mypage/textbook-register.png',
   calendar: '/icons/mypage/calendar.png',
   todo: '/icons/mypage/todo.png',
   message: '/icons/mypage/message.png',
