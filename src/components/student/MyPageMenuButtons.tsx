@@ -50,6 +50,7 @@ interface MyPageIconMenuButtonProps {
   badgeCount?: number
   className?: string
   openInNewTab?: boolean
+  externalConfirmMessage?: string
 }
 
 export function MyPageIconMenuButton({
@@ -59,17 +60,15 @@ export function MyPageIconMenuButton({
   badgeCount,
   className,
   openInNewTab,
+  externalConfirmMessage,
 }: MyPageIconMenuButtonProps) {
-  return (
-    <Link
-      href={href}
-      target={openInNewTab ? '_blank' : undefined}
-      rel={openInNewTab ? 'noopener noreferrer' : undefined}
-      className={cn(
-        'relative flex min-h-[5.75rem] flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card px-3 py-4 text-center shadow-sm transition hover:bg-background',
-        className,
-      )}
-    >
+  const buttonClassName = cn(
+    'relative flex min-h-[5.75rem] flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card px-3 py-4 text-center shadow-sm transition hover:bg-background',
+    className,
+  )
+
+  const content = (
+    <>
       <Image src={iconSrc} alt="" width={40} height={40} className="h-10 w-10" aria-hidden />
       <span className="text-sm font-medium leading-tight">{label}</span>
       {badgeCount != null && badgeCount > 0 && (
@@ -77,6 +76,33 @@ export function MyPageIconMenuButton({
           {badgeCount > 99 ? '99+' : badgeCount}
         </span>
       )}
+    </>
+  )
+
+  if (externalConfirmMessage) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          if (window.confirm(externalConfirmMessage)) {
+            window.open(href, '_blank', 'noopener,noreferrer')
+          }
+        }}
+        className={buttonClassName}
+      >
+        {content}
+      </button>
+    )
+  }
+
+  return (
+    <Link
+      href={href}
+      target={openInNewTab ? '_blank' : undefined}
+      rel={openInNewTab ? 'noopener noreferrer' : undefined}
+      className={buttonClassName}
+    >
+      {content}
     </Link>
   )
 }
