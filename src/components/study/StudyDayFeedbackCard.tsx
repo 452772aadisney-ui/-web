@@ -5,19 +5,35 @@ import { cn } from '@/lib/utils'
 interface StudyDayFeedbackCardProps {
   feedback: StudyDayFeedback
   className?: string
+  isUnread?: boolean
 }
 
-export function StudyDayFeedbackCard({ feedback, className }: StudyDayFeedbackCardProps) {
+export function StudyDayFeedbackCard({
+  feedback,
+  className,
+  isUnread = false,
+}: StudyDayFeedbackCardProps) {
   const stamp = getStudyFeedbackStamp(feedback.stamp)
+  const hasComment = feedback.comment.trim().length > 0
 
   return (
     <div
       className={cn(
-        'rounded-xl border border-amber-200 bg-amber-50/80 p-3',
+        'rounded-xl border bg-amber-50/80 p-3',
+        isUnread && hasComment
+          ? 'border-red-300 ring-2 ring-red-200'
+          : 'border-amber-200',
         className,
       )}
     >
-      <p className="text-xs font-semibold text-amber-900">先生からのフィードバック</p>
+      <div className="flex items-center gap-2">
+        <p className="text-xs font-semibold text-amber-900">先生からのフィードバック</p>
+        {isUnread && hasComment && (
+          <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold leading-none text-white">
+            未読
+          </span>
+        )}
+      </div>
       <div className="mt-2 flex items-start gap-2">
         <span className="text-xl leading-none" aria-hidden>
           {stamp?.emoji ?? '⭐'}

@@ -16,6 +16,7 @@ import {
 import { getJstDateKey, getTodayDateKey, isValidDateKey } from '@/lib/study/dates'
 import {
   fetchStudyDayFeedback,
+  fetchUnreadStudyFeedbackDates,
 } from '@/lib/study/feedback-queries'
 import { fetchStudyLogsForStudent, fetchTextbooksForStudent } from '@/lib/study/queries'
 
@@ -38,11 +39,15 @@ export default async function StudentStudyHistoryPage({
     redirect(`/dashboard/study/history?date=${todayKey}`)
   }
 
-  const [logs, textbooks, feedback] = await Promise.all([
+  const [logs, textbooks, feedback, unreadFeedbackDates] = await Promise.all([
     fetchStudyLogsForStudent(profile.id),
     fetchTextbooksForStudent(profile.id),
     fetchStudyDayFeedback(profile.id, selectedDate),
+    fetchUnreadStudyFeedbackDates(profile.id),
   ])
+
+  const hasUnreadFeedbackOnSelected =
+    unreadFeedbackDates.has(selectedDate) && Boolean(feedback?.comment.trim())
 
   const dayLogs = logs.filter((log) => log.studied_on === selectedDate)
   const dayMinutes = dayLogs.reduce((sum, log) => sum + log.duration_minutes, 0)
@@ -65,6 +70,7 @@ export default async function StudentStudyHistoryPage({
             selectedDate={selectedDate}
             dayTotalMinutes={dayMinutes}
             basePath="/dashboard/study/history"
+            unreadFeedbackDates={[...unreadFeedbackDates]}
           />
           <StudyLogTable
             logs={dayLogs}
@@ -79,7 +85,11 @@ export default async function StudentStudyHistoryPage({
               {feedback.comment.trim() && (
                 <StudyFeedbackReadMarker feedbackId={feedback.id} />
               )}
-              <StudyDayFeedbackCard feedback={feedback} className="mt-4" />
+              <StudyDayFeedbackCard
+                feedback={feedback}
+                className="mt-4"
+                isUnread={hasUnreadFeedbackOnSelected}
+              />
             </>
           )}
         </section>

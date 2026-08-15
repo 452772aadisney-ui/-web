@@ -114,15 +114,15 @@ export async function fetchIncompleteStudyFeedbackCount(
   return summaries.filter((summary) => !summary.feedback).length
 }
 
-export const fetchUnreadStudyFeedbackCount = cache(
-  async (studentId: string): Promise<number> => {
+export const fetchUnreadStudyFeedbackDates = cache(
+  async (studentId: string): Promise<Set<string>> => {
     const supabase = await createClient()
 
     const [{ data: feedbackRows, error: feedbackError }, { data: readRows, error: readError }] =
       await Promise.all([
         supabase
           .from('study_day_feedback')
-          .select('id, comment')
+          .select('id, comment, studied_on')
           .eq('student_id', studentId),
         supabase
           .from('study_day_feedback_reads')
@@ -131,16 +131,27 @@ export const fetchUnreadStudyFeedbackCount = cache(
       ])
 
     if (feedbackError || readError) {
-      return 0
+      return new Set()
     }
 
     const readIds = new Set((readRows ?? []).map((row) => row.feedback_id as string))
-    return (feedbackRows ?? []).filter((row) => {
+    const unreadDates = new Set<string>()
+
+    for (const row of feedbackRows ?? []) {
       const comment = String(row.comment ?? '').trim()
-      return comment.length > 0 && !readIds.has(row.id as string)
-    }).length
+      if (comment.length > 0 && !readIds.has(row.id as string)) {
+        unreadDates.add(row.studied_on as string)
+      }
+    }
+
+    return unreadDates
   },
 )
+
+export const fetchUnreadStudyFeedbackCount = cache(async (studentId: string): Promise<number> => {
+  const unreadDates = await fetchUnreadStudyFeedbackDates(studentId)
+  return unreadDates.size
+})
 
 export async function markStudyFeedbackAsRead(
   feedbackId: string,
