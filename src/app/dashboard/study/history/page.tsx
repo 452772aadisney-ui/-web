@@ -77,6 +77,7 @@ export default async function StudentStudyHistoryPage({
             profileSubjects={profileSubjects}
             textbooks={textbooks}
             editable
+            variant="compact"
             hideStudiedOnColumn
             emptyMessage="この日の学習記録はありません。"
           />

@@ -21,6 +21,7 @@ interface StudyLogTableProps {
   textbooks: Textbook[]
   editable?: boolean
   hideStudiedOnColumn?: boolean
+  variant?: 'full' | 'compact'
   emptyMessage?: string
 }
 
@@ -165,7 +166,170 @@ function StudyLogEditPanel({
   )
 }
 
-export function StudyLogTable({
+function StudyLogDetailPanel({
+  log,
+  editable,
+  onClose,
+  onEdit,
+}: {
+  log: StudyLog
+  editable: boolean
+  onClose: () => void
+  onEdit: () => void
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-background p-4">
+      <p className="mb-3 text-sm font-semibold">学習記録の詳細</p>
+      <dl className="space-y-2.5 text-sm">
+        <div>
+          <dt className="text-xs text-muted">科目</dt>
+          <dd className="mt-0.5 font-medium">{log.subject}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted">テキスト名</dt>
+          <dd className="mt-0.5 font-medium">{log.textbook_name}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted">時間</dt>
+          <dd className="mt-0.5 font-medium">{formatDuration(log.duration_minutes)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted">内容</dt>
+          <dd className="mt-0.5">{log.content || '—'}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted">登録日時</dt>
+          <dd className="mt-0.5 text-muted">{formatDateTime(log.created_at)}</dd>
+        </div>
+      </dl>
+
+      <div className="mt-4 flex flex-wrap gap-3">
+        {editable && (
+          <>
+            <button
+              type="button"
+              onClick={onEdit}
+              className="rounded-lg border border-border px-4 py-1.5 text-sm font-medium hover:bg-card"
+            >
+              編集
+            </button>
+            <form action={deleteStudyLog}>
+              <input type="hidden" name="logId" value={log.id} />
+              <button
+                type="submit"
+                className="rounded-lg border border-red-200 px-4 py-1.5 text-sm font-medium text-error hover:bg-red-50"
+              >
+                削除
+              </button>
+            </form>
+          </>
+        )}
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-sm text-muted hover:text-foreground"
+        >
+          閉じる
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function CompactStudyLogList({
+  logs,
+  profileSubjects,
+  textbooks,
+  editable,
+  emptyMessage,
+}: StudyLogTableProps) {
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  const detailLog = detailId ? logs.find((log) => log.id === detailId) : null
+  const editingLog = editingId ? logs.find((log) => log.id === editingId) : null
+
+  if (logs.length === 0) {
+    return <p className="py-8 text-center text-sm text-muted">{emptyMessage}</p>
+  }
+
+  function openDetail(logId: string) {
+    setEditingId(null)
+    setDetailId(logId)
+  }
+
+  function closePanels() {
+    setDetailId(null)
+    setEditingId(null)
+  }
+
+  return (
+    <div className="space-y-4">
+      {editingLog && editable && (
+        <StudyLogEditPanel
+          log={editingLog}
+          profileSubjects={profileSubjects}
+          textbooks={textbooks}
+          onCancel={() => {
+            setEditingId(null)
+            setDetailId(editingLog.id)
+          }}
+        />
+      )}
+
+      {!editingLog && detailLog && (
+        <StudyLogDetailPanel
+          log={detailLog}
+          editable={Boolean(editable)}
+          onClose={closePanels}
+          onEdit={() => {
+            setEditingId(detailLog.id)
+            setDetailId(null)
+          }}
+        />
+      )}
+
+      <div className="divide-y divide-border/60">
+        {logs.map((log) => (
+          <div
+            key={log.id}
+            className={`flex items-center gap-3 py-3 ${
+              detailId === log.id && !editingId ? 'bg-primary/5 -mx-2 rounded-lg px-2' : ''
+            }`}
+          >
+            <div className="min-w-0 flex-1 grid grid-cols-[4.5rem_minmax(0,1fr)_3.5rem] items-center gap-2 text-sm">
+              <span className="truncate">{log.subject}</span>
+              <span className="truncate" title={log.textbook_name}>
+                {log.textbook_name}
+              </span>
+              <span className="text-right font-medium whitespace-nowrap">
+                {formatDuration(log.duration_minutes)}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => (detailId === log.id && !editingId ? closePanels() : openDetail(log.id))}
+              className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-background"
+              aria-expanded={detailId === log.id && !editingId}
+            >
+              詳細
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function StudyLogTable(props: StudyLogTableProps) {
+  if (props.variant === 'compact') {
+    return <CompactStudyLogList {...props} />
+  }
+
+  return <FullStudyLogTable {...props} />
+}
+
+function FullStudyLogTable({
   logs,
   profileSubjects,
   textbooks,
