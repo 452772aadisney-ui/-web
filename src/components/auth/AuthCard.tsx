@@ -6,25 +6,38 @@ interface AuthCardProps {
   subtitle: string
   children: ReactNode
   footer?: ReactNode
+  layout?: 'page' | 'embedded'
 }
 
-export function AuthCard({ title, subtitle, children, footer }: AuthCardProps) {
-  return (
-    <div className="flex min-h-dvh items-center justify-center px-4 py-10">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-sm">
-        <div className="mb-8 text-center">
-          <span className="text-4xl" aria-hidden="true">
-            📚
-          </span>
-          <h1 className="mt-3 text-2xl font-bold">{title}</h1>
-          <p className="mt-2 text-sm text-muted">{subtitle}</p>
-        </div>
-
-        {children}
-
-        {footer && <div className="mt-6 text-center text-sm text-muted">{footer}</div>}
+export function AuthCard({
+  title,
+  subtitle,
+  children,
+  footer,
+  layout = 'page',
+}: AuthCardProps) {
+  const card = (
+    <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-sm">
+      <div className="mb-8 text-center">
+        <span className="text-4xl" aria-hidden="true">
+          📚
+        </span>
+        <h1 className="mt-3 text-2xl font-bold">{title}</h1>
+        <p className="mt-2 text-sm text-muted">{subtitle}</p>
       </div>
+
+      {children}
+
+      {footer && <div className="mt-6 text-center text-sm text-muted">{footer}</div>}
     </div>
+  )
+
+  if (layout === 'embedded') {
+    return card
+  }
+
+  return (
+    <div className="flex min-h-dvh items-center justify-center px-4 py-10">{card}</div>
   )
 }
 
