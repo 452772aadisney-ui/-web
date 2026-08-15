@@ -14,6 +14,7 @@ const iconMenuActions: Array<{
   label: string
   iconSrc: string
   badgeKey?: MenuBadgeKey
+  openInNewTab?: boolean
 }> = [
   {
     href: '/dashboard/study/history',
@@ -36,6 +37,12 @@ const iconMenuActions: Array<{
     href: '/dashboard/calendar',
     label: 'カレンダー',
     iconSrc: MYPAGE_MENU_ICONS.calendar,
+  },
+  {
+    href: 'https://mates.students-web.jp/sign-in',
+    label: '授業予定',
+    iconSrc: MYPAGE_MENU_ICONS.classSchedule,
+    openInNewTab: true,
   },
   {
     href: '/dashboard/todo',
@@ -130,6 +137,7 @@ export function MyPageActions({
             label={action.label}
             iconSrc={action.iconSrc}
             badgeCount={action.badgeKey ? badgeCounts[action.badgeKey] : undefined}
+            openInNewTab={action.openInNewTab}
           />
         ))}
       </div>

@@ -8,6 +8,7 @@ export const MYPAGE_MENU_ICONS = {
   bookshelf: '/icons/mypage/bookshelf.png',
   textbookRegister: '/icons/mypage/textbook-register.png',
   calendar: '/icons/mypage/calendar.png',
+  classSchedule: '/icons/mypage/class-schedule.png',
   todo: '/icons/mypage/todo.png',
   message: '/icons/mypage/message.png',
   announcements: '/icons/mypage/announcements.png',
@@ -48,6 +49,7 @@ interface MyPageIconMenuButtonProps {
   iconSrc: string
   badgeCount?: number
   className?: string
+  openInNewTab?: boolean
 }
 
 export function MyPageIconMenuButton({
@@ -56,10 +58,13 @@ export function MyPageIconMenuButton({
   iconSrc,
   badgeCount,
   className,
+  openInNewTab,
 }: MyPageIconMenuButtonProps) {
   return (
     <Link
       href={href}
+      target={openInNewTab ? '_blank' : undefined}
+      rel={openInNewTab ? 'noopener noreferrer' : undefined}
       className={cn(
         'relative flex min-h-[5.75rem] flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card px-3 py-4 text-center shadow-sm transition hover:bg-background',
         className,
