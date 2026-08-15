@@ -1,5 +1,6 @@
 import { getPersonName } from '@/lib/auth/display-name'
 import { getGoogleCalendarClient } from '@/lib/google-calendar/config'
+import { shiftDateKey } from '@/lib/study/dates'
 import { createClient } from '@/lib/supabase/server'
 
 function buildEventDescription(coachName: string, studentNote: string): string {
@@ -156,4 +157,119 @@ export async function updateCoachingBookingCalendarEvent(input: {
   } catch (error) {
     console.error('[google-calendar] event patch failed:', error)
   }
+}
+
+function buildQuizEventDescription(input: {
+  subject: string
+  studentNames: string[]
+  note: string
+}): string {
+  const lines = [
+    input.subject ? `科目: ${input.subject}` : '科目: 未設定',
+    '',
+    '対象生徒:',
+    input.studentNames.length > 0 ? input.studentNames.join('、') : 'なし',
+  ]
+
+  if (input.note.trim()) {
+    lines.push('', 'メモ:', input.note.trim())
+  }
+
+  return lines.join('\n')
+}
+
+async function fetchStudentNames(studentIds: string[]): Promise<string[]> {
+  if (studentIds.length === 0) return []
+
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, full_name, display_name')
+    .in('id', studentIds)
+
+  return (data ?? [])
+    .map((profile) => getPersonName(profile as { full_name: string; display_name: string }))
+    .sort((a, b) => a.localeCompare(b, 'ja'))
+}
+
+export async function createQuizCalendarEvent(input: {
+  title: string
+  subject: string
+  scheduledOn: string
+  note: string
+  studentIds: string[]
+}): Promise<string | null> {
+  const client = getGoogleCalendarClient()
+  if (!client) {
+    console.warn('[google-calendar] credentials are not configured; quiz event skipped')
+    return null
+  }
+
+  const studentNames = await fetchStudentNames(input.studentIds)
+  const endDate = shiftDateKey(input.scheduledOn, 1)
+
+  try {
+    const response = await client.calendar.events.insert({
+      calendarId: client.calendarId,
+      requestBody: {
+        summary: `【小テスト】${input.title}`,
+        description: buildQuizEventDescription({
+          subject: input.subject,
+          studentNames,
+          note: input.note,
+        }),
+        start: { date: input.scheduledOn },
+        end: { date: endDate },
+      },
+    })
+
+    return response.data.id ?? null
+  } catch (error) {
+    console.error('[google-calendar] quiz event insert failed:', error)
+    return null
+  }
+}
+
+export async function updateQuizCalendarEvent(input: {
+  eventId: string
+  title: string
+  subject: string
+  scheduledOn: string
+  note: string
+  studentIds: string[]
+}): Promise<void> {
+  const trimmed = input.eventId.trim()
+  if (!trimmed) return
+
+  const client = getGoogleCalendarClient()
+  if (!client) {
+    console.warn('[google-calendar] credentials are not configured; quiz update skipped')
+    return
+  }
+
+  const studentNames = await fetchStudentNames(input.studentIds)
+  const endDate = shiftDateKey(input.scheduledOn, 1)
+
+  try {
+    await client.calendar.events.patch({
+      calendarId: client.calendarId,
+      eventId: trimmed,
+      requestBody: {
+        summary: `【小テスト】${input.title}`,
+        description: buildQuizEventDescription({
+          subject: input.subject,
+          studentNames,
+          note: input.note,
+        }),
+        start: { date: input.scheduledOn },
+        end: { date: endDate },
+      },
+    })
+  } catch (error) {
+    console.error('[google-calendar] quiz event patch failed:', error)
+  }
+}
+
+export async function deleteQuizCalendarEvent(eventId: string | null | undefined): Promise<void> {
+  await deleteCoachingBookingCalendarEvent(eventId)
 }

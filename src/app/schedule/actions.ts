@@ -3,6 +3,11 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
+import {
+  createQuizCalendarEvent,
+  deleteQuizCalendarEvent,
+  updateQuizCalendarEvent,
+} from '@/lib/google-calendar/events'
 import type { ExamScheduleType } from '@/types/schedule'
 
 export type ScheduleActionState = {
@@ -124,6 +129,49 @@ async function syncApplicationTaskStudents(
   return null
 }
 
+async function syncQuizGoogleCalendar(input: {
+  scheduleId: string
+  title: string
+  subject: string
+  scheduledOn: string
+  note: string
+  studentIds: string[]
+  existingEventId?: string | null
+}): Promise<void> {
+  try {
+    const supabase = await createClient()
+
+    if (input.existingEventId) {
+      await updateQuizCalendarEvent({
+        eventId: input.existingEventId,
+        title: input.title,
+        subject: input.subject,
+        scheduledOn: input.scheduledOn,
+        note: input.note,
+        studentIds: input.studentIds,
+      })
+      return
+    }
+
+    const eventId = await createQuizCalendarEvent({
+      title: input.title,
+      subject: input.subject,
+      scheduledOn: input.scheduledOn,
+      note: input.note,
+      studentIds: input.studentIds,
+    })
+
+    if (eventId) {
+      await supabase
+        .from('exam_schedules')
+        .update({ google_calendar_event_id: eventId })
+        .eq('id', input.scheduleId)
+    }
+  } catch (error) {
+    console.error('[schedule] quiz google calendar sync failed:', error)
+  }
+}
+
 export async function createExamSchedule(
   _prev: ScheduleActionState,
   formData: FormData,
@@ -179,6 +227,17 @@ export async function createExamSchedule(
   const syncError = await syncExamScheduleStudents(data.id, studentIds)
   if (syncError) return { error: syncError }
 
+  if (examType === 'quiz') {
+    await syncQuizGoogleCalendar({
+      scheduleId: data.id,
+      title,
+      subject,
+      scheduledOn,
+      note,
+      studentIds,
+    })
+  }
+
   revalidateSchedulePaths()
   return { success: true }
 }
@@ -216,6 +275,13 @@ export async function updateExamSchedule(
   }
 
   const supabase = await createClient()
+
+  const { data: existingSchedule } = await supabase
+    .from('exam_schedules')
+    .select('google_calendar_event_id')
+    .eq('id', id)
+    .maybeSingle<{ google_calendar_event_id: string | null }>()
+
   const { error } = await supabase
     .from('exam_schedules')
     .update({
@@ -234,6 +300,18 @@ export async function updateExamSchedule(
   const syncError = await syncExamScheduleStudents(id, studentIds)
   if (syncError) return { error: syncError }
 
+  if (examType === 'quiz') {
+    await syncQuizGoogleCalendar({
+      scheduleId: id,
+      title,
+      subject,
+      scheduledOn,
+      note,
+      studentIds,
+      existingEventId: existingSchedule?.google_calendar_event_id,
+    })
+  }
+
   revalidateSchedulePaths()
   return { success: true }
 }
@@ -244,6 +322,17 @@ export async function deleteExamSchedule(formData: FormData): Promise<void> {
   if (!id) return
 
   const supabase = await createClient()
+
+  const { data: existingSchedule } = await supabase
+    .from('exam_schedules')
+    .select('exam_type, google_calendar_event_id')
+    .eq('id', id)
+    .maybeSingle<{ exam_type: ExamScheduleType; google_calendar_event_id: string | null }>()
+
+  if (existingSchedule?.exam_type === 'quiz') {
+    await deleteQuizCalendarEvent(existingSchedule.google_calendar_event_id)
+  }
+
   await supabase.from('exam_schedules').delete().eq('id', id)
   revalidateSchedulePaths()
 }

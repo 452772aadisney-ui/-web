@@ -43,8 +43,7 @@ export function AdminStudentCheckboxGroups({
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
-                      name={inputName}
-                      value={student.id}
+                      {...(inputName ? { name: inputName, value: student.id } : {})}
                       checked={selectedIds.has(student.id)}
                       onChange={() => onToggleStudent(student.id)}
                       className="accent-primary"

@@ -85,10 +85,11 @@ async function syncStudentAssignments(input: {
   usageTags: string[]
 }): Promise<CatalogActionState> {
   const supabase = await createClient()
+  const selectedStudentIds = input.selectedStudentIds
   const currentStudentIds = Object.keys(input.textbookIdsByStudent)
-  const toAdd = input.selectedStudentIds.filter((id) => !currentStudentIds.includes(id))
-  const toRemove = currentStudentIds.filter((id) => !input.selectedStudentIds.includes(id))
-  const affectedStudentIds = [...new Set([...input.selectedStudentIds, ...currentStudentIds])]
+  const toAdd = selectedStudentIds.filter((id) => !currentStudentIds.includes(id))
+  const toRemove = currentStudentIds.filter((id) => !selectedStudentIds.includes(id))
+  const affectedStudentIds = [...new Set([...selectedStudentIds, ...currentStudentIds])]
 
   for (const studentId of toRemove) {
     const textbookId = input.textbookIdsByStudent[studentId]
@@ -97,7 +98,7 @@ async function syncStudentAssignments(input: {
     if (error) return { error: '生徒の登録解除に失敗しました' }
   }
 
-  for (const studentId of input.selectedStudentIds) {
+  for (const studentId of selectedStudentIds) {
     const textbookId = input.textbookIdsByStudent[studentId]
     if (textbookId) {
       const { error } = await supabase
@@ -210,6 +211,11 @@ export async function updateAdminBookshelfCatalogEntry(
       .eq('id', catalogId)
 
     if (error) return { error: '参考書の更新に失敗しました' }
+
+    if (Object.keys(textbookIdsByStudent).length === 0 && selectedStudentIds.length === 0) {
+      revalidateCatalogPaths()
+      return { success: true }
+    }
   } else if (createCatalogMaster) {
     const { data: created, error } = await supabase
       .from('textbook_catalog')

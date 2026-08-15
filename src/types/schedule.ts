@@ -9,6 +9,7 @@ export interface ExamSchedule {
   return_on: string | null
   note: string
   target_all: boolean
+  google_calendar_event_id: string | null
   created_at: string
   updated_at: string
 }

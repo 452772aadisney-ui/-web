@@ -247,22 +247,16 @@ function EditBookshelfModal({
             name="textbookIdsJson"
             value={JSON.stringify(textbookIdsByStudent)}
           />
+          {[...selectedIds].map((studentId) => (
+            <input key={studentId} type="hidden" name="studentIds" value={studentId} />
+          ))}
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium">参考書名</span>
             <input type="text" name="name" required defaultValue={item.name} className={inputClass} />
           </label>
 
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium">科目タグ（カンマ区切り）</span>
-            <input
-              type="text"
-              name="subjects"
-              required
-              defaultValue={item.subjects.join(', ')}
-              className={inputClass}
-            />
-          </label>
+          <ExamSubjectMultiSelect selectedSubjects={item.subjects} />
 
           <UsageTagFields selectedUsageTags={item.usage_tags} />
 
@@ -314,11 +308,15 @@ function EditBookshelfModal({
 
           <div>
             <p className="mb-2 text-sm font-medium">利用する生徒</p>
+            <p className="mb-2 text-xs text-muted">
+              名前や科目だけ変更する場合は、そのまま保存できます。
+            </p>
             <AdminStudentCheckboxGroups
               studentGroups={studentGroups}
               selectedIds={selectedIds}
               onToggleStudent={toggleStudent}
               onToggleGroup={toggleGroup}
+              inputName=""
             />
           </div>
 
@@ -327,7 +325,7 @@ function EditBookshelfModal({
           <div className="flex flex-wrap gap-3">
             <button
               type="submit"
-              disabled={pending || selectedIds.size === 0}
+              disabled={pending}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
             >
               {pending ? '保存中…' : '変更を保存'}
