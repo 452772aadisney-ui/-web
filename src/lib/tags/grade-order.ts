@@ -19,6 +19,7 @@ export type StudentListItem = {
   display_name: string
   email: string
   student_code: string | null
+  last_sign_in_at?: string | null
 }
 
 export type StudentListGroup = {

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { getDashboardPathForRole } from '@/lib/auth/routes'
+import { formatLastSignInAt, fetchStudentLastSignInMap } from '@/lib/auth/last-sign-in'
 import { AdminPageShell } from '@/components/layout/AdminPageShell'
 import { getPersonName } from '@/lib/auth/display-name'
 import { groupStudentsByGrade } from '@/lib/tags/grade-order'
@@ -19,12 +20,18 @@ export default async function AdminStudentsPage() {
     redirect(getDashboardPathForRole('student'))
   }
 
-  const [students, gradeTagByStudentId] = await Promise.all([
+  const [students, gradeTagByStudentId, lastSignInByStudentId] = await Promise.all([
     fetchStudentList(),
     fetchGradeTagNamesByStudentId(),
+    fetchStudentLastSignInMap(),
   ])
 
-  const studentGroups = groupStudentsByGrade(students, gradeTagByStudentId)
+  const studentsWithLastSignIn = students.map((student) => ({
+    ...student,
+    last_sign_in_at: lastSignInByStudentId.get(student.id) ?? null,
+  }))
+
+  const studentGroups = groupStudentsByGrade(studentsWithLastSignIn, gradeTagByStudentId)
 
   return (
     <AdminPageShell title="生徒一覧" backHref="/admin" backLabel="管理画面">
@@ -34,7 +41,7 @@ export default async function AdminStudentsPage() {
           学年ごとに表示しています。生徒を選ぶと、学習記録のグラフと詳細を確認できます。
         </p>
 
-        {students.length === 0 ? (
+        {studentsWithLastSignIn.length === 0 ? (
           <p className="mt-6 text-sm text-muted">生徒がまだ登録されていません。</p>
         ) : (
           <div className="mt-6 space-y-8">
@@ -51,6 +58,9 @@ export default async function AdminStudentsPage() {
                         <div>
                           <p className="font-medium">{getPersonName(student)}</p>
                           <p className="text-xs text-muted">{student.email}</p>
+                          <p className="mt-1 text-xs text-muted">
+                            最終ログイン: {formatLastSignInAt(student.last_sign_in_at)}
+                          </p>
                         </div>
                         <div className="text-right">
                           {student.student_code && (
