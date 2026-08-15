@@ -265,18 +265,26 @@ export function StudentBookshelfManager({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
           onClick={() => setMode('catalog')}
-          className={`rounded-lg px-3 py-2 text-sm ${mode === 'catalog' ? 'bg-primary text-white' : 'border border-border'}`}
+          className={`rounded-lg px-3 py-2.5 text-center text-sm font-bold ${
+            mode === 'catalog'
+              ? 'bg-primary text-white'
+              : 'border border-border bg-background text-foreground'
+          }`}
         >
           リストから選ぶ
         </button>
         <button
           type="button"
           onClick={() => setMode('create')}
-          className={`rounded-lg px-3 py-2 text-sm ${mode === 'create' ? 'bg-primary text-white' : 'border border-border'}`}
+          className={`rounded-lg px-3 py-2.5 text-center text-sm font-bold ${
+            mode === 'create'
+              ? 'bg-primary text-white'
+              : 'border border-border bg-background text-foreground'
+          }`}
         >
           新規作成
         </button>
