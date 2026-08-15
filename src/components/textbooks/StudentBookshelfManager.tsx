@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState, useMemo, useState } from 'react'
+import { useActionState, useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   addTextbookFromCatalog,
   createTextbook,
@@ -46,10 +47,18 @@ function TextbookEditForm({
   profileSubjects: string[]
   onCancel: () => void
 }) {
+  const router = useRouter()
   const [state, formAction, pending] = useActionState(
     updateTextbook.bind(null, studentId),
     initialState,
   )
+
+  useEffect(() => {
+    if (state.success) {
+      onCancel()
+      router.refresh()
+    }
+  }, [state.success, onCancel, router])
 
   return (
     <form action={formAction} className="min-w-0 space-y-4 rounded-lg border border-primary/30 bg-blue-50/30 p-4">
@@ -64,7 +73,6 @@ function TextbookEditForm({
       <UsageTagFields selectedUsageTags={book.usage_tags} />
       <TextbookDateFields startDate={book.start_date} plannedEndDate={book.planned_end_date} />
       {state.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error">{state.error}</p>}
-      {state.success && <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">更新しました</p>}
       <div className="flex gap-3">
         <button
           type="submit"

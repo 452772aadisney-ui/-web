@@ -1,16 +1,19 @@
 'use client'
 
-import { useActionState, useState } from 'react'
+import { useActionState, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { deleteStudyLog, updateStudyLog, type StudyLogActionState } from '@/app/study/actions'
 import { filterTextbooksBySubject } from '@/components/textbooks/TextbookManager'
 import { formatDuration } from '@/lib/study/chart-data'
+import { getJstDateKey } from '@/lib/study/dates'
+import { MAX_STUDY_DURATION_MINUTES } from '@/lib/study/validation'
 import type { StudyLog } from '@/lib/study/chart-data'
 import type { Textbook } from '@/types/textbook'
 
 const initialState: StudyLogActionState = {}
 
 const fieldClass =
-  'w-full min-w-0 max-w-full rounded-lg border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-primary'
+  'w-full min-w-0 rounded-lg border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-primary'
 
 interface StudyLogTableProps {
   logs: StudyLog[]
@@ -29,6 +32,7 @@ function formatStudiedOn(date: string): string {
 function formatDateTime(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -37,127 +41,127 @@ function formatDateTime(iso: string): string {
   })
 }
 
-function tableColSpan(editable: boolean, hideStudiedOnColumn: boolean): number {
-  const dataCols = hideStudiedOnColumn ? 5 : 6
-  return dataCols + (editable ? 1 : 0)
-}
-
-function StudyLogEditRow({
+function StudyLogEditPanel({
   log,
   profileSubjects,
   textbooks,
-  hideStudiedOnColumn,
   onCancel,
 }: {
   log: StudyLog
   profileSubjects: string[]
   textbooks: Textbook[]
-  hideStudiedOnColumn: boolean
   onCancel: () => void
 }) {
+  const router = useRouter()
   const [state, formAction, pending] = useActionState(updateStudyLog, initialState)
   const [selectedSubject, setSelectedSubject] = useState(log.subject)
+  const todayKey = getJstDateKey()
   const filteredTextbooks = filterTextbooksBySubject(textbooks, selectedSubject)
   const defaultTextbookId =
     log.textbook_id && filteredTextbooks.some((b) => b.id === log.textbook_id)
       ? log.textbook_id
       : filteredTextbooks[0]?.id ?? ''
 
+  useEffect(() => {
+    if (state.success) {
+      onCancel()
+      router.refresh()
+    }
+  }, [state.success, onCancel, router])
+
   return (
-    <tr>
-      <td colSpan={tableColSpan(true, hideStudiedOnColumn)} className="bg-blue-50/40 px-3 py-4">
-        <form action={formAction} className="space-y-3">
-          <input type="hidden" name="logId" value={log.id} />
+    <div className="rounded-xl border border-primary/30 bg-blue-50/40 p-4">
+      <p className="mb-3 text-sm font-semibold">学習記録を編集</p>
+      <form action={formAction} className="space-y-3">
+        <input type="hidden" name="logId" value={log.id} />
 
-          <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <label className="block min-w-0">
-              <span className="mb-1 block text-xs font-medium">学習日</span>
-              <div className="overflow-hidden rounded-lg border border-border bg-background focus-within:border-primary">
-                <input
-                  type="date"
-                  name="studiedOn"
-                  required
-                  defaultValue={log.studied_on}
-                  className="study-date-input px-2 py-1.5 text-sm outline-none"
-                />
-              </div>
-            </label>
-            <label className="block min-w-0">
-              <span className="mb-1 block text-xs font-medium">科目</span>
-              <select
-                name="subject"
-                required
-                value={selectedSubject}
-                onChange={(e) => setSelectedSubject(e.target.value)}
-                className={fieldClass}
-              >
-                {profileSubjects.map((subject) => (
-                  <option key={subject} value={subject}>
-                    {subject}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block min-w-0">
-              <span className="mb-1 block text-xs font-medium">教材</span>
-              <select
-                name="textbookId"
-                required
-                key={selectedSubject}
-                defaultValue={defaultTextbookId}
-                className={fieldClass}
-              >
-                {filteredTextbooks.map((book) => (
-                  <option key={book.id} value={book.id}>
-                    {book.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium">学習時間（分）</span>
-              <input
-                type="number"
-                name="durationMinutes"
-                min={1}
-                required
-                defaultValue={log.duration_minutes}
-                className={fieldClass}
-              />
-            </label>
-            <label className="block sm:col-span-2">
-              <span className="mb-1 block text-xs font-medium">内容</span>
-              <input
-                type="text"
-                name="content"
-                defaultValue={log.content}
-                className={fieldClass}
-              />
-            </label>
-          </div>
-
-          {state.error && <p className="text-sm text-error">{state.error}</p>}
-          {state.success && <p className="text-sm text-green-700">更新しました</p>}
-
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              disabled={pending || filteredTextbooks.length === 0}
-              className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-white disabled:opacity-60"
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+          <label className="block min-w-0">
+            <span className="mb-1 block text-xs font-medium">学習日</span>
+            <input
+              type="date"
+              name="studiedOn"
+              required
+              defaultValue={log.studied_on}
+              max={todayKey}
+              className={fieldClass}
+            />
+          </label>
+          <label className="block min-w-0">
+            <span className="mb-1 block text-xs font-medium">科目</span>
+            <select
+              name="subject"
+              required
+              value={selectedSubject}
+              onChange={(e) => setSelectedSubject(e.target.value)}
+              className={fieldClass}
             >
-              {pending ? '保存中…' : '保存'}
-            </button>
-            <button
-              type="button"
-              onClick={onCancel}
-              className="text-sm text-muted hover:text-foreground"
+              {profileSubjects.map((subject) => (
+                <option key={subject} value={subject}>
+                  {subject}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block min-w-0">
+            <span className="mb-1 block text-xs font-medium">教材</span>
+            <select
+              name="textbookId"
+              required
+              key={selectedSubject}
+              defaultValue={defaultTextbookId}
+              className={fieldClass}
             >
-              キャンセル
-            </button>
-          </div>
-        </form>
-      </td>
-    </tr>
+              {filteredTextbooks.map((book) => (
+                <option key={book.id} value={book.id}>
+                  {book.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block min-w-0">
+            <span className="mb-1 block text-xs font-medium">学習時間（分）</span>
+            <input
+              type="number"
+              name="durationMinutes"
+              min={1}
+              max={MAX_STUDY_DURATION_MINUTES}
+              required
+              defaultValue={log.duration_minutes}
+              className={fieldClass}
+            />
+          </label>
+          <label className="block min-w-0 sm:col-span-2">
+            <span className="mb-1 block text-xs font-medium">内容</span>
+            <input
+              type="text"
+              name="content"
+              defaultValue={log.content}
+              className={fieldClass}
+            />
+          </label>
+        </div>
+
+        {state.error && <p className="text-sm text-error">{state.error}</p>}
+
+        <div className="flex gap-3">
+          <button
+            type="submit"
+            disabled={pending || filteredTextbooks.length === 0}
+            className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-white disabled:opacity-60"
+          >
+            {pending ? '保存中…' : '保存'}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-sm text-muted hover:text-foreground"
+          >
+            キャンセル
+          </button>
+        </div>
+      </form>
+    </div>
   )
 }
 
@@ -170,53 +174,43 @@ export function StudyLogTable({
   emptyMessage = '学習記録はまだありません。',
 }: StudyLogTableProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
+  const editingLog = editingId ? logs.find((log) => log.id === editingId) : null
+  const visibleLogs = editingId ? logs.filter((log) => log.id !== editingId) : logs
 
   if (logs.length === 0) {
     return <p className="py-8 text-center text-sm text-muted">{emptyMessage}</p>
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-left text-sm">
-        <thead>
-          <tr className="border-b border-border text-muted">
-            {!hideStudiedOnColumn && <th className="px-3 py-2 font-medium">学習日</th>}
-            <th className="px-3 py-2 font-medium">科目</th>
-            <th className="px-3 py-2 font-medium">テキスト</th>
-            <th className="px-3 py-2 font-medium">内容</th>
-            <th className="px-3 py-2 font-medium">時間</th>
-            <th className="px-3 py-2 font-medium">登録日時</th>
-            {editable && <th className="px-3 py-2 font-medium" />}
-          </tr>
-        </thead>
-        <tbody>
-          {logs.map((log) =>
-            editingId === log.id && editable ? (
-              <StudyLogEditRow
-                key={log.id}
-                log={log}
-                profileSubjects={profileSubjects}
-                textbooks={textbooks}
-                hideStudiedOnColumn={hideStudiedOnColumn}
-                onCancel={() => setEditingId(null)}
-              />
-            ) : (
+    <div className="space-y-4">
+      {editingLog && editable && (
+        <StudyLogEditPanel
+          log={editingLog}
+          profileSubjects={profileSubjects}
+          textbooks={textbooks}
+          onCancel={() => setEditingId(null)}
+        />
+      )}
+
+      <div className="overflow-x-auto">
+        <table className="w-full table-fixed text-left text-sm">
+          <thead>
+            <tr className="border-b border-border text-muted">
+              {editable && <th className="w-20 px-2 py-2 font-medium">操作</th>}
+              {!hideStudiedOnColumn && <th className="w-24 px-2 py-2 font-medium">学習日</th>}
+              <th className="w-16 px-2 py-2 font-medium">科目</th>
+              <th className="px-2 py-2 font-medium">テキスト</th>
+              <th className="px-2 py-2 font-medium">内容</th>
+              <th className="w-16 px-2 py-2 font-medium">時間</th>
+              <th className="w-28 px-2 py-2 font-medium">登録日時</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleLogs.map((log) => (
               <tr key={log.id} className="border-b border-border/60">
-                {!hideStudiedOnColumn && (
-                  <td className="px-3 py-3 whitespace-nowrap">{formatStudiedOn(log.studied_on)}</td>
-                )}
-                <td className="px-3 py-3 whitespace-nowrap">{log.subject}</td>
-                <td className="px-3 py-3">{log.textbook_name}</td>
-                <td className="px-3 py-3 text-muted">{log.content || '—'}</td>
-                <td className="px-3 py-3 whitespace-nowrap font-medium">
-                  {formatDuration(log.duration_minutes)}
-                </td>
-                <td className="px-3 py-3 whitespace-nowrap text-muted">
-                  {formatDateTime(log.created_at)}
-                </td>
                 {editable && (
-                  <td className="px-3 py-3 whitespace-nowrap">
-                    <div className="flex gap-3">
+                  <td className="px-2 py-3 whitespace-nowrap">
+                    <div className="flex flex-col gap-1">
                       <button
                         type="button"
                         onClick={() => setEditingId(log.id)}
@@ -233,11 +227,29 @@ export function StudyLogTable({
                     </div>
                   </td>
                 )}
+                {!hideStudiedOnColumn && (
+                  <td className="px-2 py-3 whitespace-nowrap text-xs">
+                    {formatStudiedOn(log.studied_on)}
+                  </td>
+                )}
+                <td className="px-2 py-3 whitespace-nowrap text-xs">{log.subject}</td>
+                <td className="max-w-0 truncate px-2 py-3" title={log.textbook_name}>
+                  {log.textbook_name}
+                </td>
+                <td className="max-w-0 truncate px-2 py-3 text-muted" title={log.content || undefined}>
+                  {log.content || '—'}
+                </td>
+                <td className="px-2 py-3 whitespace-nowrap text-xs font-medium">
+                  {formatDuration(log.duration_minutes)}
+                </td>
+                <td className="px-2 py-3 whitespace-nowrap text-xs text-muted">
+                  {formatDateTime(log.created_at)}
+                </td>
               </tr>
-            ),
-          )}
-        </tbody>
-      </table>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

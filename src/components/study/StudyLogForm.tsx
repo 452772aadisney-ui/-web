@@ -3,7 +3,8 @@
 import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import { createStudyLog, type StudyLogActionState } from '@/app/study/actions'
-import { getTodayDateKey } from '@/lib/study/dates'
+import { getJstDateKey } from '@/lib/study/dates'
+import { MAX_STUDY_DURATION_MINUTES } from '@/lib/study/validation'
 import { filterTextbooksBySubject } from '@/components/textbooks/TextbookManager'
 import type { Textbook } from '@/types/textbook'
 
@@ -23,6 +24,7 @@ interface StudyLogFormProps {
 export function StudyLogForm({ profileSubjects, textbooks }: StudyLogFormProps) {
   const [state, formAction, pending] = useActionState(createStudyLog, initialState)
   const [selectedSubject, setSelectedSubject] = useState('')
+  const todayKey = getJstDateKey()
 
   const filteredTextbooks = filterTextbooksBySubject(textbooks, selectedSubject)
 
@@ -48,7 +50,8 @@ export function StudyLogForm({ profileSubjects, textbooks }: StudyLogFormProps) 
           <input
             type="date"
             name="studiedOn"
-            defaultValue={getTodayDateKey()}
+            defaultValue={todayKey}
+            max={todayKey}
             required
             className="study-date-input px-3 py-2.5 outline-none"
           />
@@ -127,11 +130,15 @@ export function StudyLogForm({ profileSubjects, textbooks }: StudyLogFormProps) 
           type="number"
           name="durationMinutes"
           min={1}
+          max={MAX_STUDY_DURATION_MINUTES}
           step={1}
           required
           placeholder="60"
           className={fieldClass}
         />
+        <span className="mt-1 block text-xs text-muted">
+          1〜{MAX_STUDY_DURATION_MINUTES}分の整数
+        </span>
       </label>
 
       {state.error && (

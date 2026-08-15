@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState } from 'react'
+import { useActionState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { updateProfile, type ProfileActionState } from '@/app/profile/actions'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
 import { SubjectCheckboxGrid } from '@/components/subjects/SubjectCheckboxGrid'
@@ -15,7 +16,14 @@ interface ProfileFormProps {
 }
 
 export function ProfileForm({ profile, backHref }: ProfileFormProps) {
+  const router = useRouter()
   const [state, formAction, pending] = useActionState(updateProfile, initialState)
+
+  useEffect(() => {
+    if (state.success) {
+      router.push(backHref)
+    }
+  }, [state.success, backHref, router])
 
   const targetSchoolsText = profile.target_schools.join('\n')
   const selectedSubjects = new Set(profile.subjects)
@@ -68,12 +76,6 @@ export function ProfileForm({ profile, backHref }: ProfileFormProps) {
       {state.error && (
         <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-error" role="alert">
           {state.error}
-        </p>
-      )}
-
-      {state.success && (
-        <p className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
-          プロフィールを保存しました
         </p>
       )}
 

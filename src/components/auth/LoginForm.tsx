@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import { signIn, type AuthActionState } from '@/app/auth/actions'
 import { AuthCard, AuthLink } from '@/components/auth/AuthCard'
+import { PasswordInput } from '@/components/auth/PasswordInput'
 
 const initialState: AuthActionState = {}
 
@@ -38,17 +39,13 @@ export function LoginForm({ registered }: { registered?: boolean }) {
           />
         </label>
 
-        <label className="block">
-          <span className="mb-1.5 block text-sm font-medium">パスワード</span>
-          <input
-            type="password"
-            name="password"
-            autoComplete="current-password"
-            required
-            placeholder="パスワード"
-            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-          />
-        </label>
+        <PasswordInput
+          name="password"
+          label="パスワード"
+          autoComplete="current-password"
+          required
+          placeholder="パスワード"
+        />
 
         <p className="text-right text-sm">
           <AuthLink href="/forgot-password">パスワードを忘れた方</AuthLink>

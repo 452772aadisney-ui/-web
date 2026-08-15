@@ -37,13 +37,20 @@ export function DailyStudyBarChart({ data, subjects }: DailyStudyBarChartProps) 
   return (
     <div className="h-72 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <BarChart data={data} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
           <XAxis dataKey="label" tick={{ fontSize: 12 }} stroke="#64748b" />
           <YAxis
+            width={32}
             tick={{ fontSize: 12 }}
             stroke="#64748b"
-            label={{ value: '分', angle: -90, position: 'insideLeft', offset: 10 }}
+            label={{
+              value: '分',
+              angle: -90,
+              position: 'insideTopLeft',
+              offset: 0,
+              style: { fontSize: 11, fill: '#64748b' },
+            }}
           />
           <Tooltip
             formatter={(value, name) => [

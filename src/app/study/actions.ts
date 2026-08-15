@@ -2,6 +2,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { getJstDateKey } from '@/lib/study/dates'
+import {
+  validateStudiedOn,
+  validateStudyDurationMinutes,
+} from '@/lib/study/validation'
 
 export type StudyLogActionState = {
   error?: string
@@ -50,9 +55,15 @@ async function validateAndResolveStudyLog(
     return { error: '選択した科目に対応する教材を選んでください' as const }
   }
 
+  const studiedOnError = validateStudiedOn(studiedOn, getJstDateKey())
+  if (studiedOnError) {
+    return { error: studiedOnError }
+  }
+
   const durationMinutes = Number(durationRaw)
-  if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
-    return { error: '学習時間は1分以上の整数で入力してください' as const }
+  const durationError = validateStudyDurationMinutes(durationMinutes)
+  if (durationError) {
+    return { error: durationError }
   }
 
   return {
