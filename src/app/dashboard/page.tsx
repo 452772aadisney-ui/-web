@@ -11,6 +11,8 @@ import { fetchUnreadStudyFeedbackCount } from '@/lib/study/feedback-queries'
 import { fetchUnseenTextbookCount } from '@/lib/textbooks/catalog-queries'
 import { getCoachingAlertState, getNextCoachingBooking } from '@/lib/coaching/alert'
 import { fetchCoachingBookingsForStudent } from '@/lib/coaching/queries'
+import { isKisotsuGradeTag } from '@/lib/tags/grade-order'
+import { fetchGradeTagNameForProfile } from '@/lib/tags/queries'
 
 export default async function StudentDashboardPage() {
   const supabase = await createClient()
@@ -62,6 +64,10 @@ export default async function StudentDashboardPage() {
         ])
       : [0, 0, 0, 0]
 
+  const gradeTagName =
+    profile.role === 'student' ? await fetchGradeTagNameForProfile(profile.id) : null
+  const isKisotsuStudent = isKisotsuGradeTag(gradeTagName)
+
   return (
     <StudentPageShell title="マイページ">
       <div className="space-y-6">
@@ -73,9 +79,10 @@ export default async function StudentDashboardPage() {
           unreadAnnouncementCount={unreadAnnouncementCount}
           unreadChatCount={unreadChatCount}
           unseenTextbookCount={unseenTextbookCount}
+          hideClassSchedule={isKisotsuStudent}
         />
 
-        {profile.role === 'student' && profile.student_code && (
+        {profile.role === 'student' && profile.student_code && !isKisotsuStudent && (
           <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
             <h2 className="mb-4 text-lg font-bold">生徒ID（QRコード）</h2>
             <StudentQrCode studentCode={profile.student_code} />

@@ -72,6 +72,7 @@ interface MyPageActionsProps {
   unreadAnnouncementCount?: number
   unreadChatCount?: number
   unseenTextbookCount?: number
+  hideClassSchedule?: boolean
 }
 
 export function MyPageActions({
@@ -80,6 +81,7 @@ export function MyPageActions({
   unreadAnnouncementCount = 0,
   unreadChatCount = 0,
   unseenTextbookCount = 0,
+  hideClassSchedule = false,
 }: MyPageActionsProps) {
   const badgeCounts: Record<MenuBadgeKey, number> = {
     studyHistory: unreadStudyFeedbackCount,
@@ -87,6 +89,10 @@ export function MyPageActions({
     chat: unreadChatCount,
     bookshelf: unseenTextbookCount,
   }
+
+  const visibleMenuActions = hideClassSchedule
+    ? iconMenuActions.filter((action) => action.label !== '授業予定')
+    : iconMenuActions
 
   return (
     <div className="space-y-4">
@@ -133,7 +139,7 @@ export function MyPageActions({
       />
 
       <div className="grid grid-cols-3 gap-3">
-        {iconMenuActions.map((action) => (
+        {visibleMenuActions.map((action) => (
           <MyPageIconMenuButton
             key={action.href}
             href={action.href}

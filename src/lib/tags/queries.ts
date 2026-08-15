@@ -67,6 +67,11 @@ export async function fetchGradeTagNamesByStudentId(): Promise<Map<string, strin
   return map
 }
 
+export async function fetchGradeTagNameForProfile(profileId: string): Promise<string | null> {
+  const tags = await fetchTagsForProfile(profileId)
+  return tags.find((tag) => tag.category === '学年')?.name ?? null
+}
+
 export async function resolveGradeTagId(gradeTagName: string): Promise<string | null> {
   const supabase = await createClient()
   const { data } = await supabase
