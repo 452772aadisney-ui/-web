@@ -21,7 +21,7 @@ export default async function StudentStudyRecordPage() {
         <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-bold">学習を記録する</h2>
           <p className="mt-1 text-sm text-muted">
-            プロフィールの使用科目と登録済み教材から選んで記録します。
+            プロフィールの使用科目と登録済み教材から選んで記録します。科目は本棚と同じ区分（英語・数学・現代文など）で表示されます。
           </p>
           <div className="mt-6">
             <StudyLogForm profileSubjects={profileSubjects} textbooks={textbooks} />

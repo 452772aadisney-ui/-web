@@ -1,5 +1,10 @@
 'use server'
 
+import {
+  filterTextbooksByStudyCategory,
+  isStudySubjectCategoryLabel,
+  profileIncludesStudyCategory,
+} from '@/lib/constants/textbook-subject-categories'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { getJstDateKey } from '@/lib/study/dates'
@@ -36,7 +41,7 @@ async function validateAndResolveStudyLog(
 
   const profileSubjects = profile?.subjects ?? []
 
-  if (!profileSubjects.includes(subject)) {
+  if (!isStudySubjectCategoryLabel(subject) || !profileIncludesStudyCategory(profileSubjects, subject)) {
     return { error: 'プロフィールで選択した科目のみ記録できます' as const }
   }
 
@@ -51,7 +56,7 @@ async function validateAndResolveStudyLog(
     return { error: '教材を正しく選択してください' as const }
   }
 
-  if (!textbook.subjects.includes(subject)) {
+  if (!filterTextbooksByStudyCategory([textbook], subject).length) {
     return { error: '選択した科目に対応する教材を選んでください' as const }
   }
 

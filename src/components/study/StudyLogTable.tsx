@@ -3,7 +3,11 @@
 import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { deleteStudyLog, updateStudyLog, type StudyLogActionState } from '@/app/study/actions'
-import { filterTextbooksBySubject } from '@/components/textbooks/TextbookManager'
+import {
+  filterTextbooksByStudyCategory,
+  getStudySubjectCategoriesForProfile,
+  resolveStudySubjectCategory,
+} from '@/lib/constants/textbook-subject-categories'
 import { formatDuration } from '@/lib/study/chart-data'
 import { getJstDateKey } from '@/lib/study/dates'
 import { MAX_STUDY_DURATION_MINUTES } from '@/lib/study/validation'
@@ -55,9 +59,15 @@ function StudyLogEditPanel({
 }) {
   const router = useRouter()
   const [state, formAction, pending] = useActionState(updateStudyLog, initialState)
-  const [selectedSubject, setSelectedSubject] = useState(log.subject)
+  const studySubjectCategories = getStudySubjectCategoriesForProfile(profileSubjects)
+  const initialSubject = (() => {
+    const resolved = resolveStudySubjectCategory(log.subject)
+    if (resolved && studySubjectCategories.includes(resolved)) return resolved
+    return studySubjectCategories[0] ?? ''
+  })()
+  const [selectedSubject, setSelectedSubject] = useState<string>(initialSubject)
   const todayKey = getJstDateKey()
-  const filteredTextbooks = filterTextbooksBySubject(textbooks, selectedSubject)
+  const filteredTextbooks = filterTextbooksByStudyCategory(textbooks, selectedSubject)
   const defaultTextbookId =
     log.textbook_id && filteredTextbooks.some((b) => b.id === log.textbook_id)
       ? log.textbook_id
@@ -97,7 +107,7 @@ function StudyLogEditPanel({
               onChange={(e) => setSelectedSubject(e.target.value)}
               className={fieldClass}
             >
-              {profileSubjects.map((subject) => (
+              {studySubjectCategories.map((subject) => (
                 <option key={subject} value={subject}>
                   {subject}
                 </option>

@@ -32,3 +32,46 @@ export function catalogMatchesCategory(
   if (tags.length === 0) return false
   return tags.some((tag) => catalogSubjects.includes(tag))
 }
+
+export function isStudySubjectCategoryLabel(
+  value: string,
+): value is TextbookSubjectCategoryLabel {
+  return TEXTBOOK_SUBJECT_CATEGORIES.some((category) => category.label === value)
+}
+
+/** プロフィールの使用科目から、学習記録用の科目カテゴリ一覧を返す */
+export function getStudySubjectCategoriesForProfile(
+  profileSubjects: string[],
+): TextbookSubjectCategoryLabel[] {
+  return TEXTBOOK_SUBJECT_CATEGORIES.filter((category) =>
+    category.subjects.some((tag) => profileSubjects.includes(tag)),
+  ).map((category) => category.label)
+}
+
+/** 保存済みの科目名（詳細タグ含む）を学習記録用カテゴリに変換 */
+export function resolveStudySubjectCategory(
+  subject: string,
+): TextbookSubjectCategoryLabel | null {
+  if (isStudySubjectCategoryLabel(subject)) return subject
+
+  const category = TEXTBOOK_SUBJECT_CATEGORIES.find((item) =>
+    (item.subjects as readonly string[]).includes(subject),
+  )
+  return category?.label ?? null
+}
+
+export function profileIncludesStudyCategory(
+  profileSubjects: string[],
+  categoryLabel: string,
+): boolean {
+  const tags = getSubjectTagsForCategory(categoryLabel)
+  return tags.some((tag) => profileSubjects.includes(tag))
+}
+
+export function filterTextbooksByStudyCategory<T extends { subjects: string[] }>(
+  textbooks: T[],
+  categoryLabel: string,
+): T[] {
+  if (!categoryLabel) return []
+  return textbooks.filter((book) => catalogMatchesCategory(book.subjects, categoryLabel))
+}

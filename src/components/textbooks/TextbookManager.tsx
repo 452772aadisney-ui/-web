@@ -15,6 +15,7 @@ import {
   TextbookDateFields,
   UsageTagFields,
 } from '@/components/textbooks/TextbookFormFields'
+import { filterTextbooksByStudyCategory } from '@/lib/constants/textbook-subject-categories'
 import { formatTextbookPeriod } from '@/lib/textbooks/format'
 import type { Textbook } from '@/types/textbook'
 
@@ -217,8 +218,7 @@ export function TextbookManager({
 
 export function filterTextbooksBySubject(
   textbooks: Textbook[],
-  subject: string,
+  categoryLabel: string,
 ): Textbook[] {
-  if (!subject) return []
-  return textbooks.filter((book) => book.subjects.includes(subject))
+  return filterTextbooksByStudyCategory(textbooks, categoryLabel)
 }

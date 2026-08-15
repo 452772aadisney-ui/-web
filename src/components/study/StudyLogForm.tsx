@@ -3,9 +3,12 @@
 import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import { createStudyLog, type StudyLogActionState } from '@/app/study/actions'
+import {
+  filterTextbooksByStudyCategory,
+  getStudySubjectCategoriesForProfile,
+} from '@/lib/constants/textbook-subject-categories'
 import { getJstDateKey } from '@/lib/study/dates'
 import { MAX_STUDY_DURATION_MINUTES } from '@/lib/study/validation'
-import { filterTextbooksBySubject } from '@/components/textbooks/TextbookManager'
 import type { Textbook } from '@/types/textbook'
 
 const initialState: StudyLogActionState = {}
@@ -26,9 +29,10 @@ export function StudyLogForm({ profileSubjects, textbooks }: StudyLogFormProps) 
   const [selectedSubject, setSelectedSubject] = useState('')
   const todayKey = getJstDateKey()
 
-  const filteredTextbooks = filterTextbooksBySubject(textbooks, selectedSubject)
+  const studySubjectCategories = getStudySubjectCategoriesForProfile(profileSubjects)
+  const filteredTextbooks = filterTextbooksByStudyCategory(textbooks, selectedSubject)
 
-  if (profileSubjects.length === 0) {
+  if (studySubjectCategories.length === 0) {
     return (
       <div className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
         使用科目が未設定です。{' '}
@@ -72,7 +76,7 @@ export function StudyLogForm({ profileSubjects, textbooks }: StudyLogFormProps) 
           <option value="" disabled>
             選択してください
           </option>
-          {profileSubjects.map((subject) => (
+          {studySubjectCategories.map((subject) => (
             <option key={subject} value={subject}>
               {subject}
             </option>
