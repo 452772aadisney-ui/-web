@@ -15,11 +15,13 @@ export const STUDENT_HAMBURGER_ITEMS = [
   { href: '/dashboard/coaching', label: 'コーチング' },
   { href: '/dashboard/announcements', label: 'お知らせ' },
   { href: '/dashboard/chat', label: 'メッセージ' },
+  { href: '/dashboard/faq', label: 'よくある質問' },
   { href: '/dashboard/info', label: '生徒情報' },
 ] as const
 
 export const ADMIN_HAMBURGER_ITEMS = [
   { href: '/admin', label: 'マイページ' },
+  { href: '/admin/faq', label: 'FAQ管理' },
   { href: '/admin/tags', label: 'タグ管理' },
   { href: '/admin/profile', label: 'プロフィールを編集' },
 ] as const
