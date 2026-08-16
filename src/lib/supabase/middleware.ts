@@ -19,6 +19,13 @@ async function getProfileRole(
 }
 
 export async function updateSession(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+
+  // Vercel Cron など、未ログインで叩く API は認証リダイレクトの対象外
+  if (pathname.startsWith('/api/cron')) {
+    return NextResponse.next({ request })
+  }
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -44,7 +51,6 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const pathname = request.nextUrl.pathname
   const isAuthCallback = pathname.startsWith('/auth/callback')
 
   if (!user && !isAuthPath(pathname) && !isAuthCallback) {
