@@ -185,5 +185,4 @@ export async function markFaqIntroSeen(): Promise<void> {
     .is('faq_intro_seen_at', null)
 
   revalidatePath('/dashboard')
-  revalidatePath('/dashboard/faq')
 }

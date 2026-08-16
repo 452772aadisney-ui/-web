@@ -34,12 +34,7 @@ export default async function BookshelfPage({
       <div className="space-y-6">
         <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-bold">登録済みの参考書</h2>
-              <p className="mt-1 text-sm text-muted">
-                科目を選んで、登録されている参考書を確認できます。
-              </p>
-            </div>
+            <h2 className="text-lg font-bold">登録済みの参考書</h2>
             <Link
               href={`/dashboard/textbooks/register?subject=${encodeURIComponent(initialSubject)}`}
               className="rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-background"

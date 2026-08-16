@@ -1,9 +1,8 @@
 import { redirect } from 'next/navigation'
-import { markFaqIntroSeen } from '@/app/faq/actions'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { StudentFaqList } from '@/components/faq/StudentFaqList'
-import { fetchPublishedFaq } from '@/lib/faq/queries'
+import { fetchPublishedFaq, markFaqIntroSeenForProfile } from '@/lib/faq/queries'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,7 +12,7 @@ export default async function StudentFaqPage() {
   if (!profile) redirect('/login')
   if (profile.role !== 'student') redirect('/admin')
 
-  await markFaqIntroSeen()
+  await markFaqIntroSeenForProfile(profile.id)
 
   const categories = await fetchPublishedFaq()
 

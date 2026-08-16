@@ -65,3 +65,13 @@ export async function fetchFaqForAdmin(): Promise<FaqCategoryWithItems[]> {
     false,
   )
 }
+
+export async function markFaqIntroSeenForProfile(userId: string): Promise<void> {
+  const supabase = await createClient()
+
+  await supabase
+    .from('profiles')
+    .update({ faq_intro_seen_at: new Date().toISOString() })
+    .eq('id', userId)
+    .is('faq_intro_seen_at', null)
+}

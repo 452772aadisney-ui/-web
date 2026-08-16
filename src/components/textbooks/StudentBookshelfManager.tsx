@@ -23,10 +23,11 @@ import {
   type TextbookSubjectCategoryLabel,
 } from '@/lib/constants/textbook-subject-categories'
 import { formatTextbookPeriod } from '@/lib/textbooks/format'
-import { cn } from '@/lib/utils'
 import type { Textbook, TextbookCatalog } from '@/types/textbook'
 
 const initialState: TextbookActionState = {}
+const selectClass =
+  'w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm'
 
 type RegisterMode = 'catalog' | 'create'
 
@@ -41,7 +42,7 @@ interface StudentBookshelfManagerProps {
   variant: 'list' | 'register'
 }
 
-function SubjectCategoryButtonGrid({
+function SubjectCategorySelect({
   categories,
   selectedSubject,
   onSelect,
@@ -53,26 +54,20 @@ function SubjectCategoryButtonGrid({
   if (categories.length === 0) return null
 
   return (
-    <section className="space-y-3">
-      <h3 className="text-sm font-bold">科目を選択</h3>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
+    <label className="block">
+      <span className="mb-1.5 block text-sm font-medium">科目</span>
+      <select
+        value={selectedSubject}
+        onChange={(event) => onSelect(event.target.value as TextbookSubjectCategoryLabel)}
+        className={selectClass}
+      >
         {categories.map((category) => (
-          <button
-            key={category}
-            type="button"
-            onClick={() => onSelect(category)}
-            className={cn(
-              'flex h-14 w-full items-center justify-center rounded-lg px-2 text-center text-xs leading-tight sm:text-sm',
-              selectedSubject === category
-                ? 'bg-primary text-white'
-                : 'border border-border bg-background hover:bg-card',
-            )}
-          >
+          <option key={category} value={category}>
             {category}
-          </button>
+          </option>
         ))}
-      </div>
-    </section>
+      </select>
+    </label>
   )
 }
 
@@ -176,7 +171,7 @@ function CatalogRegisterForm({
 
   return (
     <div className="space-y-4">
-      <SubjectCategoryButtonGrid
+      <SubjectCategorySelect
         categories={availableCategories}
         selectedSubject={categoryLabel}
         onSelect={switchSubject}
@@ -415,7 +410,7 @@ function StudentTextbookListWithCategories({
 
   return (
     <div className="space-y-6">
-      <SubjectCategoryButtonGrid
+      <SubjectCategorySelect
         categories={availableCategories}
         selectedSubject={selectedSubject}
         onSelect={switchSubject}
