@@ -3,21 +3,31 @@ import { redirect } from 'next/navigation'
 import { requireProfile } from '@/app/profile/actions'
 import { StudentBookshelfManager } from '@/components/textbooks/StudentBookshelfManager'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
+import { resolveInitialSubjectCategoryForProfile } from '@/lib/constants/textbook-subject-categories'
 import { markTextbooksAsSeen } from '@/lib/textbooks/catalog-queries'
 import { fetchTextbooksForStudent } from '@/lib/study/queries'
 
-export default async function BookshelfPage() {
+export default async function BookshelfPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ subject?: string }>
+}) {
   const profile = await requireProfile()
 
   if (profile.role !== 'student') {
     redirect('/dashboard')
   }
 
+  const params = await searchParams
   const textbooks = await fetchTextbooksForStudent(profile.id)
 
   await markTextbooksAsSeen(profile.id)
 
   const profileSubjects = profile.subjects ?? []
+  const initialSubject = resolveInitialSubjectCategoryForProfile(
+    profileSubjects,
+    params.subject,
+  )
 
   return (
     <StudentPageShell title="本棚" backHref="/dashboard" backLabel="マイページ">
@@ -26,10 +36,12 @@ export default async function BookshelfPage() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold">登録済みの参考書</h2>
-              <p className="mt-1 text-sm text-muted">現在登録されている参考書の一覧です。</p>
+              <p className="mt-1 text-sm text-muted">
+                科目を選んで、登録されている参考書を確認できます。
+              </p>
             </div>
             <Link
-              href="/dashboard/textbooks/register"
+              href={`/dashboard/textbooks/register?subject=${encodeURIComponent(initialSubject)}`}
               className="rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-background"
             >
               教材を登録
@@ -44,6 +56,7 @@ export default async function BookshelfPage() {
               catalog={[]}
               registeredCatalogIds={[]}
               editHref="/dashboard/profile"
+              initialSubject={initialSubject}
             />
           </div>
         </section>

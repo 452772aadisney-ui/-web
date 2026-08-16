@@ -75,3 +75,19 @@ export function filterTextbooksByStudyCategory<T extends { subjects: string[] }>
   if (!categoryLabel) return []
   return textbooks.filter((book) => catalogMatchesCategory(book.subjects, categoryLabel))
 }
+
+/** URL パラメータとプロフィール科目から、初期表示する科目カテゴリを決める */
+export function resolveInitialSubjectCategoryForProfile(
+  profileSubjects: string[],
+  param?: string,
+): TextbookSubjectCategoryLabel {
+  const available = getStudySubjectCategoriesForProfile(profileSubjects)
+  if (
+    param &&
+    isStudySubjectCategoryLabel(param) &&
+    profileIncludesStudyCategory(profileSubjects, param)
+  ) {
+    return param
+  }
+  return available[0] ?? TEXTBOOK_SUBJECT_CATEGORIES[0].label
+}

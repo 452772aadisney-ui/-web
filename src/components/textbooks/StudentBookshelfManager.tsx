@@ -17,10 +17,13 @@ import {
   inputClass,
 } from '@/components/textbooks/TextbookFormFields'
 import {
-  TEXTBOOK_SUBJECT_CATEGORIES,
   catalogMatchesCategory,
+  filterTextbooksByStudyCategory,
+  getStudySubjectCategoriesForProfile,
+  type TextbookSubjectCategoryLabel,
 } from '@/lib/constants/textbook-subject-categories'
 import { formatTextbookPeriod } from '@/lib/textbooks/format'
+import { cn } from '@/lib/utils'
 import type { Textbook, TextbookCatalog } from '@/types/textbook'
 
 const initialState: TextbookActionState = {}
@@ -34,7 +37,43 @@ interface StudentBookshelfManagerProps {
   catalog: TextbookCatalog[]
   registeredCatalogIds: string[]
   editHref?: string
+  initialSubject: TextbookSubjectCategoryLabel
   variant: 'list' | 'register'
+}
+
+function SubjectCategoryButtonGrid({
+  categories,
+  selectedSubject,
+  onSelect,
+}: {
+  categories: TextbookSubjectCategoryLabel[]
+  selectedSubject: TextbookSubjectCategoryLabel
+  onSelect: (subject: TextbookSubjectCategoryLabel) => void
+}) {
+  if (categories.length === 0) return null
+
+  return (
+    <section className="space-y-3">
+      <h3 className="text-sm font-bold">科目を選択</h3>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
+        {categories.map((category) => (
+          <button
+            key={category}
+            type="button"
+            onClick={() => onSelect(category)}
+            className={cn(
+              'flex h-14 w-full items-center justify-center rounded-lg px-2 text-center text-xs leading-tight sm:text-sm',
+              selectedSubject === category
+                ? 'bg-primary text-white'
+                : 'border border-border bg-background hover:bg-card',
+            )}
+          >
+            {category}
+          </button>
+        ))}
+      </div>
+    </section>
+  )
 }
 
 function TextbookEditForm({
@@ -92,21 +131,35 @@ function TextbookEditForm({
 
 function CatalogRegisterForm({
   studentId,
+  profileSubjects,
   catalog,
   registeredCatalogIds,
+  initialSubject,
 }: {
   studentId: string
+  profileSubjects: string[]
   catalog: TextbookCatalog[]
   registeredCatalogIds: string[]
+  initialSubject: TextbookSubjectCategoryLabel
 }) {
+  const router = useRouter()
+  const availableCategories = getStudySubjectCategoriesForProfile(profileSubjects)
   const [state, formAction, pending] = useActionState(
     addTextbookFromCatalog.bind(null, studentId),
     initialState,
   )
-  const [categoryLabel, setCategoryLabel] = useState<string>(
-    TEXTBOOK_SUBJECT_CATEGORIES[0]?.label ?? '',
+  const [categoryLabel, setCategoryLabel] = useState<TextbookSubjectCategoryLabel>(() =>
+    availableCategories.includes(initialSubject) ? initialSubject : availableCategories[0]!,
   )
   const [catalogId, setCatalogId] = useState('')
+
+  function switchSubject(subject: TextbookSubjectCategoryLabel) {
+    setCategoryLabel(subject)
+    setCatalogId('')
+    const params = new URLSearchParams()
+    params.set('subject', subject)
+    router.replace(`/dashboard/textbooks/register?${params.toString()}`, { scroll: false })
+  }
 
   const availableCatalog = useMemo(() => {
     const registered = new Set(registeredCatalogIds)
@@ -122,26 +175,15 @@ function CatalogRegisterForm({
   const selectedCatalog = catalog.find((item) => item.id === catalogId) ?? null
 
   return (
-    <form action={formAction} className="space-y-4 rounded-lg border border-border bg-background p-4">
-      <h3 className="font-medium">リストから選ぶ</h3>
+    <div className="space-y-4">
+      <SubjectCategoryButtonGrid
+        categories={availableCategories}
+        selectedSubject={categoryLabel}
+        onSelect={switchSubject}
+      />
 
-      <label className="block">
-        <span className="mb-1.5 block text-sm font-medium">科目</span>
-        <select
-          value={categoryLabel}
-          onChange={(event) => {
-            setCategoryLabel(event.target.value)
-            setCatalogId('')
-          }}
-          className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
-        >
-          {TEXTBOOK_SUBJECT_CATEGORIES.map((category) => (
-            <option key={category.label} value={category.label}>
-              {category.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <form action={formAction} className="space-y-4 rounded-lg border border-border bg-background p-4">
+      <h3 className="font-medium">リストから選ぶ</h3>
 
       <label className="block">
         <span className="mb-1.5 block text-sm font-medium">参考書</span>
@@ -186,7 +228,8 @@ function CatalogRegisterForm({
       >
         {pending ? '登録中…' : 'リストから登録'}
       </button>
-    </form>
+      </form>
+    </div>
   )
 }
 
@@ -241,18 +284,28 @@ function StudentTextbookList({
   studentId,
   profileSubjects,
   textbooks,
+  selectedSubject,
+  totalTextbookCount,
 }: {
   studentId: string
   profileSubjects: string[]
   textbooks: Textbook[]
+  selectedSubject: TextbookSubjectCategoryLabel
+  totalTextbookCount: number
 }) {
   const [editingId, setEditingId] = useState<string | null>(null)
 
   if (textbooks.length === 0) {
+    const registerHref = `/dashboard/textbooks/register?subject=${encodeURIComponent(selectedSubject)}`
+
     return (
       <div className="space-y-3">
-        <p className="text-sm text-muted">登録された参考書はまだありません。</p>
-        <Link href="/dashboard/textbooks/register" className="text-sm font-medium text-primary hover:underline">
+        <p className="text-sm text-muted">
+          {totalTextbookCount === 0
+            ? '登録された参考書はまだありません。'
+            : `${selectedSubject}の参考書はまだありません。`}
+        </p>
+        <Link href={registerHref} className="text-sm font-medium text-primary hover:underline">
           教材を登録する →
         </Link>
       </div>
@@ -313,17 +366,88 @@ function StudentTextbookList({
   )
 }
 
+function StudentTextbookListWithCategories({
+  studentId,
+  profileSubjects,
+  textbooks,
+  initialSubject,
+  editHref,
+}: {
+  studentId: string
+  profileSubjects: string[]
+  textbooks: Textbook[]
+  initialSubject: TextbookSubjectCategoryLabel
+  editHref?: string
+}) {
+  const router = useRouter()
+  const availableCategories = getStudySubjectCategoriesForProfile(profileSubjects)
+  const [selectedSubject, setSelectedSubject] = useState<TextbookSubjectCategoryLabel>(() =>
+    availableCategories.includes(initialSubject) ? initialSubject : availableCategories[0]!,
+  )
+
+  const filteredTextbooks = useMemo(
+    () => filterTextbooksByStudyCategory(textbooks, selectedSubject),
+    [textbooks, selectedSubject],
+  )
+
+  function switchSubject(subject: TextbookSubjectCategoryLabel) {
+    setSelectedSubject(subject)
+    const params = new URLSearchParams()
+    params.set('subject', subject)
+    router.replace(`/dashboard/bookshelf?${params.toString()}`, { scroll: false })
+  }
+
+  if (profileSubjects.length === 0) {
+    return (
+      <div className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        使用科目が未設定です。{' '}
+        {editHref ? (
+          <Link href={editHref} className="font-medium underline">
+            プロフィール編集
+          </Link>
+        ) : (
+          'プロフィール編集'
+        )}
+        で科目を選んでから参考書を確認してください。
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <SubjectCategoryButtonGrid
+        categories={availableCategories}
+        selectedSubject={selectedSubject}
+        onSelect={switchSubject}
+      />
+
+      <section className="space-y-3">
+        <h3 className="text-sm font-bold">{selectedSubject}の参考書</h3>
+        <StudentTextbookList
+          studentId={studentId}
+          profileSubjects={profileSubjects}
+          textbooks={filteredTextbooks}
+          selectedSubject={selectedSubject}
+          totalTextbookCount={textbooks.length}
+        />
+      </section>
+    </div>
+  )
+}
+
 function StudentTextbookRegister({
   studentId,
   profileSubjects,
   catalog,
   registeredCatalogIds,
+  initialSubject,
   editHref,
 }: {
   studentId: string
   profileSubjects: string[]
   catalog: TextbookCatalog[]
   registeredCatalogIds: string[]
+  initialSubject: TextbookSubjectCategoryLabel
   editHref?: string
 }) {
   const [mode, setMode] = useState<RegisterMode>('catalog')
@@ -374,8 +498,10 @@ function StudentTextbookRegister({
       {mode === 'catalog' ? (
         <CatalogRegisterForm
           studentId={studentId}
+          profileSubjects={profileSubjects}
           catalog={catalog}
           registeredCatalogIds={registeredCatalogIds}
+          initialSubject={initialSubject}
         />
       ) : (
         <CreateRegisterForm studentId={studentId} profileSubjects={profileSubjects} />
@@ -391,14 +517,17 @@ export function StudentBookshelfManager({
   catalog,
   registeredCatalogIds,
   editHref,
+  initialSubject,
   variant,
 }: StudentBookshelfManagerProps) {
   if (variant === 'list') {
     return (
-      <StudentTextbookList
+      <StudentTextbookListWithCategories
         studentId={studentId}
         profileSubjects={profileSubjects}
         textbooks={textbooks}
+        initialSubject={initialSubject}
+        editHref={editHref}
       />
     )
   }
@@ -409,6 +538,7 @@ export function StudentBookshelfManager({
       profileSubjects={profileSubjects}
       catalog={catalog}
       registeredCatalogIds={registeredCatalogIds}
+      initialSubject={initialSubject}
       editHref={editHref}
     />
   )
