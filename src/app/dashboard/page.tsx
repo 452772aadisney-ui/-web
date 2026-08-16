@@ -67,6 +67,8 @@ export default async function StudentDashboardPage() {
   const gradeTagName =
     profile.role === 'student' ? await fetchGradeTagNameForProfile(profile.id) : null
   const isKisotsuStudent = isKisotsuGradeTag(gradeTagName)
+  const showFaqIntro =
+    profile.role === 'student' && profile.faq_intro_seen_at == null
 
   return (
     <StudentPageShell title="マイページ">
@@ -80,6 +82,7 @@ export default async function StudentDashboardPage() {
           unreadChatCount={unreadChatCount}
           unseenTextbookCount={unseenTextbookCount}
           hideClassSchedule={isKisotsuStudent}
+          showFaqIntro={showFaqIntro}
         />
 
         {profile.role === 'student' && profile.student_code && !isKisotsuStudent && (

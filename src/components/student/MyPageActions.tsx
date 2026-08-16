@@ -3,13 +3,14 @@
 import Link from 'next/link'
 import { formatCoachingBookingDateTime } from '@/lib/coaching/format'
 import type { CoachingBookingWithDetails } from '@/types/coaching'
+import { FaqIntroDialog } from '@/components/faq/FaqIntroDialog'
 import {
   MYPAGE_MENU_ICONS,
   MyPageIconMenuButton,
   MyPagePrimaryActionButton,
 } from '@/components/student/MyPageMenuButtons'
 
-type MenuBadgeKey = 'studyHistory' | 'announcements' | 'chat' | 'bookshelf'
+type MenuBadgeKey = 'studyHistory' | 'announcements' | 'chat' | 'bookshelf' | 'faqIntro'
 
 const iconMenuActions: Array<{
   href: string
@@ -64,6 +65,12 @@ const iconMenuActions: Array<{
     iconSrc: MYPAGE_MENU_ICONS.classSchedule,
     externalConfirmMessage: '生徒web(外部リンク)を開きます',
   },
+  {
+    href: '/dashboard/faq',
+    label: 'FAQ',
+    iconSrc: MYPAGE_MENU_ICONS.faq,
+    badgeKey: 'faqIntro',
+  },
 ]
 
 interface MyPageActionsProps {
@@ -73,6 +80,7 @@ interface MyPageActionsProps {
   unreadChatCount?: number
   unseenTextbookCount?: number
   hideClassSchedule?: boolean
+  showFaqIntro?: boolean
 }
 
 export function MyPageActions({
@@ -82,12 +90,14 @@ export function MyPageActions({
   unreadChatCount = 0,
   unseenTextbookCount = 0,
   hideClassSchedule = false,
+  showFaqIntro = false,
 }: MyPageActionsProps) {
   const badgeCounts: Record<MenuBadgeKey, number> = {
     studyHistory: unreadStudyFeedbackCount,
     announcements: unreadAnnouncementCount,
     chat: unreadChatCount,
     bookshelf: unseenTextbookCount,
+    faqIntro: showFaqIntro ? 1 : 0,
   }
 
   const visibleMenuActions = hideClassSchedule
@@ -96,6 +106,8 @@ export function MyPageActions({
 
   return (
     <div className="space-y-4">
+      <FaqIntroDialog open={showFaqIntro} />
+
       {nextCoaching ? (
         <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
           <h2 className="text-center text-sm font-semibold text-muted">次回コーチング予定</h2>

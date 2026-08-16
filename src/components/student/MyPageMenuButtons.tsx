@@ -14,6 +14,7 @@ export const MYPAGE_MENU_ICONS = {
   todo: '/icons/mypage/todo.png',
   message: '/icons/mypage/message.png',
   announcements: '/icons/mypage/announcements.png',
+  faq: '/icons/mypage/faq.png',
 } as const
 
 interface MyPagePrimaryActionButtonProps {

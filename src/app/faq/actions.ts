@@ -169,3 +169,21 @@ export async function deleteFaqItem(formData: FormData): Promise<void> {
   await supabase.from('faq_items').delete().eq('id', id)
   revalidateFaqPaths()
 }
+
+export async function markFaqIntroSeen(): Promise<void> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) return
+
+  await supabase
+    .from('profiles')
+    .update({ faq_intro_seen_at: new Date().toISOString() })
+    .eq('id', user.id)
+    .is('faq_intro_seen_at', null)
+
+  revalidatePath('/dashboard')
+  revalidatePath('/dashboard/faq')
+}

@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { markFaqIntroSeen } from '@/app/faq/actions'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { StudentFaqList } from '@/components/faq/StudentFaqList'
@@ -11,6 +12,8 @@ export default async function StudentFaqPage() {
 
   if (!profile) redirect('/login')
   if (profile.role !== 'student') redirect('/admin')
+
+  await markFaqIntroSeen()
 
   const categories = await fetchPublishedFaq()
 
