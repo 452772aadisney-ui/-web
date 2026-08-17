@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { deleteStudyLog, updateStudyLog, type StudyLogActionState } from '@/app/study/actions'
 import {
-  deriveStudyCategoryFromTextbook,
+  filterTextbooksByStudyCategory,
   getStudySubjectCategoriesForProfile,
   resolveStudySubjectCategory,
 } from '@/lib/constants/textbook-subject-categories'
@@ -164,13 +164,18 @@ function StudyLogTextbookEditPanel({
 }) {
   const router = useRouter()
   const [state, formAction, pending] = useActionState(updateStudyLog, initialState)
-  const availableTextbooks = textbooks.filter(
-    (book) => deriveStudyCategoryFromTextbook(book.subjects, profileSubjects) != null,
-  )
+  const studySubjectCategories = getStudySubjectCategoriesForProfile(profileSubjects)
+  const initialSubject = (() => {
+    const resolved = resolveStudySubjectCategory(log.subject)
+    if (resolved && studySubjectCategories.includes(resolved)) return resolved
+    return studySubjectCategories[0] ?? ''
+  })()
+  const [selectedSubject, setSelectedSubject] = useState<string>(initialSubject)
+  const filteredTextbooks = filterTextbooksByStudyCategory(textbooks, selectedSubject)
   const defaultTextbookId =
-    log.textbook_id && availableTextbooks.some((book) => book.id === log.textbook_id)
+    log.textbook_id && filteredTextbooks.some((book) => book.id === log.textbook_id)
       ? log.textbook_id
-      : availableTextbooks[0]?.id ?? ''
+      : filteredTextbooks[0]?.id ?? ''
   const todayKey = getJstDateKey()
 
   useEffect(() => {
@@ -200,14 +205,31 @@ function StudyLogTextbookEditPanel({
             />
           </label>
           <label className="block min-w-0">
+            <span className="mb-1 block text-xs font-medium">科目</span>
+            <select
+              name="subject"
+              required
+              value={selectedSubject}
+              onChange={(event) => setSelectedSubject(event.target.value)}
+              className={fieldClass}
+            >
+              {studySubjectCategories.map((subject) => (
+                <option key={subject} value={subject}>
+                  {subject}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block min-w-0">
             <span className="mb-1 block text-xs font-medium">参考書</span>
             <select
               name="textbookId"
               required
+              key={selectedSubject}
               defaultValue={defaultTextbookId}
               className={fieldClass}
             >
-              {availableTextbooks.map((book) => (
+              {filteredTextbooks.map((book) => (
                 <option key={book.id} value={book.id}>
                   {book.name}
                 </option>
@@ -242,7 +264,7 @@ function StudyLogTextbookEditPanel({
         <div className="flex gap-3">
           <button
             type="submit"
-            disabled={pending || availableTextbooks.length === 0}
+            disabled={pending || filteredTextbooks.length === 0}
             className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-white disabled:opacity-60"
           >
             {pending ? '保存中…' : '保存'}

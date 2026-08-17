@@ -1,7 +1,6 @@
 'use server'
 
 import {
-  deriveStudyCategoryFromTextbook,
   filterTextbooksByStudyCategory,
   isStudySubjectCategoryLabel,
   profileIncludesStudyCategory,
@@ -107,7 +106,12 @@ async function validateTextbookStudyLog(
   userId: string,
   formData: FormData,
 ): Promise<{ error: string } | { data: ResolvedStudyLog }> {
+  const subject = String(formData.get('subject') ?? '').trim()
   const textbookId = String(formData.get('textbookId') ?? '').trim()
+
+  if (!subject) {
+    return { error: '科目を選択してください' }
+  }
   if (!textbookId) {
     return { error: '参考書を選択してください' }
   }
@@ -125,6 +129,10 @@ async function validateTextbookStudyLog(
 
   const profileSubjects = profile?.subjects ?? []
 
+  if (!isStudySubjectCategoryLabel(subject) || !profileIncludesStudyCategory(profileSubjects, subject)) {
+    return { error: 'プロフィールで選択した科目のみ記録できます' }
+  }
+
   const { data: textbook } = await supabase
     .from('textbooks')
     .select('id, name, subjects, student_id')
@@ -136,9 +144,8 @@ async function validateTextbookStudyLog(
     return { error: '参考書を正しく選択してください' }
   }
 
-  const subject = deriveStudyCategoryFromTextbook(textbook.subjects, profileSubjects)
-  if (!subject) {
-    return { error: '選択した参考書の科目がプロフィールと一致しません' }
+  if (!filterTextbooksByStudyCategory([textbook], subject).length) {
+    return { error: '選択した科目に対応する参考書を選んでください' }
   }
 
   return {
