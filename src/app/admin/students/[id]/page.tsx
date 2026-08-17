@@ -25,7 +25,9 @@ import { fetchHomeworkCompletionsForStudent } from '@/lib/todo/queries'
 import { getPersonName } from '@/lib/auth/display-name'
 import { AdminStudentQuizSection } from '@/components/quizzes/AdminQuizScoreTable'
 import { fetchQuizMasters, fetchStudentQuizAssignments } from '@/lib/quizzes/queries'
-import { fetchStudentTags, fetchTagIdsForProfile } from '@/lib/tags/queries'
+import { groupStudentsByGrade } from '@/lib/tags/grade-order'
+import { fetchGradeTagNamesByStudentId, fetchStudentTags, fetchTagIdsForProfile } from '@/lib/tags/queries'
+import { fetchStudentList } from '@/lib/study/queries'
 
 export default async function AdminStudentStudyPage({
   params,
@@ -49,7 +51,7 @@ export default async function AdminStudentStudyPage({
     notFound()
   }
 
-  const [logs, textbooks, homework, completions, allTags, assignedTagIds, quizMasters, quizAssignments] =
+  const [logs, textbooks, homework, completions, allTags, assignedTagIds, quizMasters, quizAssignments, students, gradeTagByStudentId] =
     await Promise.all([
     fetchStudyLogsForStudent(id),
     fetchTextbooksForStudent(id),
@@ -59,7 +61,11 @@ export default async function AdminStudentStudyPage({
     fetchTagIdsForProfile(id),
     fetchQuizMasters(true),
     fetchStudentQuizAssignments(id),
+    fetchStudentList(),
+    fetchGradeTagNamesByStudentId(),
   ])
+
+  const studentGroups = groupStudentsByGrade(students, gradeTagByStudentId)
 
   const { rows, subjects } = buildDailyChartData(logs, 14)
   const pieData = buildSubjectPieData(logs)
@@ -138,6 +144,7 @@ export default async function AdminStudentStudyPage({
             </p>
             <AdminStudentQuizSection
               studentId={id}
+              studentGroups={studentGroups}
               masters={quizMasters}
               assignments={quizAssignments}
             />

@@ -192,6 +192,43 @@ async function fetchStudentNames(studentIds: string[]): Promise<string[]> {
     .sort((a, b) => a.localeCompare(b, 'ja'))
 }
 
+export async function createQuizStudentCalendarEvent(input: {
+  studentName: string
+  title: string
+  subject: string
+  scheduledOn: string
+  note: string
+}): Promise<string | null> {
+  const client = getGoogleCalendarClient()
+  if (!client) {
+    console.warn('[google-calendar] credentials are not configured; quiz event skipped')
+    return null
+  }
+
+  const endDate = shiftDateKey(input.scheduledOn, 1)
+
+  try {
+    const response = await client.calendar.events.insert({
+      calendarId: client.calendarId,
+      requestBody: {
+        summary: `${input.studentName} ${input.title}`,
+        description: buildQuizEventDescription({
+          subject: input.subject,
+          studentNames: [input.studentName],
+          note: input.note,
+        }),
+        start: { date: input.scheduledOn },
+        end: { date: endDate },
+      },
+    })
+
+    return response.data.id ?? null
+  } catch (error) {
+    console.error('[google-calendar] quiz student event insert failed:', error)
+    return null
+  }
+}
+
 export async function createQuizCalendarEvent(input: {
   title: string
   subject: string

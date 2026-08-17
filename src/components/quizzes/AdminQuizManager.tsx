@@ -8,7 +8,9 @@ import {
   updateQuizMaster,
   type QuizActionState,
 } from '@/app/quizzes/actions'
+import { AdminQuizAssignmentForm } from '@/components/quizzes/AdminQuizAssignmentForm'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
+import type { StudentListGroup } from '@/lib/tags/grade-order'
 import type { QuizAssignmentListItem, QuizMaster } from '@/types/quiz'
 
 const initialState: QuizActionState = {}
@@ -95,9 +97,11 @@ function QuizMasterForm({
 export function AdminQuizManager({
   masters,
   assignments,
+  studentGroups,
 }: {
   masters: QuizMaster[]
   assignments: QuizAssignmentListItem[]
+  studentGroups: StudentListGroup[]
 }) {
   const [editingId, setEditingId] = useState<string | null>(null)
 
@@ -115,7 +119,7 @@ export function AdminQuizManager({
         <div>
           <h3 className="text-base font-bold">登録済みの小テスト</h3>
           <p className="mt-1 text-sm text-muted">
-            生徒への割り当ては生徒一覧から行います。実施記録は下の表から点数入力へ進めます。
+            一覧から編集できます。生徒への登録は下のフォームから行えます。
           </p>
         </div>
         {masters.length === 0 ? (
@@ -165,6 +169,16 @@ export function AdminQuizManager({
             ))}
           </div>
         )}
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-bold">生徒に小テストを登録</h3>
+          <p className="mt-1 text-sm text-muted">
+            小テスト・実施日・対象生徒を選んで登録します。Googleカレンダーにも反映されます。
+          </p>
+        </div>
+        <AdminQuizAssignmentForm masters={masters} studentGroups={studentGroups} />
       </section>
 
       <section className="space-y-4">
