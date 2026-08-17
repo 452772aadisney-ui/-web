@@ -8,7 +8,7 @@ import {
   saveQuizResultsBulk,
   type QuizActionState,
 } from '@/app/quizzes/actions'
-import { AdminQuizAssignmentForm } from '@/components/quizzes/AdminQuizAssignmentForm'
+import { AdminQuizRegisterForm } from '@/components/quizzes/AdminQuizRegisterForm'
 import type { StudentListGroup } from '@/lib/tags/grade-order'
 import type { QuizAssignmentDetail, StudentQuizAssignmentRow } from '@/types/quiz'
 
@@ -185,19 +185,16 @@ export function AdminQuizAssignmentScoreTable({
 export function AdminStudentQuizSection({
   studentId,
   studentGroups,
-  masters,
   assignments,
 }: {
   studentId: string
   studentGroups: StudentListGroup[]
-  masters: import('@/types/quiz').QuizMaster[]
   assignments: StudentQuizAssignmentRow[]
 }) {
   return (
     <div>
       <div className="mb-6">
-        <AdminQuizAssignmentForm
-          masters={masters}
+        <AdminQuizRegisterForm
           studentGroups={studentGroups}
           defaultSelectedStudentIds={[studentId]}
           submitLabel="この生徒に登録"

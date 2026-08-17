@@ -3,12 +3,11 @@
 import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import {
-  createQuizMaster,
   deleteQuizMaster,
   updateQuizMaster,
   type QuizActionState,
 } from '@/app/quizzes/actions'
-import { AdminQuizAssignmentForm } from '@/components/quizzes/AdminQuizAssignmentForm'
+import { AdminQuizRegisterForm } from '@/components/quizzes/AdminQuizRegisterForm'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
 import type { StudentListGroup } from '@/lib/tags/grade-order'
 import type { QuizAssignmentListItem, QuizMaster } from '@/types/quiz'
@@ -26,23 +25,22 @@ function QuizMasterForm({
   master,
   onCancel,
 }: {
-  master?: QuizMaster
+  master: QuizMaster
   onCancel?: () => void
 }) {
-  const action = master ? updateQuizMaster : createQuizMaster
-  const [state, formAction, pending] = useActionState(action, initialState)
+  const [state, formAction, pending] = useActionState(updateQuizMaster, initialState)
 
   return (
     <form action={formAction} className="space-y-3 rounded-lg border border-border bg-background p-4">
-      {master && <input type="hidden" name="id" value={master.id} />}
+      <input type="hidden" name="id" value={master.id} />
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block sm:col-span-2">
           <span className="mb-1 block text-sm font-medium">タイトル *</span>
-          <input name="title" required defaultValue={master?.title ?? ''} className={fieldClass} />
+          <input name="title" required defaultValue={master.title} className={fieldClass} />
         </label>
         <label className="block">
           <span className="mb-1 block text-sm font-medium">教科</span>
-          <select name="subject" defaultValue={master?.subject ?? ''} className={fieldClass}>
+          <select name="subject" defaultValue={master.subject ?? ''} className={fieldClass}>
             <option value="">—</option>
             {EXAM_SUBJECTS.map((subject) => (
               <option key={subject} value={subject}>
@@ -59,20 +57,18 @@ function QuizMasterForm({
             min={1}
             step={1}
             required
-            defaultValue={master?.max_score ?? 100}
+            defaultValue={master.max_score}
             className={fieldClass}
           />
         </label>
         <label className="block sm:col-span-2">
           <span className="mb-1 block text-sm font-medium">説明</span>
-          <input name="description" defaultValue={master?.description ?? ''} className={fieldClass} />
+          <input name="description" defaultValue={master.description ?? ''} className={fieldClass} />
         </label>
-        {master && (
-          <label className="flex items-center gap-2 text-sm sm:col-span-2">
-            <input type="checkbox" name="isActive" defaultChecked={master.is_active} className="accent-primary" />
-            有効
-          </label>
-        )}
+        <label className="flex items-center gap-2 text-sm sm:col-span-2">
+          <input type="checkbox" name="isActive" defaultChecked={master.is_active} className="accent-primary" />
+          有効
+        </label>
       </div>
       {state.error && <p className="text-sm text-error">{state.error}</p>}
       {state.success && <p className="text-sm text-green-700">保存しました</p>}
@@ -82,7 +78,7 @@ function QuizMasterForm({
           disabled={pending}
           className="rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-60"
         >
-          {pending ? '保存中…' : master ? '更新' : '登録'}
+          {pending ? '保存中…' : '更新'}
         </button>
         {onCancel && (
           <button type="button" onClick={onCancel} className="text-sm text-muted">
@@ -109,18 +105,18 @@ export function AdminQuizManager({
     <div className="space-y-8">
       <section className="space-y-4">
         <div>
-          <h3 className="text-base font-bold">小テストを登録</h3>
-          <p className="mt-1 text-sm text-muted">名称・教科・満点を登録します。</p>
+          <h3 className="text-base font-bold">小テストを生徒ごとに登録</h3>
+          <p className="mt-1 text-sm text-muted">
+            内容・実施日・対象生徒を入力して登録します。生徒ごとに個別の小テストとして記録されます。
+          </p>
         </div>
-        <QuizMasterForm />
+        <AdminQuizRegisterForm studentGroups={studentGroups} />
       </section>
 
       <section className="space-y-4">
         <div>
           <h3 className="text-base font-bold">登録済みの小テスト</h3>
-          <p className="mt-1 text-sm text-muted">
-            一覧から編集できます。生徒への登録は下のフォームから行えます。
-          </p>
+          <p className="mt-1 text-sm text-muted">一覧から内容を編集できます。</p>
         </div>
         {masters.length === 0 ? (
           <p className="text-sm text-muted">登録されている小テストはありません。</p>
@@ -169,16 +165,6 @@ export function AdminQuizManager({
             ))}
           </div>
         )}
-      </section>
-
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-base font-bold">生徒に小テストを登録</h3>
-          <p className="mt-1 text-sm text-muted">
-            小テスト・実施日・対象生徒を選んで登録します。Googleカレンダーにも反映されます。
-          </p>
-        </div>
-        <AdminQuizAssignmentForm masters={masters} studentGroups={studentGroups} />
       </section>
 
       <section className="space-y-4">

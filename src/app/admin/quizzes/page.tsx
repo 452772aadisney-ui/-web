@@ -28,7 +28,7 @@ export default async function AdminQuizzesPage() {
       <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <h2 className="mb-1 text-lg font-bold">小テスト管理</h2>
         <p className="mb-6 text-sm text-muted">
-          小テストの種類を登録し、対象生徒を選んで割り当てます。点数は生徒詳細または実施記録から入力できます。
+          生徒ごとに小テストを登録し、点数を入力できます。
         </p>
         <AdminQuizManager
           masters={masters}

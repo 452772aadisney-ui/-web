@@ -54,83 +54,68 @@ function parseScore(raw: string): number | null {
   return value
 }
 
-async function syncAssignmentStudentsWithCalendar(
-  assignmentId: string,
-  studentIds: string[],
-  master: { title: string; subject: string },
-  scheduledOn: string,
-  note: string,
-): Promise<string | null> {
-  const supabase = await createClient()
-
-  const { error: insertError } = await supabase.from('quiz_assignment_students').insert(
-    studentIds.map((studentId) => ({
-      quiz_assignment_id: assignmentId,
-      student_id: studentId,
-    })),
-  )
-
-  if (insertError) return '対象生徒の登録に失敗しました'
-
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, full_name, display_name, role')
-    .in('id', studentIds)
-
-  for (const profile of profiles ?? []) {
-    if (profile.role !== 'student') continue
-
-    const studentName = getPersonName(profile as { full_name: string; display_name: string })
-    const eventId = await createQuizStudentCalendarEvent({
-      studentName,
-      title: master.title,
-      subject: master.subject,
-      scheduledOn,
-      note,
+async function registerQuizForStudent(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  studentId: string,
+  studentName: string,
+  fields: {
+    title: string
+    subject: string
+    description: string
+    maxScore: number
+    scheduledOn: string
+    note: string
+  },
+): Promise<{ error: string | null; assignmentId?: string }> {
+  const { data: master, error: masterError } = await supabase
+    .from('quiz_masters')
+    .insert({
+      title: fields.title,
+      subject: fields.subject,
+      description: fields.description,
+      max_score: fields.maxScore,
     })
+    .select('id, title, subject')
+    .single<{ id: string; title: string; subject: string }>()
 
-    if (eventId) {
-      await supabase
-        .from('quiz_assignment_students')
-        .update({ google_calendar_event_id: eventId })
-        .eq('quiz_assignment_id', assignmentId)
-        .eq('student_id', profile.id)
-    }
-  }
+  if (masterError || !master) return { error: '小テストの登録に失敗しました' }
 
-  return null
-}
+  const { data: assignment, error: assignmentError } = await supabase
+    .from('quiz_assignments')
+    .insert({
+      quiz_master_id: master.id,
+      scheduled_on: fields.scheduledOn,
+      note: fields.note,
+    })
+    .select('id')
+    .single<{ id: string }>()
 
-export async function createQuizMaster(
-  _prev: QuizActionState,
-  formData: FormData,
-): Promise<QuizActionState> {
-  const auth = await assertAdmin()
-  if ('error' in auth) return { error: auth.error }
+  if (assignmentError || !assignment) return { error: '小テストの登録に失敗しました' }
 
-  const title = String(formData.get('title') ?? '').trim()
-  const subject = String(formData.get('subject') ?? '').trim()
-  const description = String(formData.get('description') ?? '').trim()
-  const maxScore = parseMaxScore(String(formData.get('maxScore') ?? ''))
-
-  if (!title) return { error: 'タイトルを入力してください' }
-  if (subject && !EXAM_SUBJECTS.includes(subject as (typeof EXAM_SUBJECTS)[number])) {
-    return { error: '教科が不正です' }
-  }
-  if (!maxScore) return { error: '満点は1以上の整数で入力してください' }
-
-  const supabase = await createClient()
-  const { error } = await supabase.from('quiz_masters').insert({
-    title,
-    subject,
-    description,
-    max_score: maxScore,
+  const { error: studentError } = await supabase.from('quiz_assignment_students').insert({
+    quiz_assignment_id: assignment.id,
+    student_id: studentId,
   })
 
-  if (error) return { error: '小テストの登録に失敗しました' }
+  if (studentError) return { error: '対象生徒の登録に失敗しました' }
 
-  revalidateQuizPaths()
-  return { success: true }
+  const eventId = await createQuizStudentCalendarEvent({
+    studentName,
+    title: master.title,
+    subject: master.subject,
+    scheduledOn: fields.scheduledOn,
+    note: fields.note,
+  })
+
+  if (eventId) {
+    await supabase
+      .from('quiz_assignment_students')
+      .update({ google_calendar_event_id: eventId })
+      .eq('quiz_assignment_id', assignment.id)
+      .eq('student_id', studentId)
+  }
+
+  return { error: null, assignmentId: assignment.id }
 }
 
 export async function updateQuizMaster(
@@ -184,68 +169,60 @@ export async function deleteQuizMaster(formData: FormData): Promise<void> {
   revalidateQuizPaths()
 }
 
-export async function createQuizAssignment(
+export async function registerStudentQuizzes(
   _prev: QuizActionState,
   formData: FormData,
 ): Promise<QuizActionState> {
   const auth = await assertAdmin()
   if ('error' in auth) return { error: auth.error }
 
-  const quizMasterId = String(formData.get('quizMasterId') ?? '').trim()
+  const title = String(formData.get('title') ?? '').trim()
+  const subject = String(formData.get('subject') ?? '').trim()
+  const description = String(formData.get('description') ?? '').trim()
+  const maxScore = parseMaxScore(String(formData.get('maxScore') ?? ''))
   const scheduledOn = String(formData.get('scheduledOn') ?? '').trim()
   const note = String(formData.get('note') ?? '').trim()
   const studentIds = parseStudentIds(formData)
 
-  if (!quizMasterId) return { error: '小テストを選択してください' }
+  if (!title) return { error: 'タイトルを入力してください' }
+  if (subject && !EXAM_SUBJECTS.includes(subject as (typeof EXAM_SUBJECTS)[number])) {
+    return { error: '教科が不正です' }
+  }
+  if (!maxScore) return { error: '満点は1以上の整数で入力してください' }
   if (!scheduledOn) return { error: '実施日を入力してください' }
   if (studentIds.length === 0) return { error: '1名以上の生徒を選択してください' }
 
   const supabase = await createClient()
 
-  const { data: master } = await supabase
-    .from('quiz_masters')
-    .select('id, title, subject, is_active')
-    .eq('id', quizMasterId)
-    .maybeSingle<{ id: string; title: string; subject: string; is_active: boolean }>()
-
-  if (!master?.is_active) return { error: '選択した小テストが見つかりません' }
-
   const { data: students } = await supabase
     .from('profiles')
-    .select('id, role')
+    .select('id, full_name, display_name, role')
     .in('id', studentIds)
 
-  const validStudentIds = (students ?? [])
-    .filter((student) => student.role === 'student')
-    .map((student) => String(student.id))
+  const validStudents = (students ?? []).filter((student) => student.role === 'student')
+  if (validStudents.length === 0) return { error: '有効な生徒が選択されていません' }
 
-  if (validStudentIds.length === 0) return { error: '有効な生徒が選択されていません' }
+  const fields = { title, subject, description, maxScore, scheduledOn, note }
 
-  const { data: assignment, error } = await supabase
-    .from('quiz_assignments')
-    .insert({
-      quiz_master_id: quizMasterId,
-      scheduled_on: scheduledOn,
-      note,
-    })
-    .select('id')
-    .single<{ id: string }>()
+  for (const student of validStudents) {
+    const studentName = getPersonName(
+      student as { full_name: string; display_name: string },
+    )
+    const result = await registerQuizForStudent(
+      supabase,
+      String(student.id),
+      studentName,
+      fields,
+    )
+    if (result.error) return { error: result.error }
 
-  if (error || !assignment) return { error: '小テストの登録に失敗しました' }
-
-  const syncError = await syncAssignmentStudentsWithCalendar(
-    assignment.id,
-    validStudentIds,
-    { title: master.title, subject: master.subject },
-    scheduledOn,
-    note,
-  )
-  if (syncError) return { error: syncError }
-
-  for (const studentId of validStudentIds) {
-    revalidateQuizPaths(studentId)
+    revalidateQuizPaths(String(student.id))
+    if (result.assignmentId) {
+      revalidatePath(`/admin/quizzes/assignments/${result.assignmentId}`)
+    }
   }
-  revalidatePath(`/admin/quizzes/assignments/${assignment.id}`)
+
+  revalidateQuizPaths()
   return { success: true }
 }
 
