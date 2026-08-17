@@ -1,8 +1,6 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
-import { StudentPageShell } from '@/components/layout/StudentPageShell'
-import { StudyLogModeChooserWithIcons } from '@/components/study/StudyLogModeChooser'
+import { StudyLogModeDialogPage } from '@/components/study/StudyLogModeDialogPage'
 
 export default async function StudentStudyRecordPage() {
   const profile = await getCurrentProfile()
@@ -11,27 +9,5 @@ export default async function StudentStudyRecordPage() {
     redirect('/login')
   }
 
-  return (
-    <StudentPageShell title="学習を記録する" backHref="/dashboard" backLabel="マイページ">
-      <div className="space-y-6">
-        <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="text-lg font-bold">登録方法を選ぶ</h2>
-          <p className="mt-1 text-sm text-muted">
-            教科名だけで記録するか、参考書を選んで記録するかを選んでください。
-          </p>
-          <div className="mt-6">
-            <StudyLogModeChooserWithIcons />
-          </div>
-        </section>
-
-        <p className="text-center text-sm text-muted">
-          これまでの記録は{' '}
-          <Link href="/dashboard/study/history" className="text-primary hover:underline">
-            学習履歴
-          </Link>
-          から確認できます。
-        </p>
-      </div>
-    </StudentPageShell>
-  )
+  return <StudyLogModeDialogPage />
 }

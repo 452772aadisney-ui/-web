@@ -18,21 +18,23 @@ export const MYPAGE_MENU_ICONS = {
 } as const
 
 interface MyPagePrimaryActionButtonProps {
-  href: string
+  href?: string
   label: string
   iconSrc: string
+  onClick?: () => void
 }
 
 export function MyPagePrimaryActionButton({
   href,
   label,
   iconSrc,
+  onClick,
 }: MyPagePrimaryActionButtonProps) {
-  return (
-    <Link
-      href={href}
-      className="flex min-h-[5.5rem] items-center justify-center gap-3 rounded-2xl bg-[#1a1f36] px-6 py-6 text-lg font-bold text-white shadow-sm transition hover:bg-[#252b45]"
-    >
+  const className =
+    'flex min-h-[5.5rem] w-full items-center justify-center gap-3 rounded-2xl bg-[#1a1f36] px-6 py-6 text-lg font-bold text-white shadow-sm transition hover:bg-[#252b45]'
+
+  const content = (
+    <>
       <Image
         src={iconSrc}
         alt=""
@@ -42,6 +44,20 @@ export function MyPagePrimaryActionButton({
         aria-hidden
       />
       {label}
+    </>
+  )
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={className}>
+        {content}
+      </button>
+    )
+  }
+
+  return (
+    <Link href={href ?? '#'} className={className}>
+      {content}
     </Link>
   )
 }

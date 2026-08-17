@@ -1,9 +1,11 @@
 'use client'
 
 import Link from 'next/link'
+import { useState } from 'react'
 import { formatCoachingBookingDateTime } from '@/lib/coaching/format'
 import type { CoachingBookingWithDetails } from '@/types/coaching'
 import { FaqIntroDialog } from '@/components/faq/FaqIntroDialog'
+import { StudyLogModeDialog } from '@/components/study/StudyLogModeDialog'
 import {
   MYPAGE_MENU_ICONS,
   MyPageIconMenuButton,
@@ -92,6 +94,7 @@ export function MyPageActions({
   hideClassSchedule = false,
   showFaqIntro = false,
 }: MyPageActionsProps) {
+  const [studyDialogOpen, setStudyDialogOpen] = useState(false)
   const badgeCounts: Record<MenuBadgeKey, number> = {
     studyHistory: unreadStudyFeedbackCount,
     announcements: unreadAnnouncementCount,
@@ -107,6 +110,7 @@ export function MyPageActions({
   return (
     <div className="space-y-4">
       <FaqIntroDialog open={showFaqIntro} />
+      <StudyLogModeDialog open={studyDialogOpen} onClose={() => setStudyDialogOpen(false)} />
 
       {nextCoaching ? (
         <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -145,9 +149,9 @@ export function MyPageActions({
       )}
 
       <MyPagePrimaryActionButton
-        href="/dashboard/study"
         label="学習を記録する"
         iconSrc={MYPAGE_MENU_ICONS.recordStudy}
+        onClick={() => setStudyDialogOpen(true)}
       />
 
       <div className="grid grid-cols-3 gap-3">
