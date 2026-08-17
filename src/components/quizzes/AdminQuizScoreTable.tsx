@@ -4,11 +4,12 @@ import { useActionState, useState } from 'react'
 import { getPersonName } from '@/lib/auth/display-name'
 import { formatQuizScore } from '@/lib/quizzes/chart-data'
 import {
+  createQuizAssignmentForStudent,
   saveQuizResult,
   saveQuizResultsBulk,
   type QuizActionState,
 } from '@/app/quizzes/actions'
-import type { QuizAssignmentDetail, StudentQuizAssignmentRow } from '@/types/quiz'
+import type { QuizAssignmentDetail, QuizMaster, StudentQuizAssignmentRow } from '@/types/quiz'
 
 const initialState: QuizActionState = {}
 const fieldClass =
@@ -176,6 +177,77 @@ export function AdminQuizAssignmentScoreTable({
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+export function AdminStudentQuizRegisterForm({
+  studentId,
+  masters,
+}: {
+  studentId: string
+  masters: QuizMaster[]
+}) {
+  const [state, formAction, pending] = useActionState(createQuizAssignmentForStudent, initialState)
+  const activeMasters = masters.filter((master) => master.is_active)
+
+  return (
+    <form action={formAction} className="mb-6 space-y-3 rounded-lg border border-border bg-background p-4">
+      <input type="hidden" name="studentId" value={studentId} />
+      <h3 className="text-sm font-bold">小テストを登録</h3>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block sm:col-span-2">
+          <span className="mb-1 block text-sm font-medium">小テスト *</span>
+          <select name="quizMasterId" required className={fieldClass} defaultValue="">
+            <option value="" disabled>
+              選択してください
+            </option>
+            {activeMasters.map((master) => (
+              <option key={master.id} value={master.id}>
+                {master.title}
+                {master.subject ? `（${master.subject}）` : ''} / 満点{master.max_score}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">実施日 *</span>
+          <input type="date" name="scheduledOn" required className={fieldClass} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium">メモ</span>
+          <input name="note" className={fieldClass} />
+        </label>
+      </div>
+      {state.error && <p className="text-sm text-error">{state.error}</p>}
+      {state.success && <p className="text-sm text-green-700">小テストを登録しました</p>}
+      <button
+        type="submit"
+        disabled={pending || activeMasters.length === 0}
+        className="rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-60"
+      >
+        {pending ? '登録中…' : 'この生徒に登録'}
+      </button>
+      {activeMasters.length === 0 && (
+        <p className="text-xs text-muted">先に小テスト管理画面で小テストを登録してください。</p>
+      )}
+    </form>
+  )
+}
+
+export function AdminStudentQuizSection({
+  studentId,
+  masters,
+  assignments,
+}: {
+  studentId: string
+  masters: QuizMaster[]
+  assignments: StudentQuizAssignmentRow[]
+}) {
+  return (
+    <div>
+      <AdminStudentQuizRegisterForm studentId={studentId} masters={masters} />
+      <AdminStudentQuizScores studentId={studentId} assignments={assignments} />
     </div>
   )
 }

@@ -3,21 +3,17 @@
 import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import {
-  createQuizAssignment,
   createQuizMaster,
   deleteQuizMaster,
   updateQuizMaster,
   type QuizActionState,
 } from '@/app/quizzes/actions'
-import { ScheduleStudentPicker } from '@/components/schedule/ScheduleStudentPicker'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
 import type { QuizAssignmentListItem, QuizMaster } from '@/types/quiz'
 
 const initialState: QuizActionState = {}
 const fieldClass =
   'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20'
-
-type StudentOption = { id: string; full_name: string; display_name: string }
 
 function formatDate(date: string): string {
   const [y, m, d] = date.split('-')
@@ -96,64 +92,12 @@ function QuizMasterForm({
   )
 }
 
-function QuizAssignmentForm({
-  masters,
-  students,
-}: {
-  masters: QuizMaster[]
-  students: StudentOption[]
-}) {
-  const [state, formAction, pending] = useActionState(createQuizAssignment, initialState)
-  const activeMasters = masters.filter((master) => master.is_active)
-
-  return (
-    <form action={formAction} className="space-y-3 rounded-lg border border-border bg-background p-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block sm:col-span-2">
-          <span className="mb-1 block text-sm font-medium">小テスト *</span>
-          <select name="quizMasterId" required className={fieldClass} defaultValue="">
-            <option value="" disabled>
-              選択してください
-            </option>
-            {activeMasters.map((master) => (
-              <option key={master.id} value={master.id}>
-                {master.title}
-                {master.subject ? `（${master.subject}）` : ''} / 満点{master.max_score}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium">実施日 *</span>
-          <input type="date" name="scheduledOn" required className={fieldClass} />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium">メモ</span>
-          <input name="note" className={fieldClass} />
-        </label>
-      </div>
-      <ScheduleStudentPicker students={students} />
-      {state.error && <p className="text-sm text-error">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">生徒に登録しました</p>}
-      <button
-        type="submit"
-        disabled={pending || activeMasters.length === 0}
-        className="rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-60"
-      >
-        {pending ? '登録中…' : '生徒に登録'}
-      </button>
-    </form>
-  )
-}
-
 export function AdminQuizManager({
   masters,
   assignments,
-  students,
 }: {
   masters: QuizMaster[]
   assignments: QuizAssignmentListItem[]
-  students: StudentOption[]
 }) {
   const [editingId, setEditingId] = useState<string | null>(null)
 
@@ -170,7 +114,9 @@ export function AdminQuizManager({
       <section className="space-y-4">
         <div>
           <h3 className="text-base font-bold">登録済みの小テスト</h3>
-          <p className="mt-1 text-sm text-muted">一覧から編集できます。実施記録は下の表から点数入力へ進めます。</p>
+          <p className="mt-1 text-sm text-muted">
+            生徒への割り当ては生徒一覧から行います。実施記録は下の表から点数入力へ進めます。
+          </p>
         </div>
         {masters.length === 0 ? (
           <p className="text-sm text-muted">登録されている小テストはありません。</p>
@@ -223,16 +169,8 @@ export function AdminQuizManager({
 
       <section className="space-y-4">
         <div>
-          <h3 className="text-base font-bold">生徒に小テストを登録</h3>
-          <p className="mt-1 text-sm text-muted">登録済みの小テストから選び、実施日と対象生徒を指定します。</p>
-        </div>
-        <QuizAssignmentForm masters={masters} students={students} />
-      </section>
-
-      <section className="space-y-4">
-        <div>
           <h3 className="text-base font-bold">実施記録</h3>
-          <p className="mt-1 text-sm text-muted">行をクリックして点数を入力できます。</p>
+          <p className="mt-1 text-sm text-muted">生徒ごとに登録された小テストの点数を入力できます。</p>
         </div>
         {assignments.length === 0 ? (
           <p className="text-sm text-muted">実施記録はまだありません。</p>
@@ -242,9 +180,10 @@ export function AdminQuizManager({
               <thead className="bg-background">
                 <tr className="border-b border-border text-muted">
                   <th className="px-4 py-3 font-medium">小テスト</th>
+                  <th className="px-4 py-3 font-medium">生徒</th>
                   <th className="px-4 py-3 font-medium">実施日</th>
-                  <th className="px-4 py-3 font-medium">対象</th>
-                  <th className="px-4 py-3 font-medium">点数入力</th>
+                  <th className="px-4 py-3 font-medium">点数</th>
+                  <th className="px-4 py-3 font-medium">入力</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -256,9 +195,12 @@ export function AdminQuizManager({
                         {assignment.master.subject || '教科未設定'} / 満点 {assignment.master.max_score}
                       </p>
                     </td>
+                    <td className="px-4 py-3 text-muted">
+                      {assignment.student_names.join('、') || '—'}
+                    </td>
                     <td className="px-4 py-3 text-muted">{formatDate(assignment.scheduled_on)}</td>
                     <td className="px-4 py-3 text-muted">
-                      {assignment.scored_count}/{assignment.student_count} 名入力済
+                      {assignment.scored_count}/{assignment.student_count} 入力済
                     </td>
                     <td className="px-4 py-3">
                       <Link

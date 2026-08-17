@@ -33,6 +33,7 @@ export interface QuizAssignmentListItem extends QuizAssignment {
   master: QuizMaster
   student_count: number
   scored_count: number
+  student_names: string[]
 }
 
 export interface QuizAssignmentStudentRow {

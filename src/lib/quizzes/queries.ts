@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getPersonName } from '@/lib/auth/display-name'
 import type {
   QuizAssignmentDetail,
   QuizAssignmentListItem,
@@ -39,13 +40,32 @@ export async function fetchQuizAssignments(): Promise<QuizAssignmentListItem[]> 
     ])
 
   const masterById = new Map(((masters as QuizMaster[] | null) ?? []).map((m) => [m.id, m]))
+  const studentIdsByAssignment = new Map<string, string[]>()
   const studentCountByAssignment = new Map<string, number>()
   const scoredCountByAssignment = new Map<string, number>()
 
   for (const row of students ?? []) {
     const id = String(row.quiz_assignment_id)
+    const list = studentIdsByAssignment.get(id) ?? []
+    list.push(String(row.student_id))
+    studentIdsByAssignment.set(id, list)
     studentCountByAssignment.set(id, (studentCountByAssignment.get(id) ?? 0) + 1)
   }
+
+  const allStudentIds = [...new Set((students ?? []).map((row) => String(row.student_id)))]
+  const { data: profiles } = allStudentIds.length
+    ? await supabase
+        .from('profiles')
+        .select('id, full_name, display_name')
+        .in('id', allStudentIds)
+    : { data: [] }
+
+  const nameByStudentId = new Map(
+    (profiles ?? []).map((profile) => [
+      String(profile.id),
+      getPersonName(profile as { full_name: string; display_name: string }),
+    ]),
+  )
 
   for (const row of results ?? []) {
     const id = String(row.quiz_assignment_id)
@@ -61,6 +81,9 @@ export async function fetchQuizAssignments(): Promise<QuizAssignmentListItem[]> 
         master,
         student_count: studentCountByAssignment.get(assignment.id) ?? 0,
         scored_count: scoredCountByAssignment.get(assignment.id) ?? 0,
+        student_names: (studentIdsByAssignment.get(assignment.id) ?? [])
+          .map((studentId) => nameByStudentId.get(studentId))
+          .filter((name): name is string => Boolean(name)),
       }
     })
     .filter((item): item is QuizAssignmentListItem => item != null)

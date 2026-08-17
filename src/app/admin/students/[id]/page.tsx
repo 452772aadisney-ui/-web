@@ -23,8 +23,8 @@ import { StudentTagAssignForm } from '@/components/tags/StudentTagAssignForm'
 import { fetchHomeworkTasksForStudent } from '@/lib/schedule/queries'
 import { fetchHomeworkCompletionsForStudent } from '@/lib/todo/queries'
 import { getPersonName } from '@/lib/auth/display-name'
-import { AdminStudentQuizScores } from '@/components/quizzes/AdminQuizScoreTable'
-import { fetchStudentQuizAssignments } from '@/lib/quizzes/queries'
+import { AdminStudentQuizSection } from '@/components/quizzes/AdminQuizScoreTable'
+import { fetchQuizMasters, fetchStudentQuizAssignments } from '@/lib/quizzes/queries'
 import { fetchStudentTags, fetchTagIdsForProfile } from '@/lib/tags/queries'
 
 export default async function AdminStudentStudyPage({
@@ -49,7 +49,7 @@ export default async function AdminStudentStudyPage({
     notFound()
   }
 
-  const [logs, textbooks, homework, completions, allTags, assignedTagIds, quizAssignments] =
+  const [logs, textbooks, homework, completions, allTags, assignedTagIds, quizMasters, quizAssignments] =
     await Promise.all([
     fetchStudyLogsForStudent(id),
     fetchTextbooksForStudent(id),
@@ -57,6 +57,7 @@ export default async function AdminStudentStudyPage({
     fetchHomeworkCompletionsForStudent(id),
     fetchStudentTags(),
     fetchTagIdsForProfile(id),
+    fetchQuizMasters(true),
     fetchStudentQuizAssignments(id),
   ])
 
@@ -131,11 +132,15 @@ export default async function AdminStudentStudyPage({
 
         <div className="space-y-6">
           <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-            <h2 className="mb-1 text-lg font-bold">小テスト成績</h2>
+            <h2 className="mb-1 text-lg font-bold">小テスト</h2>
             <p className="mb-6 text-sm text-muted">
-              この生徒に登録された小テストの点数を入力できます。
+              この生徒に小テストを登録し、点数を入力できます。
             </p>
-            <AdminStudentQuizScores studentId={id} assignments={quizAssignments} />
+            <AdminStudentQuizSection
+              studentId={id}
+              masters={quizMasters}
+              assignments={quizAssignments}
+            />
           </section>
 
           <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">

@@ -35,10 +35,6 @@ function revalidateQuizPaths(studentId?: string) {
   }
 }
 
-function parseStudentIds(formData: FormData): string[] {
-  return formData.getAll('targetStudentIds').map(String).filter(Boolean)
-}
-
 function parseMaxScore(raw: string): number | null {
   const value = Number(raw)
   if (!Number.isInteger(value) || value <= 0) return null
@@ -158,30 +154,39 @@ export async function deleteQuizMaster(formData: FormData): Promise<void> {
   revalidateQuizPaths()
 }
 
-export async function createQuizAssignment(
+export async function createQuizAssignmentForStudent(
   _prev: QuizActionState,
   formData: FormData,
 ): Promise<QuizActionState> {
   const auth = await assertAdmin()
   if ('error' in auth) return { error: auth.error }
 
+  const studentId = String(formData.get('studentId') ?? '').trim()
   const quizMasterId = String(formData.get('quizMasterId') ?? '').trim()
   const scheduledOn = String(formData.get('scheduledOn') ?? '').trim()
   const note = String(formData.get('note') ?? '').trim()
-  const studentIds = parseStudentIds(formData)
 
+  if (!studentId) return { error: '生徒が不正です' }
   if (!quizMasterId) return { error: '小テストを選択してください' }
   if (!scheduledOn) return { error: '実施日を入力してください' }
-  if (studentIds.length === 0) return { error: '1名以上の生徒を選択してください' }
 
   const supabase = await createClient()
-  const { data: master } = await supabase
-    .from('quiz_masters')
-    .select('id, is_active')
-    .eq('id', quizMasterId)
-    .maybeSingle<{ id: string; is_active: boolean }>()
+
+  const [{ data: master }, { data: student }] = await Promise.all([
+    supabase
+      .from('quiz_masters')
+      .select('id, is_active')
+      .eq('id', quizMasterId)
+      .maybeSingle<{ id: string; is_active: boolean }>(),
+    supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('id', studentId)
+      .maybeSingle<{ id: string; role: string }>(),
+  ])
 
   if (!master?.is_active) return { error: '選択した小テストが見つかりません' }
+  if (student?.role !== 'student') return { error: '生徒が見つかりません' }
 
   const { data: assignment, error } = await supabase
     .from('quiz_assignments')
@@ -193,12 +198,13 @@ export async function createQuizAssignment(
     .select('id')
     .single<{ id: string }>()
 
-  if (error || !assignment) return { error: '生徒への登録に失敗しました' }
+  if (error || !assignment) return { error: '小テストの登録に失敗しました' }
 
-  const syncError = await syncAssignmentStudents(assignment.id, studentIds)
+  const syncError = await syncAssignmentStudents(assignment.id, [studentId])
   if (syncError) return { error: syncError }
 
-  revalidateQuizPaths()
+  revalidateQuizPaths(studentId)
+  revalidatePath(`/admin/quizzes/assignments/${assignment.id}`)
   return { success: true }
 }
 
