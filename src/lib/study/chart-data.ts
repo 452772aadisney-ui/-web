@@ -61,6 +61,14 @@ export function getSubjectColor(subject: string): string {
 }
 
 import { formatChartDate, getRecentDateKeys, getTodayDateKey } from '@/lib/study/dates'
+import {
+  getOrderedChartSubjectLabels,
+  resolveStudySubjectCategory,
+} from '@/lib/constants/textbook-subject-categories'
+
+function getChartSubjectLabel(subject: string): string {
+  return resolveStudySubjectCategory(subject) ?? subject
+}
 
 export function formatDuration(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -85,12 +93,13 @@ export function buildDailyChartData(logs: StudyLog[], days = 14): {
 
   for (const log of logs) {
     if (!dateKeys.includes(log.studied_on)) continue
-    subjectSet.add(log.subject)
+    const chartSubject = getChartSubjectLabel(log.subject)
+    subjectSet.add(chartSubject)
     const dayMap = totals.get(log.studied_on)!
-    dayMap.set(log.subject, (dayMap.get(log.subject) ?? 0) + log.duration_minutes)
+    dayMap.set(chartSubject, (dayMap.get(chartSubject) ?? 0) + log.duration_minutes)
   }
 
-  const subjects = Array.from(subjectSet).sort()
+  const subjects = getOrderedChartSubjectLabels(Array.from(subjectSet))
 
   const rows: DailyChartRow[] = dateKeys.map((date) => {
     const row: DailyChartRow = {
@@ -111,14 +120,15 @@ export function buildSubjectPieData(logs: StudyLog[]): SubjectChartRow[] {
   const totals = new Map<string, number>()
 
   for (const log of logs) {
-    totals.set(log.subject, (totals.get(log.subject) ?? 0) + log.duration_minutes)
+    const chartSubject = getChartSubjectLabel(log.subject)
+    totals.set(chartSubject, (totals.get(chartSubject) ?? 0) + log.duration_minutes)
   }
 
-  return Array.from(totals.entries())
-    .map(([name, minutes]) => ({
+  return getOrderedChartSubjectLabels(Array.from(totals.keys()))
+    .map((name) => ({
       name,
-      value: minutes,
-      minutes,
+      value: totals.get(name) ?? 0,
+      minutes: totals.get(name) ?? 0,
     }))
-    .sort((a, b) => b.value - a.value)
+    .filter((row) => row.value > 0)
 }

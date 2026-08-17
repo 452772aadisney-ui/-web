@@ -5,6 +5,7 @@ import {
   upsertStudyDayFeedback,
   type StudyDailyFeedbackActionState,
 } from '@/app/admin/study-daily/actions'
+import { resolveStudySubjectCategory } from '@/lib/constants/textbook-subject-categories'
 import { formatDuration } from '@/lib/study/chart-data'
 import type { StudyLog } from '@/lib/study/chart-data'
 import { STUDY_FEEDBACK_STAMPS, type StudyDayFeedback } from '@/lib/study/feedback'
@@ -19,7 +20,8 @@ interface AdminStudentDailyStudyCardProps {
 }
 
 function formatLogSummary(log: StudyLog): string {
-  return `${log.subject} ${formatDuration(log.duration_minutes)}${log.textbook_name ? `（${log.textbook_name}）` : ''}`
+  const subject = resolveStudySubjectCategory(log.subject) ?? log.subject
+  return `${subject} ${formatDuration(log.duration_minutes)}${log.textbook_name.trim() ? `（${log.textbook_name}）` : ''}`
 }
 
 function CompletedStudyCard({ summary }: { summary: StudentDailyStudySummary }) {

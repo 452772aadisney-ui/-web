@@ -3,13 +3,9 @@
 import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import { createStudyLog, type StudyLogActionState } from '@/app/study/actions'
-import {
-  filterTextbooksByStudyCategory,
-  getStudySubjectCategoriesForProfile,
-} from '@/lib/constants/textbook-subject-categories'
+import { getStudySubjectCategoriesForProfile } from '@/lib/constants/textbook-subject-categories'
 import { getJstDateKey } from '@/lib/study/dates'
 import { MAX_STUDY_DURATION_MINUTES } from '@/lib/study/validation'
-import type { Textbook } from '@/types/textbook'
 
 const initialState: StudyLogActionState = {}
 
@@ -19,18 +15,14 @@ const fieldClass =
 const dateFieldShellClass =
   'w-full min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-background focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20'
 
-interface StudyLogFormProps {
+interface StudyLogSubjectFormProps {
   profileSubjects: string[]
-  textbooks: Textbook[]
 }
 
-export function StudyLogForm({ profileSubjects, textbooks }: StudyLogFormProps) {
+export function StudyLogSubjectForm({ profileSubjects }: StudyLogSubjectFormProps) {
   const [state, formAction, pending] = useActionState(createStudyLog, initialState)
-  const [selectedSubject, setSelectedSubject] = useState('')
   const todayKey = getJstDateKey()
-
   const studySubjectCategories = getStudySubjectCategoriesForProfile(profileSubjects)
-  const filteredTextbooks = filterTextbooksByStudyCategory(textbooks, selectedSubject)
 
   if (studySubjectCategories.length === 0) {
     return (
@@ -46,6 +38,8 @@ export function StudyLogForm({ profileSubjects, textbooks }: StudyLogFormProps) 
 
   return (
     <form action={formAction} className="min-w-0 space-y-4">
+      <input type="hidden" name="registrationMode" value="subject" />
+
       <label className="block w-full min-w-0">
         <span className="mb-1.5 block text-sm font-medium">
           学習日 <span className="text-error">*</span>
@@ -64,15 +58,9 @@ export function StudyLogForm({ profileSubjects, textbooks }: StudyLogFormProps) 
 
       <label className="block w-full min-w-0">
         <span className="mb-1.5 block text-sm font-medium">
-          科目 <span className="text-error">*</span>
+          教科 <span className="text-error">*</span>
         </span>
-        <select
-          name="subject"
-          required
-          value={selectedSubject}
-          onChange={(e) => setSelectedSubject(e.target.value)}
-          className={fieldClass}
-        >
+        <select name="subject" required defaultValue="" className={fieldClass}>
           <option value="" disabled>
             選択してください
           </option>
@@ -85,43 +73,11 @@ export function StudyLogForm({ profileSubjects, textbooks }: StudyLogFormProps) 
       </label>
 
       <label className="block w-full min-w-0">
-        <span className="mb-1.5 block text-sm font-medium">
-          教材 <span className="text-error">*</span>
-        </span>
-        <select
-          name="textbookId"
-          required
-          disabled={!selectedSubject}
-          defaultValue=""
-          key={selectedSubject}
-          className={`${fieldClass} disabled:opacity-50`}
-        >
-          <option value="" disabled>
-            {selectedSubject ? '教材を選択' : '先に科目を選択してください'}
-          </option>
-          {filteredTextbooks.map((book) => (
-            <option key={book.id} value={book.id}>
-              {book.name}
-            </option>
-          ))}
-        </select>
-        {selectedSubject && filteredTextbooks.length === 0 && (
-          <p className="mt-2 text-xs text-amber-700">
-            この科目の教材がありません。{' '}
-            <Link href="/dashboard/textbooks/register" className="underline">
-              教材登録
-            </Link>
-            で教材を登録してください。
-          </p>
-        )}
-      </label>
-
-      <label className="block w-full min-w-0">
         <span className="mb-1.5 block text-sm font-medium">内容</span>
         <textarea
           name="content"
           rows={3}
-          placeholder="例: 第3章 二次関数の演習"
+          placeholder="例: 二次関数の演習"
           className={fieldClass}
         />
       </label>
@@ -159,7 +115,7 @@ export function StudyLogForm({ profileSubjects, textbooks }: StudyLogFormProps) 
 
       <button
         type="submit"
-        disabled={pending || !selectedSubject || filteredTextbooks.length === 0}
+        disabled={pending}
         className="rounded-lg bg-primary px-6 py-2.5 font-medium text-white transition hover:bg-primary-hover disabled:opacity-60"
       >
         {pending ? '保存中…' : '記録を追加'}

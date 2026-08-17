@@ -60,6 +60,29 @@ export function resolveStudySubjectCategory(
   return category?.label ?? null
 }
 
+/** 参考書のタグから学習記録用カテゴリを決定（プロフィール科目に合う最初のカテゴリ） */
+export function deriveStudyCategoryFromTextbook(
+  textbookSubjects: string[],
+  profileSubjects: string[],
+): TextbookSubjectCategoryLabel | null {
+  for (const category of TEXTBOOK_SUBJECT_CATEGORIES) {
+    if (
+      category.subjects.some((tag) => textbookSubjects.includes(tag)) &&
+      profileIncludesStudyCategory(profileSubjects, category.label)
+    ) {
+      return category.label
+    }
+  }
+  return null
+}
+
+export function getOrderedChartSubjectLabels(subjectsInData: string[]): TextbookSubjectCategoryLabel[] {
+  const subjectSet = new Set(subjectsInData)
+  return TEXTBOOK_SUBJECT_CATEGORIES.map((category) => category.label).filter((label) =>
+    subjectSet.has(label),
+  )
+}
+
 export function profileIncludesStudyCategory(
   profileSubjects: string[],
   categoryLabel: string,

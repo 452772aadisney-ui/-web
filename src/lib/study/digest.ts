@@ -1,3 +1,4 @@
+import { resolveStudySubjectCategory } from '@/lib/constants/textbook-subject-categories'
 import { getPersonName } from '@/lib/auth/display-name'
 import { formatDuration, type StudyLog } from '@/lib/study/chart-data'
 import { formatStudyDateLabel, getJstDateKey, shiftDateKey } from '@/lib/study/dates'
@@ -18,7 +19,8 @@ export type DailyStudyDigestReport = {
 }
 
 function formatLogLine(log: StudyLog): string {
-  const parts = [`${log.subject} ${formatDuration(log.duration_minutes)}`]
+  const subject = resolveStudySubjectCategory(log.subject) ?? log.subject
+  const parts = [`${subject} ${formatDuration(log.duration_minutes)}`]
   if (log.textbook_name.trim()) {
     parts.push(`（${log.textbook_name.trim()}）`)
   }
