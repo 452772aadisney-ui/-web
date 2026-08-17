@@ -4,6 +4,7 @@ export const ADMIN_MYPAGE_MENU_ICONS = {
   students: '/icons/admin-mypage/students.png',
   dailyManagement: '/icons/admin-mypage/daily-management.png',
   schedule: '/icons/admin-mypage/schedule.png',
+  quiz: '/icons/admin-mypage/quiz.png',
   coaching: '/icons/admin-mypage/coaching.png',
   bookshelf: '/icons/admin-mypage/bookshelf.png',
   announcements: '/icons/admin-mypage/announcements.png',
@@ -33,6 +34,11 @@ const menuActions: Array<{
     href: '/admin/schedule',
     label: 'スケジュール登録',
     iconSrc: ADMIN_MYPAGE_MENU_ICONS.schedule,
+  },
+  {
+    href: '/admin/quizzes',
+    label: '小テスト',
+    iconSrc: ADMIN_MYPAGE_MENU_ICONS.quiz,
   },
   {
     href: '/admin/coaching',

@@ -12,6 +12,7 @@ const NAV_ITEMS = [
     badgeKey: 'studyDaily' as const,
   },
   { href: '/admin/schedule', label: 'スケジュール' },
+  { href: '/admin/quizzes', label: '小テスト' },
   { href: '/admin/coaching', label: 'コーチング' },
   { href: '/admin/bookshelf', label: '本棚' },
   { href: '/admin/chat', label: 'メッセージ', badgeKey: 'chat' as const },
@@ -46,6 +47,8 @@ export function AdminMainNav({
               (pathname?.startsWith('/admin/study-daily') ?? false)) ||
             (item.href === '/admin/schedule' &&
               (pathname?.startsWith('/admin/schedule') ?? false)) ||
+            (item.href === '/admin/quizzes' &&
+              (pathname?.startsWith('/admin/quizzes') ?? false)) ||
             (item.href === '/admin/coaching' &&
               (pathname?.startsWith('/admin/coaching') ?? false)) ||
             (item.href === '/admin/bookshelf' &&

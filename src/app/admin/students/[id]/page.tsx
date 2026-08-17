@@ -23,6 +23,8 @@ import { StudentTagAssignForm } from '@/components/tags/StudentTagAssignForm'
 import { fetchHomeworkTasksForStudent } from '@/lib/schedule/queries'
 import { fetchHomeworkCompletionsForStudent } from '@/lib/todo/queries'
 import { getPersonName } from '@/lib/auth/display-name'
+import { AdminStudentQuizScores } from '@/components/quizzes/AdminQuizScoreTable'
+import { fetchStudentQuizAssignments } from '@/lib/quizzes/queries'
 import { fetchStudentTags, fetchTagIdsForProfile } from '@/lib/tags/queries'
 
 export default async function AdminStudentStudyPage({
@@ -47,13 +49,15 @@ export default async function AdminStudentStudyPage({
     notFound()
   }
 
-  const [logs, textbooks, homework, completions, allTags, assignedTagIds] = await Promise.all([
+  const [logs, textbooks, homework, completions, allTags, assignedTagIds, quizAssignments] =
+    await Promise.all([
     fetchStudyLogsForStudent(id),
     fetchTextbooksForStudent(id),
     fetchHomeworkTasksForStudent(id),
     fetchHomeworkCompletionsForStudent(id),
     fetchStudentTags(),
     fetchTagIdsForProfile(id),
+    fetchStudentQuizAssignments(id),
   ])
 
   const { rows, subjects } = buildDailyChartData(logs, 14)
@@ -126,6 +130,14 @@ export default async function AdminStudentStudyPage({
         </div>
 
         <div className="space-y-6">
+          <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <h2 className="mb-1 text-lg font-bold">小テスト成績</h2>
+            <p className="mb-6 text-sm text-muted">
+              この生徒に登録された小テストの点数を入力できます。
+            </p>
+            <AdminStudentQuizScores studentId={id} assignments={quizAssignments} />
+          </section>
+
           <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
             <h2 className="mb-1 text-lg font-bold">宿題・ToDo 状況</h2>
             <p className="mb-6 text-sm text-muted">

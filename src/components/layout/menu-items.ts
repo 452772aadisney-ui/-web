@@ -13,6 +13,7 @@ export const STUDENT_HAMBURGER_ITEMS = [
   { href: '/dashboard/calendar', label: 'カレンダー' },
   { href: '/dashboard/todo', label: 'ToDoリスト' },
   { href: '/dashboard/coaching', label: 'コーチング' },
+  { href: '/dashboard/quizzes', label: '小テスト' },
   { href: '/dashboard/announcements', label: 'お知らせ' },
   { href: '/dashboard/chat', label: 'メッセージ' },
   { href: '/dashboard/faq', label: 'よくある質問' },
