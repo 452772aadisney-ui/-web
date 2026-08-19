@@ -2,12 +2,17 @@ import { createClient } from '@/lib/supabase/server'
 import {
   ACHIEVEMENTS,
   ACHIEVEMENT_SERIES,
+  isSecretAchievement,
   type AchievementDefinition,
 } from '@/lib/achievements/definitions'
 
 export type AchievementListItem = AchievementDefinition & {
   unlocked: boolean
   unlockedAt: string | null
+}
+
+export function getListableAchievements(): AchievementDefinition[] {
+  return ACHIEVEMENTS.filter((achievement) => !achievement.secret)
 }
 
 export async function fetchStudentAchievements(studentId: string): Promise<{
@@ -26,7 +31,8 @@ export async function fetchStudentAchievements(studentId: string): Promise<{
     (data ?? []).map((row) => [String(row.achievement_id), String(row.unlocked_at)]),
   )
 
-  const items = ACHIEVEMENTS.map((achievement) => ({
+  const listableAchievements = getListableAchievements()
+  const items = listableAchievements.map((achievement) => ({
     ...achievement,
     unlocked: unlockedAtById.has(achievement.id),
     unlockedAt: unlockedAtById.get(achievement.id) ?? null,
@@ -39,7 +45,7 @@ export async function fetchStudentAchievements(studentId: string): Promise<{
   }
 }
 
-/** 系統ごとに達成済み＋次の1件（未達成）のみ返す */
+/** 系統ごとに達成済み＋次の1件（未達成）のみ返す（シークレット実績は除外） */
 export function getVisibleAchievements(items: AchievementListItem[]): AchievementListItem[] {
   const itemById = new Map(items.map((item) => [item.id, item]))
   const visible: AchievementListItem[] = []
@@ -51,6 +57,7 @@ export function getVisibleAchievements(items: AchievementListItem[]): Achievemen
 
     let nextLockedShown = false
     for (const item of seriesItems) {
+      if (isSecretAchievement(item.id)) continue
       if (item.unlocked) {
         visible.push(item)
         continue

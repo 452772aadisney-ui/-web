@@ -1,20 +1,24 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { markAnnouncementAsRead } from '@/app/announcements/actions'
+import { usePathname } from 'next/navigation'
+import { recordStudentPageVisit } from '@/app/achievements/actions'
 import { AchievementUnlockDialog } from '@/components/achievements/AchievementUnlockDialog'
 import type { UnlockedAchievement } from '@/lib/achievements/unlock'
 
-export function MarkAnnouncementRead({ announcementId }: { announcementId: string }) {
+export function RecordStudentPageVisit() {
+  const pathname = usePathname()
   const [visibleAchievements, setVisibleAchievements] = useState<UnlockedAchievement[]>([])
 
   useEffect(() => {
-    void markAnnouncementAsRead(announcementId).then((unlocked) => {
+    if (!pathname) return
+
+    void recordStudentPageVisit(pathname).then((unlocked) => {
       if (unlocked.length > 0) {
         setVisibleAchievements(unlocked)
       }
     })
-  }, [announcementId])
+  }, [pathname])
 
   return (
     <AchievementUnlockDialog

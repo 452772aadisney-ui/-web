@@ -7,6 +7,7 @@ import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
 import { fetchUnreadStudyFeedbackCount } from '@/lib/study/feedback-queries'
 import { fetchUnseenTextbookCount } from '@/lib/textbooks/catalog-queries'
 import { HamburgerMenu } from '@/components/layout/HamburgerMenu'
+import { RecordStudentPageVisit } from '@/components/achievements/RecordStudentPageVisit'
 import {
   STUDENT_HAMBURGER_ITEMS,
   type HamburgerMenuItem,
@@ -75,6 +76,7 @@ export async function StudentPageShell({
 
   return (
     <div className="min-h-dvh">
+      <RecordStudentPageVisit />
       <header className="border-b border-border bg-card px-4 py-4">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
           <div className="min-w-0 flex-1">

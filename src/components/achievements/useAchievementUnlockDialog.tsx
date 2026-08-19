@@ -6,6 +6,7 @@ import { AchievementUnlockDialog } from '@/components/achievements/AchievementUn
 
 export function useAchievementUnlockDialog(
   unlockedAchievements: UnlockedAchievement[] | undefined,
+  options?: { onClose?: () => void },
 ) {
   const [visibleAchievements, setVisibleAchievements] = useState<UnlockedAchievement[]>([])
   const lastKeyRef = useRef('')
@@ -23,7 +24,10 @@ export function useAchievementUnlockDialog(
     dialog: (
       <AchievementUnlockDialog
         achievements={visibleAchievements}
-        onClose={() => setVisibleAchievements([])}
+        onClose={() => {
+          setVisibleAchievements([])
+          options?.onClose?.()
+        }}
       />
     ),
   }

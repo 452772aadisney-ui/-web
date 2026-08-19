@@ -1,9 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState, useEffect } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateProfile, type ProfileActionState } from '@/app/profile/actions'
+import { useAchievementUnlockDialog } from '@/components/achievements/useAchievementUnlockDialog'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
 import { SubjectCheckboxGrid } from '@/components/subjects/SubjectCheckboxGrid'
 import type { Profile } from '@/types/database'
@@ -18,18 +19,33 @@ interface ProfileFormProps {
 export function ProfileForm({ profile, backHref }: ProfileFormProps) {
   const router = useRouter()
   const [state, formAction, pending] = useActionState(updateProfile, initialState)
+  const [pendingRedirect, setPendingRedirect] = useState(false)
+  const { dialog } = useAchievementUnlockDialog(state.unlockedAchievements, {
+    onClose: () => {
+      if (!pendingRedirect) return
+      setPendingRedirect(false)
+      router.push(backHref)
+    },
+  })
 
   useEffect(() => {
-    if (state.success) {
-      router.push(backHref)
+    if (!state.success) return
+
+    if (state.unlockedAchievements?.length) {
+      setPendingRedirect(true)
+      return
     }
-  }, [state.success, backHref, router])
+
+    router.push(backHref)
+  }, [state.success, state.unlockedAchievements, backHref, router])
 
   const targetSchoolsText = profile.target_schools.join('\n')
   const selectedSubjects = new Set(profile.subjects)
 
   return (
-    <form action={formAction} className="space-y-6">
+    <>
+      {dialog}
+      <form action={formAction} className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block sm:col-span-2">
           <span className="mb-1.5 block text-sm font-medium">
@@ -92,5 +108,6 @@ export function ProfileForm({ profile, backHref }: ProfileFormProps) {
         </Link>
       </div>
     </form>
+    </>
   )
 }

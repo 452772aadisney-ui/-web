@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { evaluateProfileAchievements, type UnlockedAchievement } from '@/lib/achievements/unlock'
 import { createClient } from '@/lib/supabase/server'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
 import type { Profile } from '@/types/database'
@@ -9,6 +10,7 @@ import type { Profile } from '@/types/database'
 export type ProfileActionState = {
   error?: string
   success?: boolean
+  unlockedAchievements?: UnlockedAchievement[]
 }
 
 function parseTargetSchools(raw: string): string[] {
@@ -62,11 +64,13 @@ export async function updateProfile(
     return { error: 'プロフィールの保存に失敗しました' }
   }
 
+  const unlockedAchievements = await evaluateProfileAchievements(user.id)
+
   revalidatePath('/dashboard')
   revalidatePath('/dashboard/profile')
   revalidatePath('/admin/profile')
 
-  return { success: true }
+  return { success: true, unlockedAchievements }
 }
 
 export async function requireProfile(): Promise<Profile> {

@@ -1,6 +1,8 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { unlockAchievementIds, type UnlockedAchievement } from '@/lib/achievements/unlock'
+import { isUnreadEligibleContent } from '@/lib/account/content-cutoff'
 import { notifyStudentsOfNewAnnouncement } from '@/lib/email/notifications'
 import { createClient } from '@/lib/supabase/server'
 
@@ -173,12 +175,31 @@ export async function deleteAnnouncement(formData: FormData): Promise<void> {
   revalidateAnnouncementPaths()
 }
 
-export async function markAnnouncementAsRead(announcementId: string): Promise<void> {
+export async function markAnnouncementAsRead(announcementId: string): Promise<UnlockedAchievement[]> {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user || !announcementId) return
+  if (!user || !announcementId) return []
+
+  const { data: existingRead } = await supabase
+    .from('announcement_reads')
+    .select('student_id')
+    .eq('student_id', user.id)
+    .eq('announcement_id', announcementId)
+    .maybeSingle()
+
+  if (existingRead) return []
+
+  const [{ data: profile }, { data: announcement }] = await Promise.all([
+    supabase.from('profiles').select('created_at, role').eq('id', user.id).single(),
+    supabase.from('announcements').select('created_at').eq('id', announcementId).single(),
+  ])
+
+  const wasUnread =
+    profile?.role === 'student' &&
+    announcement != null &&
+    isUnreadEligibleContent(String(announcement.created_at), String(profile.created_at))
 
   await supabase.from('announcement_reads').upsert(
     {
@@ -193,4 +214,8 @@ export async function markAnnouncementAsRead(announcementId: string): Promise<vo
   revalidatePath(`/dashboard/announcements/${announcementId}`)
   revalidatePath('/admin/announcements')
   revalidatePath('/dashboard')
+
+  if (!wasUnread) return []
+
+  return unlockAchievementIds(user.id, ['announcement_read'])
 }
