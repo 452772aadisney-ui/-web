@@ -4,6 +4,8 @@ import { getPersonName } from '@/lib/auth/display-name'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { sendChatMessage } from '@/app/chat/actions'
+import { useAchievementUnlockDialog } from '@/components/achievements/useAchievementUnlockDialog'
+import type { UnlockedAchievement } from '@/lib/achievements/unlock'
 import { markChatAsRead } from '@/lib/chat/unread'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
@@ -40,6 +42,10 @@ export function ChatRoom({
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [lastUnlockedAchievements, setLastUnlockedAchievements] = useState<
+    UnlockedAchievement[] | undefined
+  >(undefined)
+  const { dialog: achievementDialog } = useAchievementUnlockDialog(lastUnlockedAchievements)
   const bottomRef = useRef<HTMLDivElement>(null)
   const supabase = useMemo(() => createClient(), [])
 
@@ -111,6 +117,10 @@ export function ChatRoom({
       if (prev.some((m) => m.id === result.message!.id)) return prev
       return [...prev, result.message!]
     })
+
+    if (result.unlockedAchievements?.length) {
+      setLastUnlockedAchievements(result.unlockedAchievements)
+    }
   }
 
   const peerDisplayName =
@@ -118,7 +128,9 @@ export function ChatRoom({
     (currentUserRole === 'admin' ? getPersonName(studentParticipant) : '管理者')
 
   return (
-    <div className="flex h-[min(70vh,560px)] flex-col rounded-2xl border border-border bg-card shadow-sm">
+    <>
+      {achievementDialog}
+      <div className="flex h-[min(70vh,560px)] flex-col rounded-2xl border border-border bg-card shadow-sm">
       <div className="border-b border-border px-4 py-3">
         <p className="text-sm text-muted">
           {currentUserRole === 'admin' ? 'チャット相手' : '管理者とのチャット'}
@@ -182,5 +194,6 @@ export function ChatRoom({
         {error && <p className="mt-2 text-sm text-error">{error}</p>}
       </form>
     </div>
+    </>
   )
 }

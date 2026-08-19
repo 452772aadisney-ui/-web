@@ -27,6 +27,8 @@ export const ACHIEVEMENT_MENU_PAGE_KEYS = [
   '/dashboard/info',
 ] as const
 
+export const STUDY_HISTORY_PAGE_KEY = '/dashboard/study/history'
+
 /** 同系統の実績は先頭から順に表示し、達成すると次が現れる（secret は含めない） */
 export const ACHIEVEMENT_SERIES: readonly (readonly string[])[] = [
   ['first_study_log'],
@@ -35,10 +37,13 @@ export const ACHIEVEMENT_SERIES: readonly (readonly string[])[] = [
   ['streak_3', 'streak_7', 'streak_14', 'streak_30'],
   ['total_10h', 'total_100h', 'total_500h', 'total_1000h'],
   ['daily_5h', 'daily_10h', 'daily_13h'],
-  ['single_subject_6h'],
+  ['single_subject_6h', 'single_subject_10h'],
+  ['vocab_3h', 'vocab_30h', 'vocab_75h', 'vocab_200h', 'vocab_500h'],
   ['subjects_3_day'],
+  ['coaching_first', 'coaching_10', 'coaching_20', 'coaching_50'],
   ['coaching_4_month'],
-  ['announcement_read'],
+  ['announcement_read', 'announcement_read_5'],
+  ['study_history_views_10'],
 ]
 
 export const ACHIEVEMENTS: AchievementDefinition[] = [
@@ -155,10 +160,80 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     category: 'daily',
   },
   {
+    id: 'single_subject_10h',
+    title: '猪突猛進',
+    description: '1つの科目を1日で10時間以上勉強した',
+    stars: 2,
+    category: 'daily',
+  },
+  {
+    id: 'vocab_3h',
+    title: '覚えなきゃ...',
+    description: '単語帳の学習時間が3時間を突破',
+    stars: 1,
+    category: 'total',
+  },
+  {
+    id: 'vocab_30h',
+    title: 'まだまだ...',
+    description: '単語帳の学習時間が30時間を突破',
+    stars: 1,
+    category: 'total',
+  },
+  {
+    id: 'vocab_75h',
+    title: 'これから...',
+    description: '単語帳の学習時間が75時間を突破',
+    stars: 2,
+    category: 'total',
+  },
+  {
+    id: 'vocab_200h',
+    title: 'もっともっと...',
+    description: '単語帳の学習時間が200時間を突破',
+    stars: 3,
+    category: 'total',
+  },
+  {
+    id: 'vocab_500h',
+    title: '生き字引',
+    description: '単語帳の学習時間が500時間を突破',
+    stars: 4,
+    category: 'total',
+  },
+  {
     id: 'subjects_3_day',
     title: '文武両道',
     description: '1日に3科目以上学習を記録した',
     stars: 2,
+    category: 'balance',
+  },
+  {
+    id: 'coaching_first',
+    title: '初めての',
+    description: 'コーチングを初めて予約し、実施した',
+    stars: 1,
+    category: 'balance',
+  },
+  {
+    id: 'coaching_10',
+    title: '相談が，あるんです',
+    description: 'コーチングを10回予約し、実施した',
+    stars: 2,
+    category: 'balance',
+  },
+  {
+    id: 'coaching_20',
+    title: '私のこと，分かりますよね？',
+    description: 'コーチングを20回予約し、実施した',
+    stars: 3,
+    category: 'balance',
+  },
+  {
+    id: 'coaching_50',
+    title: '二人三脚',
+    description: 'コーチングを50回予約し、実施した',
+    stars: 4,
     category: 'balance',
   },
   {
@@ -173,6 +248,20 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     title: '知らなきゃ損！',
     description: '未読のお知らせを1つ既読にした',
     stars: 1,
+    category: 'balance',
+  },
+  {
+    id: 'announcement_read_5',
+    title: 'メガホンを持って',
+    description: '未読のお知らせを5つ既読にした',
+    stars: 2,
+    category: 'balance',
+  },
+  {
+    id: 'study_history_views_10',
+    title: '過去から学ぶ',
+    description: '学習履歴で、過去の履歴を10回以上見た',
+    stars: 2,
     category: 'balance',
   },
   {
@@ -199,6 +288,38 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     category: 'secret',
     secret: true,
   },
+  {
+    id: 'birthday_since_registration',
+    title: '歳は数字でしかない，から',
+    description: '登録して初めて誕生日を迎えた',
+    stars: 2,
+    category: 'secret',
+    secret: true,
+  },
+  {
+    id: 'chat_messages_5',
+    title: '些細なことでも',
+    description: 'メッセージ機能で管理者に5回以上メッセージを送った',
+    stars: 1,
+    category: 'secret',
+    secret: true,
+  },
+  {
+    id: 'chat_messages_20',
+    title: 'ほうれん草食べた',
+    description: 'メッセージ機能で管理者に20回以上メッセージを送った',
+    stars: 2,
+    category: 'secret',
+    secret: true,
+  },
+  {
+    id: 'chat_messages_50',
+    title: '何でも話せる間柄',
+    description: 'メッセージ機能で管理者に50回以上メッセージを送った',
+    stars: 3,
+    category: 'secret',
+    secret: true,
+  },
 ]
 
 const achievementById = new Map(ACHIEVEMENTS.map((item) => [item.id, item]))
@@ -217,7 +338,10 @@ export function formatAchievementStars(stars: number): string {
 }
 
 export function normalizeAchievementVisitPath(pathname: string): string | null {
-  if (pathname.startsWith('/dashboard/study/subject') || pathname.startsWith('/dashboard/study/textbook')) {
+  if (
+    pathname.startsWith('/dashboard/study/subject') ||
+    pathname.startsWith('/dashboard/study/textbook')
+  ) {
     return '/dashboard/study'
   }
 

@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { evaluateAndUnlockAchievements, type UnlockedAchievement } from '@/lib/achievements/unlock'
 import { notifyStudentChatMessage } from '@/lib/discord/notifications'
 import { notifyChatMessageReceived } from '@/lib/email/notifications'
 import { createClient } from '@/lib/supabase/server'
@@ -10,6 +11,7 @@ import type { UserRole } from '@/types/database'
 export type ChatActionState = {
   error?: string
   message?: ChatMessage
+  unlockedAchievements?: UnlockedAchievement[]
 }
 
 export async function sendChatMessage(
@@ -91,5 +93,8 @@ export async function sendChatMessage(
   revalidatePath(`/admin/chat/${studentId}`)
   revalidatePath('/dashboard')
 
-  return { message }
+  const unlockedAchievements =
+    profile.role === 'student' ? await evaluateAndUnlockAchievements(user.id) : []
+
+  return { message, unlockedAchievements }
 }

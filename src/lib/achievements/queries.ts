@@ -71,3 +71,14 @@ export function getVisibleAchievements(items: AchievementListItem[]): Achievemen
 
   return visible
 }
+
+/** 未達成を上、達成済みを下に並べ替える */
+export function splitVisibleAchievements(items: AchievementListItem[]): {
+  lockedItems: AchievementListItem[]
+  unlockedItems: AchievementListItem[]
+} {
+  return {
+    lockedItems: items.filter((item) => !item.unlocked),
+    unlockedItems: items.filter((item) => item.unlocked),
+  }
+}

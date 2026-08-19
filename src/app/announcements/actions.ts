@@ -1,8 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { unlockAchievementIds, type UnlockedAchievement } from '@/lib/achievements/unlock'
-import { isUnreadEligibleContent } from '@/lib/account/content-cutoff'
+import { evaluateAndUnlockAchievements, type UnlockedAchievement } from '@/lib/achievements/unlock'
 import { notifyStudentsOfNewAnnouncement } from '@/lib/email/notifications'
 import { createClient } from '@/lib/supabase/server'
 
@@ -191,15 +190,11 @@ export async function markAnnouncementAsRead(announcementId: string): Promise<Un
 
   if (existingRead) return []
 
-  const [{ data: profile }, { data: announcement }] = await Promise.all([
-    supabase.from('profiles').select('created_at, role').eq('id', user.id).single(),
-    supabase.from('announcements').select('created_at').eq('id', announcementId).single(),
-  ])
-
-  const wasUnread =
-    profile?.role === 'student' &&
-    announcement != null &&
-    isUnreadEligibleContent(String(announcement.created_at), String(profile.created_at))
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
 
   await supabase.from('announcement_reads').upsert(
     {
@@ -215,7 +210,7 @@ export async function markAnnouncementAsRead(announcementId: string): Promise<Un
   revalidatePath('/admin/announcements')
   revalidatePath('/dashboard')
 
-  if (!wasUnread) return []
+  if (profile?.role !== 'student') return []
 
-  return unlockAchievementIds(user.id, ['announcement_read'])
+  return evaluateAndUnlockAchievements(user.id)
 }

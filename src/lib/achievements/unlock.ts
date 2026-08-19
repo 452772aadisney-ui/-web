@@ -1,11 +1,14 @@
 import { revalidatePath } from 'next/cache'
 import {
   ACHIEVEMENT_MENU_PAGE_KEYS,
+  STUDY_HISTORY_PAGE_KEY,
   getAchievementDefinition,
 } from '@/lib/achievements/definitions'
 import {
   buildAchievementMetrics,
+  countEligibleAnnouncementReads,
   getUnlockableAchievementIds,
+  hasFirstBirthdaySinceRegistration,
 } from '@/lib/achievements/metrics'
 import { createClient } from '@/lib/supabase/server'
 
@@ -82,11 +85,14 @@ async function loadAchievementEvaluationContext(studentId: string) {
   const [
     { data: existingRows },
     { data: studyLogs },
+    { data: textbooks },
     { count: textbookCount },
     { data: coachingBookings },
     { data: coachingSlots },
     { data: profile },
     { data: pageVisits },
+    { data: announcementReads },
+    { count: studentChatMessageCount },
   ] = await Promise.all([
     supabase
       .from('student_achievements')
@@ -94,8 +100,9 @@ async function loadAchievementEvaluationContext(studentId: string) {
       .eq('student_id', studentId),
     supabase
       .from('study_logs')
-      .select('subject, duration_minutes, studied_on')
+      .select('subject, duration_minutes, studied_on, textbook_id')
       .eq('student_id', studentId),
+    supabase.from('textbooks').select('id, usage_tags').eq('student_id', studentId),
     supabase
       .from('textbooks')
       .select('id', { count: 'exact', head: true })
@@ -107,10 +114,22 @@ async function loadAchievementEvaluationContext(studentId: string) {
     supabase.from('coaching_slots').select('id, slot_date'),
     supabase
       .from('profiles')
-      .select('birthday, target_schools')
+      .select('birthday, target_schools, created_at')
       .eq('id', studentId)
       .single(),
-    supabase.from('student_page_visits').select('page_key').eq('student_id', studentId),
+    supabase
+      .from('student_page_visits')
+      .select('page_key, visit_count')
+      .eq('student_id', studentId),
+    supabase
+      .from('announcement_reads')
+      .select('announcement_id')
+      .eq('student_id', studentId),
+    supabase
+      .from('chat_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('student_id', studentId)
+      .eq('sender_id', studentId),
   ])
 
   const slotDateById = new Map(
@@ -122,7 +141,37 @@ async function loadAchievementEvaluationContext(studentId: string) {
     visitedPageKeys.has(pageKey),
   )
 
+  const studyHistoryVisit = (pageVisits ?? []).find(
+    (row) => String(row.page_key) === STUDY_HISTORY_PAGE_KEY,
+  )
+  const studyHistoryViewCount = Number(studyHistoryVisit?.visit_count ?? 0)
+
   const targetSchools = Array.isArray(profile?.target_schools) ? profile.target_schools : []
+  const accountCreatedAt = String(profile?.created_at ?? '')
+  const readAnnouncementIds = (announcementReads ?? []).map((row) => String(row.announcement_id))
+
+  let eligibleAnnouncementReadCount = 0
+  if (readAnnouncementIds.length > 0 && accountCreatedAt) {
+    const { data: announcements } = await supabase
+      .from('announcements')
+      .select('id, created_at')
+      .in('id', readAnnouncementIds)
+
+    const announcementsById = new Map(
+      (announcements ?? []).map((row) => [
+        String(row.id),
+        { created_at: String(row.created_at) },
+      ]),
+    )
+
+    eligibleAnnouncementReadCount = countEligibleAnnouncementReads(
+      (announcementReads ?? []).map((row) => ({
+        announcement_id: String(row.announcement_id),
+      })),
+      announcementsById,
+      accountCreatedAt,
+    )
+  }
 
   return {
     existingIds: new Set((existingRows ?? []).map((row) => String(row.achievement_id))),
@@ -131,15 +180,27 @@ async function loadAchievementEvaluationContext(studentId: string) {
         subject: String(log.subject),
         duration_minutes: Number(log.duration_minutes),
         studied_on: String(log.studied_on),
+        textbook_id: log.textbook_id ? String(log.textbook_id) : null,
+      })),
+      textbooks: (textbooks ?? []).map((book) => ({
+        id: String(book.id),
+        usage_tags: Array.isArray(book.usage_tags) ? book.usage_tags.map(String) : [],
       })),
       textbookCount: textbookCount ?? 0,
       coachingBookings: (coachingBookings ?? []).map((row) => ({
         status: String(row.status),
         slot_date: row.slot_id ? slotDateById.get(String(row.slot_id)) ?? null : null,
       })),
+      eligibleAnnouncementReadCount,
+      studyHistoryViewCount,
+      studentChatMessageCount: studentChatMessageCount ?? 0,
       hasTargetSchool: targetSchools.some((school) => String(school).trim().length > 0),
       hasBirthday: Boolean(profile?.birthday),
       hasOpenedAllMenus,
+      hasFirstBirthdaySinceRegistration: hasFirstBirthdaySinceRegistration(
+        profile?.birthday ? String(profile.birthday) : null,
+        accountCreatedAt || null,
+      ),
     }),
   }
 }

@@ -25,10 +25,20 @@ export async function recordStudentPageVisit(pathname: string): Promise<Unlocked
 
   if (profile?.role !== 'student') return []
 
+  const { data: existingVisit } = await supabase
+    .from('student_page_visits')
+    .select('visit_count')
+    .eq('student_id', user.id)
+    .eq('page_key', pageKey)
+    .maybeSingle()
+
+  const nextVisitCount = Number(existingVisit?.visit_count ?? 0) + 1
+
   const { error: visitError } = await supabase.from('student_page_visits').upsert(
     {
       student_id: user.id,
       page_key: pageKey,
+      visit_count: nextVisitCount,
     },
     { onConflict: 'student_id,page_key' },
   )

@@ -138,7 +138,9 @@ export function UsageTagFields({ selectedUsageTags = [] }: UsageTagFieldsProps) 
       <legend className="mb-2 text-sm font-medium">
         用途タグ <span className="text-error">*</span>
       </legend>
-      <p className="mb-2 text-xs text-muted">授業用・自習用から選べます（複数選択可）</p>
+      <p className="mb-2 text-xs text-muted">
+        授業用・自習用・単語帳から選べます（複数選択可）。単語帳は主に英語の教材向けです。
+      </p>
       <div className="flex flex-wrap gap-2">
         {TEXTBOOK_USAGE_TAGS.map((tag) => (
           <label

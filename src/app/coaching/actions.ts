@@ -626,12 +626,22 @@ async function completeCoachingBookingAction(formData: FormData): Promise<Coachi
   if (!bookingId) return { error: '予約が指定されていません' }
 
   const supabase = await createClient()
+  const { data: booking, error: fetchError } = await supabase
+    .from('coaching_bookings')
+    .select('student_id')
+    .eq('id', bookingId)
+    .maybeSingle()
+
+  if (fetchError || !booking) return { error: '予約が見つかりません' }
+
   const { error } = await supabase
     .from('coaching_bookings')
     .update({ status: 'completed' })
     .eq('id', bookingId)
 
   if (error) return { error: '更新に失敗しました' }
+
+  await evaluateAndUnlockAchievements(String(booking.student_id))
 
   revalidateCoachingPaths()
   return { success: true }

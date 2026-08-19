@@ -35,17 +35,40 @@ function AchievementCard({ item }: { item: AchievementListItem }) {
   )
 }
 
-export function AchievementList({
+function AchievementSection({
+  title,
   items,
+}: {
+  title: string
+  items: AchievementListItem[]
+}) {
+  if (items.length === 0) return null
+
+  return (
+    <section>
+      <h2 className="mb-3 text-sm font-bold text-muted">{title}</h2>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {items.map((item) => (
+          <AchievementCard key={item.id} item={item} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+export function AchievementList({
+  lockedItems,
+  unlockedItems,
   unlockedCount,
   totalCount,
 }: {
-  items: AchievementListItem[]
+  lockedItems: AchievementListItem[]
+  unlockedItems: AchievementListItem[]
   unlockedCount: number
   totalCount: number
 }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="rounded-xl border border-border bg-background px-4 py-3 text-sm">
         達成数:{' '}
         <span className="font-bold text-primary">
@@ -53,11 +76,8 @@ export function AchievementList({
         </span>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        {items.map((item) => (
-          <AchievementCard key={item.id} item={item} />
-        ))}
-      </div>
+      <AchievementSection title="未達成" items={lockedItems} />
+      <AchievementSection title="達成済み" items={unlockedItems} />
     </div>
   )
 }
