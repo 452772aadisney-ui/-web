@@ -10,6 +10,7 @@ import {
   updateTextbook,
   type TextbookActionState,
 } from '@/app/textbooks/actions'
+import { useAchievementUnlockDialog } from '@/components/achievements/useAchievementUnlockDialog'
 import {
   SubjectTagFields,
   TextbookDateFields,
@@ -143,6 +144,7 @@ function CatalogRegisterForm({
     addTextbookFromCatalog.bind(null, studentId),
     initialState,
   )
+  const { dialog: achievementDialog } = useAchievementUnlockDialog(state.unlockedAchievements)
   const [categoryLabel, setCategoryLabel] = useState<TextbookSubjectCategoryLabel>(() =>
     availableCategories.includes(initialSubject) ? initialSubject : availableCategories[0]!,
   )
@@ -171,6 +173,7 @@ function CatalogRegisterForm({
 
   return (
     <div className="space-y-4">
+      {achievementDialog}
       <SubjectCategorySelect
         categories={availableCategories}
         selectedSubject={categoryLabel}
@@ -239,9 +242,12 @@ function CreateRegisterForm({
     createTextbook.bind(null, studentId),
     initialState,
   )
+  const { dialog: achievementDialog } = useAchievementUnlockDialog(state.unlockedAchievements)
 
   return (
-    <form action={formAction} className="space-y-4 rounded-lg border border-border bg-background p-4">
+    <>
+      {achievementDialog}
+      <form action={formAction} className="space-y-4 rounded-lg border border-border bg-background p-4">
       <h3 className="font-medium">新規作成</h3>
 
       <label className="block w-full min-w-0">
@@ -272,6 +278,7 @@ function CreateRegisterForm({
         {pending ? '登録中…' : '教材を登録'}
       </button>
     </form>
+    </>
   )
 }
 

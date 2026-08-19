@@ -1,5 +1,6 @@
 'use server'
 
+import { evaluateAndUnlockAchievements, type UnlockedAchievement } from '@/lib/achievements/unlock'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { TEXTBOOK_USAGE_TAGS } from '@/lib/constants/textbook-tags'
@@ -8,6 +9,7 @@ import { parseOptionalDate, validateDateRange } from '@/lib/textbooks/format'
 export type TextbookActionState = {
   error?: string
   success?: boolean
+  unlockedAchievements?: UnlockedAchievement[]
 }
 
 function parseSubjects(formData: FormData, allowedSubjects: string[]): string[] {
@@ -146,7 +148,8 @@ export async function createTextbook(
   }
 
   revalidateTextbookPaths(studentId)
-  return { success: true }
+  const unlockedAchievements = await evaluateAndUnlockAchievements(studentId)
+  return { success: true, unlockedAchievements }
 }
 
 export async function createTextbooksForStudents(
@@ -292,7 +295,8 @@ export async function addTextbookFromCatalog(
   }
 
   revalidateTextbookPaths(studentId)
-  return { success: true }
+  const unlockedAchievements = await evaluateAndUnlockAchievements(studentId)
+  return { success: true, unlockedAchievements }
 }
 
 export async function updateTextbook(

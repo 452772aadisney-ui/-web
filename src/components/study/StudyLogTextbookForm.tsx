@@ -3,12 +3,13 @@
 import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import { createStudyLog, type StudyLogActionState } from '@/app/study/actions'
+import { useAchievementUnlockDialog } from '@/components/achievements/useAchievementUnlockDialog'
 import {
   filterTextbooksByStudyCategory,
   getStudySubjectCategoriesForProfile,
 } from '@/lib/constants/textbook-subject-categories'
 import { getJstDateKey } from '@/lib/study/dates'
-import { MAX_STUDY_DURATION_MINUTES } from '@/lib/study/validation'
+import { StudyDurationInput } from '@/components/study/StudyDurationInput'
 import type { Textbook } from '@/types/textbook'
 
 const initialState: StudyLogActionState = {}
@@ -26,6 +27,7 @@ interface StudyLogTextbookFormProps {
 
 export function StudyLogTextbookForm({ profileSubjects, textbooks }: StudyLogTextbookFormProps) {
   const [state, formAction, pending] = useActionState(createStudyLog, initialState)
+  const { dialog: achievementDialog } = useAchievementUnlockDialog(state.unlockedAchievements)
   const [selectedSubject, setSelectedSubject] = useState('')
   const todayKey = getJstDateKey()
 
@@ -45,7 +47,9 @@ export function StudyLogTextbookForm({ profileSubjects, textbooks }: StudyLogTex
   }
 
   return (
-    <form action={formAction} className="min-w-0 space-y-4">
+    <>
+      {achievementDialog}
+      <form action={formAction} className="min-w-0 space-y-4">
       <input type="hidden" name="registrationMode" value="textbook" />
 
       <label className="block w-full min-w-0">
@@ -128,24 +132,7 @@ export function StudyLogTextbookForm({ profileSubjects, textbooks }: StudyLogTex
         />
       </label>
 
-      <label className="block w-full min-w-0 sm:max-w-xs">
-        <span className="mb-1.5 block text-sm font-medium">
-          学習時間（分） <span className="text-error">*</span>
-        </span>
-        <input
-          type="number"
-          name="durationMinutes"
-          min={1}
-          max={MAX_STUDY_DURATION_MINUTES}
-          step={1}
-          required
-          placeholder="60"
-          className={fieldClass}
-        />
-        <span className="mt-1 block text-xs text-muted">
-          1〜{MAX_STUDY_DURATION_MINUTES}分の整数
-        </span>
-      </label>
+      <StudyDurationInput />
 
       {state.error && (
         <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-error" role="alert">
@@ -167,5 +154,6 @@ export function StudyLogTextbookForm({ profileSubjects, textbooks }: StudyLogTex
         {pending ? '保存中…' : '記録を追加'}
       </button>
     </form>
+    </>
   )
 }

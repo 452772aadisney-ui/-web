@@ -1,5 +1,6 @@
 'use server'
 
+import { evaluateAndUnlockAchievements, type UnlockedAchievement } from '@/lib/achievements/unlock'
 import {
   filterTextbooksByStudyCategory,
   isStudySubjectCategoryLabel,
@@ -16,6 +17,7 @@ import {
 export type StudyLogActionState = {
   error?: string
   success?: boolean
+  unlockedAchievements?: UnlockedAchievement[]
 }
 
 type StudyLogRegistrationMode = 'subject' | 'textbook'
@@ -210,8 +212,11 @@ export async function createStudyLog(
   revalidatePath('/dashboard/study/history')
   revalidatePath('/admin/students')
   revalidatePath('/admin/study-daily')
+  revalidatePath('/dashboard/achievements')
 
-  return { success: true }
+  const unlockedAchievements = await evaluateAndUnlockAchievements(user.id)
+
+  return { success: true, unlockedAchievements }
 }
 
 export async function updateStudyLog(

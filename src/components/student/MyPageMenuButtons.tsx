@@ -15,6 +15,7 @@ export const MYPAGE_MENU_ICONS = {
   message: '/icons/mypage/message.png',
   announcements: '/icons/mypage/announcements.png',
   faq: '/icons/mypage/faq.png',
+  achievements: '/icons/mypage/achievements.png',
 } as const
 
 interface MyPagePrimaryActionButtonProps {

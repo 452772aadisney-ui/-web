@@ -29,6 +29,11 @@ const iconMenuActions: Array<{
     badgeKey: 'studyHistory',
   },
   {
+    href: '/dashboard/achievements',
+    label: '実績一覧',
+    iconSrc: MYPAGE_MENU_ICONS.achievements,
+  },
+  {
     href: '/dashboard/bookshelf',
     label: '本棚',
     iconSrc: MYPAGE_MENU_ICONS.bookshelf,

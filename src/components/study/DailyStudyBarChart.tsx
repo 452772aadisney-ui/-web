@@ -41,16 +41,10 @@ export function DailyStudyBarChart({ data, subjects }: DailyStudyBarChartProps) 
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
           <XAxis dataKey="label" tick={{ fontSize: 12 }} stroke="#64748b" />
           <YAxis
-            width={32}
-            tick={{ fontSize: 12 }}
+            width={72}
+            tick={{ fontSize: 11 }}
             stroke="#64748b"
-            label={{
-              value: '分',
-              angle: -90,
-              position: 'insideTopLeft',
-              offset: 0,
-              style: { fontSize: 11, fill: '#64748b' },
-            }}
+            tickFormatter={(value) => formatDuration(Number(value))}
           />
           <Tooltip
             formatter={(value, name) => [

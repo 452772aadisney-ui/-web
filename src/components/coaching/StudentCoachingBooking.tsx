@@ -8,6 +8,7 @@ import {
   rescheduleCoachingBooking,
   type CoachingActionState,
 } from '@/app/coaching/actions'
+import { useAchievementUnlockDialog } from '@/components/achievements/useAchievementUnlockDialog'
 import { CoachingWeekGrid } from '@/components/coaching/CoachingWeekGrid'
 import { formatCoachingBookingDateTime } from '@/lib/coaching/format'
 import type {
@@ -62,6 +63,7 @@ function BookingForm({
   onCancel: () => void
 }) {
   const [state, formAction, pending] = useActionState(bookCoachingSlot, initialState)
+  const { dialog: achievementDialog } = useAchievementUnlockDialog(state.unlockedAchievements)
   const confirmLabel = formatBookingConfirmLabel(slot)
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -73,11 +75,13 @@ function BookingForm({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="mt-4 space-y-3 rounded-lg border border-primary/30 bg-blue-50/40 p-4"
-    >
-      <input type="hidden" name="slotId" value={slot.id} />
+    <>
+      {achievementDialog}
+      <form
+        onSubmit={handleSubmit}
+        className="mt-4 space-y-3 rounded-lg border border-primary/30 bg-blue-50/40 p-4"
+      >
+        <input type="hidden" name="slotId" value={slot.id} />
       <p className="text-sm font-medium">
         {slot.coach.name} /{' '}
         {formatCoachingBookingDateTime(
@@ -111,6 +115,7 @@ function BookingForm({
         </button>
       </div>
     </form>
+    </>
   )
 }
 

@@ -1,5 +1,6 @@
 'use server'
 
+import { evaluateAndUnlockAchievements, type UnlockedAchievement } from '@/lib/achievements/unlock'
 import { revalidatePath } from 'next/cache'
 import { notifyCoachingBookingCreated, notifyCoachingBookingCancelled, notifyCoachingBookingRescheduled } from '@/lib/discord/notifications'
 import {
@@ -22,6 +23,7 @@ import type { AvailableCoachingSlot } from '@/types/coaching'
 export type CoachingActionState = {
   error?: string
   success?: boolean
+  unlockedAchievements?: UnlockedAchievement[]
 }
 
 function revalidateCoachingPaths() {
@@ -385,7 +387,8 @@ export async function bookCoachingSlot(
   }
 
   revalidateCoachingPaths()
-  return { success: true }
+  const unlockedAchievements = await evaluateAndUnlockAchievements(studentResult.userId)
+  return { success: true, unlockedAchievements }
 }
 
 export async function rescheduleCoachingBooking(
