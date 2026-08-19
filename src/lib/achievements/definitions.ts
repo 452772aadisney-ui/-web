@@ -8,13 +8,16 @@ export type AchievementDefinition = {
   category: AchievementCategory
 }
 
-export const ACHIEVEMENT_CATEGORY_LABELS: Record<AchievementCategory, string> = {
-  beginner: '初期離脱を防ぐビギナー実績（登録・準備系）',
-  streak: '毎日アプリを開かせる継続実績（最重要）',
-  total: '努力を可視化する累積実績（時間・量）',
-  daily: '努力を可視化する累積実績（時間・量）',
-  balance: 'バランス・行動促進実績',
-}
+/** 同系統の実績は先頭から順に表示し、達成すると次が現れる */
+export const ACHIEVEMENT_SERIES: readonly (readonly string[])[] = [
+  ['first_study_log'],
+  ['textbooks_5', 'textbooks_10'],
+  ['streak_3', 'streak_7', 'streak_14', 'streak_30'],
+  ['total_10h', 'total_100h', 'total_500h', 'total_1000h'],
+  ['daily_5h', 'daily_10h'],
+  ['subjects_3_day'],
+  ['coaching_4_month'],
+]
 
 export const ACHIEVEMENTS: AchievementDefinition[] = [
   {
@@ -134,11 +137,3 @@ export function formatAchievementStars(stars: number): string {
   if (stars <= 0) return ''
   return '☆'.repeat(stars)
 }
-
-export const ACHIEVEMENT_CATEGORY_ORDER: AchievementCategory[] = [
-  'beginner',
-  'streak',
-  'total',
-  'daily',
-  'balance',
-]

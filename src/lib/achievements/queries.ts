@@ -1,19 +1,13 @@
 import { createClient } from '@/lib/supabase/server'
 import {
   ACHIEVEMENTS,
-  type AchievementCategory,
+  ACHIEVEMENT_SERIES,
   type AchievementDefinition,
 } from '@/lib/achievements/definitions'
 
 export type AchievementListItem = AchievementDefinition & {
   unlocked: boolean
   unlockedAt: string | null
-}
-
-export type AchievementListGroup = {
-  category: AchievementCategory
-  label: string
-  items: AchievementListItem[]
 }
 
 export async function fetchStudentAchievements(studentId: string): Promise<{
@@ -45,29 +39,28 @@ export async function fetchStudentAchievements(studentId: string): Promise<{
   }
 }
 
-export function groupAchievements(items: AchievementListItem[]): AchievementListGroup[] {
-  const groups: AchievementListGroup[] = [
-    {
-      category: 'beginner',
-      label: '初期離脱を防ぐビギナー実績（登録・準備系）',
-      items: items.filter((item) => item.category === 'beginner'),
-    },
-    {
-      category: 'streak',
-      label: '毎日アプリを開かせる継続実績（最重要）',
-      items: items.filter((item) => item.category === 'streak'),
-    },
-    {
-      category: 'total',
-      label: '努力を可視化する累積実績（時間・量）',
-      items: items.filter((item) => item.category === 'total' || item.category === 'daily'),
-    },
-    {
-      category: 'balance',
-      label: 'バランス・行動促進実績',
-      items: items.filter((item) => item.category === 'balance'),
-    },
-  ]
+/** 系統ごとに達成済み＋次の1件（未達成）のみ返す */
+export function getVisibleAchievements(items: AchievementListItem[]): AchievementListItem[] {
+  const itemById = new Map(items.map((item) => [item.id, item]))
+  const visible: AchievementListItem[] = []
 
-  return groups.filter((group) => group.items.length > 0)
+  for (const series of ACHIEVEMENT_SERIES) {
+    const seriesItems = series
+      .map((id) => itemById.get(id))
+      .filter((item): item is AchievementListItem => item != null)
+
+    let nextLockedShown = false
+    for (const item of seriesItems) {
+      if (item.unlocked) {
+        visible.push(item)
+        continue
+      }
+      if (!nextLockedShown) {
+        visible.push(item)
+        nextLockedShown = true
+      }
+    }
+  }
+
+  return visible
 }

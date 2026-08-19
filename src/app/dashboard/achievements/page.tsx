@@ -3,7 +3,7 @@ import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { getDashboardPathForRole } from '@/lib/auth/routes'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { AchievementList } from '@/components/achievements/AchievementList'
-import { fetchStudentAchievements, groupAchievements } from '@/lib/achievements/queries'
+import { fetchStudentAchievements, getVisibleAchievements } from '@/lib/achievements/queries'
 
 export default async function StudentAchievementsPage() {
   const profile = await getCurrentProfile()
@@ -12,7 +12,7 @@ export default async function StudentAchievementsPage() {
   if (profile.role !== 'student') redirect(getDashboardPathForRole(profile.role))
 
   const { items, unlockedCount, totalCount } = await fetchStudentAchievements(profile.id)
-  const groups = groupAchievements(items)
+  const visibleItems = getVisibleAchievements(items)
 
   return (
     <StudentPageShell title="実績一覧" backHref="/dashboard" backLabel="マイページ">
@@ -21,7 +21,7 @@ export default async function StudentAchievementsPage() {
         <p className="mb-6 text-sm text-muted">
           学習や登録の積み重ねで実績を解除できます。未達成はグレー表示です。
         </p>
-        <AchievementList groups={groups} unlockedCount={unlockedCount} totalCount={totalCount} />
+        <AchievementList items={visibleItems} unlockedCount={unlockedCount} totalCount={totalCount} />
       </section>
     </StudentPageShell>
   )

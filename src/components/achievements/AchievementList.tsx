@@ -36,16 +36,16 @@ function AchievementCard({ item }: { item: AchievementListItem }) {
 }
 
 export function AchievementList({
-  groups,
+  items,
   unlockedCount,
   totalCount,
 }: {
-  groups: Array<{ label: string; items: AchievementListItem[] }>
+  items: AchievementListItem[]
   unlockedCount: number
   totalCount: number
 }) {
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="rounded-xl border border-border bg-background px-4 py-3 text-sm">
         達成数:{' '}
         <span className="font-bold text-primary">
@@ -53,16 +53,11 @@ export function AchievementList({
         </span>
       </div>
 
-      {groups.map((group) => (
-        <section key={group.label}>
-          <h2 className="mb-3 text-sm font-bold text-muted">{group.label}</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            {group.items.map((item) => (
-              <AchievementCard key={item.id} item={item} />
-            ))}
-          </div>
-        </section>
-      ))}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {items.map((item) => (
+          <AchievementCard key={item.id} item={item} />
+        ))}
+      </div>
     </div>
   )
 }
