@@ -11,6 +11,7 @@ import {
   MyPageIconMenuButton,
   MyPagePrimaryActionButton,
 } from '@/components/student/MyPageMenuButtons'
+import { formatStudyStreakLabel } from '@/lib/study/streak'
 
 type MenuBadgeKey = 'studyHistory' | 'announcements' | 'chat' | 'bookshelf' | 'faqIntro'
 
@@ -82,6 +83,7 @@ const iconMenuActions: Array<{
 
 interface MyPageActionsProps {
   nextCoaching?: CoachingBookingWithDetails | null
+  studyStreakDays?: number
   unreadStudyFeedbackCount?: number
   unreadAnnouncementCount?: number
   unreadChatCount?: number
@@ -92,6 +94,7 @@ interface MyPageActionsProps {
 
 export function MyPageActions({
   nextCoaching,
+  studyStreakDays = 0,
   unreadStudyFeedbackCount = 0,
   unreadAnnouncementCount = 0,
   unreadChatCount = 0,
@@ -112,42 +115,48 @@ export function MyPageActions({
     ? iconMenuActions.filter((action) => action.label !== '授業予定')
     : iconMenuActions
 
+  const studyStreakLabel = formatStudyStreakLabel(studyStreakDays)
+
   return (
     <div className="space-y-4">
       <FaqIntroDialog open={showFaqIntro} />
       <StudyLogModeDialog open={studyDialogOpen} onClose={() => setStudyDialogOpen(false)} />
 
       {nextCoaching ? (
-        <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <h2 className="text-center text-sm font-semibold text-muted">次回コーチング予定</h2>
-          <p className="mt-3 text-center text-lg font-bold">
-            {formatCoachingBookingDateTime(
-              nextCoaching.slot.slot_date,
-              nextCoaching.slot.start_time,
-              nextCoaching.slot.starts_at,
-              nextCoaching.slot.ends_at,
-            )}
-          </p>
-          <p className="mt-1 text-center text-sm text-muted">{nextCoaching.coach.name}</p>
-          <div className="mt-3 text-center">
+        <section className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-xs font-semibold text-muted">次回コーチング</h2>
+              <p className="mt-0.5 truncate text-sm font-bold">
+                {formatCoachingBookingDateTime(
+                  nextCoaching.slot.slot_date,
+                  nextCoaching.slot.start_time,
+                  nextCoaching.slot.starts_at,
+                  nextCoaching.slot.ends_at,
+                )}
+              </p>
+              <p className="truncate text-xs text-muted">{nextCoaching.coach.name}</p>
+            </div>
             <Link
               href="/dashboard/coaching"
-              className="text-sm font-medium text-primary hover:underline"
+              className="shrink-0 text-xs font-medium text-primary hover:underline"
             >
-              コーチング予定を変更する →
+              変更 →
             </Link>
           </div>
         </section>
       ) : (
-        <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <h2 className="text-center text-sm font-semibold text-muted">次回コーチング予定</h2>
-          <p className="mt-3 text-center font-medium">次回コーチングを予約してください</p>
-          <div className="mt-3 text-center">
+        <section className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xs font-semibold text-muted">次回コーチング</h2>
+              <p className="mt-0.5 text-sm font-medium">予約がありません</p>
+            </div>
             <Link
               href="/dashboard/coaching"
-              className="text-sm font-medium text-primary hover:underline"
+              className="shrink-0 text-xs font-medium text-primary hover:underline"
             >
-              コーチングを予約する →
+              予約 →
             </Link>
           </div>
         </section>
@@ -155,6 +164,7 @@ export function MyPageActions({
 
       <MyPagePrimaryActionButton
         label="学習を記録する"
+        subtitle={studyStreakLabel}
         iconSrc={MYPAGE_MENU_ICONS.recordStudy}
         onClick={() => setStudyDialogOpen(true)}
       />

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import type { StudyLog } from '@/lib/study/chart-data'
+import { computeCurrentStudyStreak } from '@/lib/study/streak'
 import type { Textbook } from '@/types/textbook'
 
 export async function fetchTextbooksForStudent(studentId: string): Promise<Textbook[]> {
@@ -37,6 +38,19 @@ export async function fetchStudyLogsForStudent(studentId: string): Promise<Study
   }
 
   return data as StudyLog[]
+}
+
+export async function fetchCurrentStudyStreakForStudent(studentId: string): Promise<number> {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('study_logs')
+    .select('studied_on')
+    .eq('student_id', studentId)
+
+  if (error || !data) return 0
+
+  return computeCurrentStudyStreak(data.map((row) => String(row.studied_on)))
 }
 
 export async function fetchStudentList(): Promise<

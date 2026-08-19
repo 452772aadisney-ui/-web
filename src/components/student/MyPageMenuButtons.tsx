@@ -22,6 +22,7 @@ interface MyPagePrimaryActionButtonProps {
   href?: string
   label: string
   iconSrc: string
+  subtitle?: string | null
   onClick?: () => void
 }
 
@@ -29,6 +30,7 @@ export function MyPagePrimaryActionButton({
   href,
   label,
   iconSrc,
+  subtitle,
   onClick,
 }: MyPagePrimaryActionButtonProps) {
   const className =
@@ -44,7 +46,12 @@ export function MyPagePrimaryActionButton({
         className="h-8 w-8 shrink-0 brightness-0 invert"
         aria-hidden
       />
-      {label}
+      <span className="flex flex-col items-center gap-1">
+        <span>{label}</span>
+        {subtitle && (
+          <span className="text-sm font-semibold text-amber-300">{subtitle}</span>
+        )}
+      </span>
     </>
   )
 
