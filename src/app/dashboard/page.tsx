@@ -4,7 +4,9 @@ import { getCurrentProfileWithError } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { CoachingAlertBanner } from '@/components/coaching/CoachingAlertBanner'
 import { MyPageActions } from '@/components/student/MyPageActions'
+import { StarRankingBanner } from '@/components/student/StarRankingBanner'
 import { StudentQrCode } from '@/components/student/StudentQrCode'
+import { fetchStudentStarRanking } from '@/lib/achievements/ranking'
 import { fetchUnreadAnnouncementCount } from '@/lib/announcements/queries'
 import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
 import { fetchCurrentStudyStreakForStudent } from '@/lib/study/queries'
@@ -55,7 +57,7 @@ export default async function StudentDashboardPage() {
   const nextCoaching =
     profile.role === 'student' ? getNextCoachingBooking(coachingBookings) : null
 
-  const [unreadAnnouncementCount, unreadChatCount, unreadStudyFeedbackCount, unseenTextbookCount, studyStreakDays] =
+  const [unreadAnnouncementCount, unreadChatCount, unreadStudyFeedbackCount, unseenTextbookCount, studyStreakDays, starRanking] =
     profile.role === 'student'
       ? await Promise.all([
           fetchUnreadAnnouncementCount(profile.id).catch(() => 0),
@@ -63,8 +65,9 @@ export default async function StudentDashboardPage() {
           fetchUnreadStudyFeedbackCount(profile.id).catch(() => 0),
           fetchUnseenTextbookCount(profile.id).catch(() => 0),
           fetchCurrentStudyStreakForStudent(profile.id).catch(() => 0),
+          fetchStudentStarRanking(profile.id).catch(() => null),
         ])
-      : [0, 0, 0, 0, 0]
+      : [0, 0, 0, 0, 0, null]
 
   const gradeTagName =
     profile.role === 'student' ? await fetchGradeTagNameForProfile(profile.id) : null
@@ -75,6 +78,7 @@ export default async function StudentDashboardPage() {
   return (
     <StudentPageShell title="マイページ">
       <div className="space-y-6">
+        {starRanking && <StarRankingBanner ranking={starRanking} />}
         {coachingAlert?.showAlert && <CoachingAlertBanner message={coachingAlert.message} />}
 
         <MyPageActions
