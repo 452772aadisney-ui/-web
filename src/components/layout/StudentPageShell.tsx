@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { getPersonName } from '@/lib/auth/display-name'
+import { cn } from '@/lib/utils'
 import { fetchUnreadAnnouncementCount } from '@/lib/announcements/queries'
 import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
 import { fetchUnreadStudyFeedbackCount } from '@/lib/study/feedback-queries'
@@ -17,6 +18,7 @@ interface StudentPageShellProps {
   title: string
   backHref?: string
   backLabel?: string
+  mainClassName?: string
   children: ReactNode
 }
 
@@ -46,6 +48,7 @@ export async function StudentPageShell({
   title,
   backHref,
   backLabel,
+  mainClassName,
   children,
 }: StudentPageShellProps) {
   const profile = await getCurrentProfile()
@@ -101,7 +104,7 @@ export async function StudentPageShell({
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 py-8">{children}</main>
+      <main className={cn('mx-auto max-w-3xl px-4 py-8', mainClassName)}>{children}</main>
     </div>
   )
 }

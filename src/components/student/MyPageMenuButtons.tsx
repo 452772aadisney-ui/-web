@@ -34,7 +34,7 @@ export function MyPagePrimaryActionButton({
   onClick,
 }: MyPagePrimaryActionButtonProps) {
   const className =
-    'flex min-h-[5.5rem] w-full items-center justify-center gap-3 rounded-2xl bg-[#1a1f36] px-6 py-6 text-lg font-bold text-white shadow-sm transition hover:bg-[#252b45] active:scale-[0.99] active:bg-[#12162a]'
+    'flex min-h-[5.5rem] w-full items-center justify-center gap-3 rounded-2xl bg-[#1a1f36] px-6 py-6 text-lg font-bold text-white shadow-sm transition hover:bg-[#252b45] active:scale-[0.95] active:bg-[#12162a]'
 
   const content = (
     <>
@@ -90,7 +90,7 @@ export function MyPageIconMenuButton({
   externalConfirmMessage,
 }: MyPageIconMenuButtonProps) {
   const buttonClassName = cn(
-    'relative flex min-h-[5.75rem] flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card px-3 py-4 text-center shadow-sm transition hover:bg-background active:scale-[0.97] active:border-primary/30 active:bg-primary/10',
+    'relative flex min-h-[5.75rem] flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card px-3 py-4 text-center shadow-sm transition hover:bg-background active:scale-[0.92] active:border-primary/30 active:bg-primary/10',
     className,
   )
 

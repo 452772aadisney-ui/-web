@@ -30,7 +30,7 @@ export default async function StudentDashboardPage() {
 
   if (!profile) {
     return (
-      <StudentPageShell title="マイページ">
+      <StudentPageShell title="マイページ" mainClassName="pt-3 pb-8">
         <section className="rounded-2xl border border-red-200 bg-red-50 p-6">
           <h2 className="text-lg font-bold text-red-800">プロフィールを読み込めません</h2>
           <p className="mt-2 text-sm text-red-700">
@@ -75,7 +75,7 @@ export default async function StudentDashboardPage() {
     profile.role === 'student' && profile.faq_intro_seen_at == null
 
   return (
-    <StudentPageShell title="マイページ">
+    <StudentPageShell title="マイページ" mainClassName="pt-3 pb-8">
       <div className="space-y-6">
         {coachingAlert?.showAlert && <CoachingAlertBanner message={coachingAlert.message} />}
 
