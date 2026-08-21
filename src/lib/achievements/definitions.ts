@@ -320,6 +320,46 @@ export const ACHIEVEMENTS: AchievementDefinition[] = [
     category: 'secret',
     secret: true,
   },
+  {
+    id: 'study_log_early_morning',
+    title: '早起きは何文の徳？',
+    description: '5:00～8:00の間に学習を記録した',
+    stars: 2,
+    category: 'secret',
+    secret: true,
+  },
+  {
+    id: 'study_log_lunch',
+    title: 'やっぱ昼は勉強っしょ！',
+    description: '12:00～13:00の間に学習を記録した',
+    stars: 2,
+    category: 'secret',
+    secret: true,
+  },
+  {
+    id: 'study_log_afternoon_light',
+    title: '光の散乱を感じて...',
+    description: '16:00～18:00の間に学習を記録した',
+    stars: 1,
+    category: 'secret',
+    secret: true,
+  },
+  {
+    id: 'study_log_midnight',
+    title: '真夜中のmidnight',
+    description: '23:00～0:00の間に学習を記録した',
+    stars: 1,
+    category: 'secret',
+    secret: true,
+  },
+  {
+    id: 'study_log_late_night',
+    title: '明日は休み...？',
+    description: '1:00～3:00の間に学習を記録した',
+    stars: 2,
+    category: 'secret',
+    secret: true,
+  },
 ]
 
 const achievementById = new Map(ACHIEVEMENTS.map((item) => [item.id, item]))

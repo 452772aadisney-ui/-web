@@ -100,7 +100,7 @@ async function loadAchievementEvaluationContext(studentId: string) {
       .eq('student_id', studentId),
     supabase
       .from('study_logs')
-      .select('subject, duration_minutes, studied_on, textbook_id')
+      .select('subject, duration_minutes, studied_on, textbook_id, created_at')
       .eq('student_id', studentId),
     supabase.from('textbooks').select('id, usage_tags').eq('student_id', studentId),
     supabase
@@ -181,6 +181,7 @@ async function loadAchievementEvaluationContext(studentId: string) {
         duration_minutes: Number(log.duration_minutes),
         studied_on: String(log.studied_on),
         textbook_id: log.textbook_id ? String(log.textbook_id) : null,
+        created_at: log.created_at ? String(log.created_at) : undefined,
       })),
       textbooks: (textbooks ?? []).map((book) => ({
         id: String(book.id),

@@ -9,6 +9,7 @@ export const ADMIN_MYPAGE_MENU_ICONS = {
   bookshelf: '/icons/admin-mypage/bookshelf.png',
   announcements: '/icons/admin-mypage/announcements.png',
   message: '/icons/admin-mypage/message.png',
+  achievements: '/icons/mypage/achievements.png',
 } as const
 
 type AdminMenuBadgeKey = 'studyDaily' | 'chat'
@@ -44,6 +45,11 @@ const menuActions: Array<{
     href: '/admin/coaching',
     label: 'コーチング',
     iconSrc: ADMIN_MYPAGE_MENU_ICONS.coaching,
+  },
+  {
+    href: '/admin/achievements',
+    label: '実績・順位',
+    iconSrc: ADMIN_MYPAGE_MENU_ICONS.achievements,
   },
   {
     href: '/admin/bookshelf',

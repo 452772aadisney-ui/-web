@@ -21,6 +21,11 @@ export type AchievementMetrics = {
   hasBirthday: boolean
   hasOpenedAllMenus: boolean
   hasFirstBirthdaySinceRegistration: boolean
+  hasStudyLogEarlyMorning: boolean
+  hasStudyLogLunch: boolean
+  hasStudyLogAfternoonLight: boolean
+  hasStudyLogMidnight: boolean
+  hasStudyLogLateNight: boolean
 }
 
 type StudyLogRow = {
@@ -28,6 +33,7 @@ type StudyLogRow = {
   duration_minutes: number
   studied_on: string
   textbook_id: string | null
+  created_at?: string
 }
 
 type TextbookRow = {
@@ -85,6 +91,87 @@ export function hasFirstBirthdaySinceRegistration(
 
   const firstBirthdayKey = `${firstBirthdayYear}-${month}-${day}`
   return todayKey >= firstBirthdayKey
+}
+
+function getJstMinutesSinceMidnight(iso: string): number {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Tokyo',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  })
+  const parts = formatter.formatToParts(new Date(iso))
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value ?? 0)
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value ?? 0)
+  return hour * 60 + minute
+}
+
+function isMinutesInSameDayRange(
+  minutes: number,
+  startHour: number,
+  startMinute: number,
+  endHour: number,
+  endMinute: number,
+): boolean {
+  const start = startHour * 60 + startMinute
+  const end = endHour * 60 + endMinute
+  return minutes >= start && minutes <= end
+}
+
+function isMinutesInOvernightRange(
+  minutes: number,
+  startHour: number,
+  startMinute: number,
+  endHour: number,
+  endMinute: number,
+): boolean {
+  const start = startHour * 60 + startMinute
+  const end = endHour * 60 + endMinute
+  return minutes >= start || minutes <= end
+}
+
+function hasStudyLogInTimeRange(
+  studyLogs: StudyLogRow[],
+  range:
+    | {
+        type: 'same-day'
+        startHour: number
+        startMinute?: number
+        endHour: number
+        endMinute?: number
+      }
+    | {
+        type: 'overnight'
+        startHour: number
+        startMinute?: number
+        endHour: number
+        endMinute?: number
+      },
+): boolean {
+  return studyLogs.some((log) => {
+    if (!log.created_at) return false
+    const minutes = getJstMinutesSinceMidnight(log.created_at)
+    const startMinute = range.startMinute ?? 0
+    const endMinute = range.endMinute ?? 0
+
+    if (range.type === 'same-day') {
+      return isMinutesInSameDayRange(
+        minutes,
+        range.startHour,
+        startMinute,
+        range.endHour,
+        endMinute,
+      )
+    }
+
+    return isMinutesInOvernightRange(
+      minutes,
+      range.startHour,
+      startMinute,
+      range.endHour,
+      endMinute,
+    )
+  })
 }
 
 export function buildAchievementMetrics(input: {
@@ -169,6 +256,31 @@ export function buildAchievementMetrics(input: {
     hasBirthday: input.hasBirthday,
     hasOpenedAllMenus: input.hasOpenedAllMenus,
     hasFirstBirthdaySinceRegistration: input.hasFirstBirthdaySinceRegistration,
+    hasStudyLogEarlyMorning: hasStudyLogInTimeRange(input.studyLogs, {
+      type: 'same-day',
+      startHour: 5,
+      endHour: 8,
+    }),
+    hasStudyLogLunch: hasStudyLogInTimeRange(input.studyLogs, {
+      type: 'same-day',
+      startHour: 12,
+      endHour: 13,
+    }),
+    hasStudyLogAfternoonLight: hasStudyLogInTimeRange(input.studyLogs, {
+      type: 'same-day',
+      startHour: 16,
+      endHour: 18,
+    }),
+    hasStudyLogMidnight: hasStudyLogInTimeRange(input.studyLogs, {
+      type: 'overnight',
+      startHour: 23,
+      endHour: 0,
+    }),
+    hasStudyLogLateNight: hasStudyLogInTimeRange(input.studyLogs, {
+      type: 'same-day',
+      startHour: 1,
+      endHour: 3,
+    }),
   }
 }
 
@@ -268,6 +380,22 @@ export function getUnlockableAchievementIds(
   }
   if (!has('chat_messages_50') && metrics.studentChatMessageCount >= 50) {
     unlockable.push('chat_messages_50')
+  }
+
+  if (!has('study_log_early_morning') && metrics.hasStudyLogEarlyMorning) {
+    unlockable.push('study_log_early_morning')
+  }
+  if (!has('study_log_lunch') && metrics.hasStudyLogLunch) {
+    unlockable.push('study_log_lunch')
+  }
+  if (!has('study_log_afternoon_light') && metrics.hasStudyLogAfternoonLight) {
+    unlockable.push('study_log_afternoon_light')
+  }
+  if (!has('study_log_midnight') && metrics.hasStudyLogMidnight) {
+    unlockable.push('study_log_midnight')
+  }
+  if (!has('study_log_late_night') && metrics.hasStudyLogLateNight) {
+    unlockable.push('study_log_late_night')
   }
 
   return unlockable
