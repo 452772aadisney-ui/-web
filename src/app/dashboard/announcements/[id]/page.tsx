@@ -3,6 +3,7 @@ import { redirect, notFound } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { MarkAnnouncementRead } from '@/components/announcements/MarkAnnouncementRead'
+import { LinkifiedText } from '@/components/ui/LinkifiedText'
 import { fetchAnnouncementById } from '@/lib/announcements/queries'
 
 export const dynamic = 'force-dynamic'
@@ -34,10 +35,12 @@ export default async function StudentAnnouncementDetailPage({
   return (
     <StudentPageShell title="お知らせ" backHref="/dashboard/announcements" backLabel="お知らせ一覧">
       <MarkAnnouncementRead announcementId={id} />
-      <article className="rounded-2xl border border-border bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-bold">{announcement.title}</h2>
+      <article className="overflow-hidden rounded-2xl border border-border bg-white p-6 shadow-sm">
+        <h2 className="break-words text-xl font-bold">{announcement.title}</h2>
         <p className="mt-2 text-sm text-muted">{formatDateTime(announcement.created_at)}</p>
-        <div className="mt-6 whitespace-pre-wrap text-sm leading-relaxed">{announcement.body}</div>
+        <div className="mt-6">
+          <LinkifiedText text={announcement.body} />
+        </div>
       </article>
       <Link
         href="/dashboard/announcements"

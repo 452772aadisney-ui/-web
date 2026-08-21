@@ -38,9 +38,9 @@ export function AnnouncementList({ announcements }: AnnouncementListProps) {
             )}
           >
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-bold">{announcement.title}</p>
-                <p className="mt-1 line-clamp-2 text-sm text-muted">{announcement.body}</p>
+              <div className="min-w-0 flex-1">
+                <p className="break-words font-bold">{announcement.title}</p>
+                <p className="mt-1 line-clamp-2 break-all text-sm text-muted">{announcement.body}</p>
                 <p className="mt-2 text-xs text-muted">
                   {formatDateTime(announcement.created_at)}
                 </p>
