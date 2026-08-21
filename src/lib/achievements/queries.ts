@@ -11,12 +11,20 @@ export type AchievementListItem = AchievementDefinition & {
   unlockedAt: string | null
 }
 
-export function getListableAchievements(): AchievementDefinition[] {
-  return ACHIEVEMENTS.filter((achievement) => !achievement.secret)
+function mapAchievementItems(
+  achievements: AchievementDefinition[],
+  unlockedAtById: Map<string, string>,
+): AchievementListItem[] {
+  return achievements.map((achievement) => ({
+    ...achievement,
+    unlocked: unlockedAtById.has(achievement.id),
+    unlockedAt: unlockedAtById.get(achievement.id) ?? null,
+  }))
 }
 
 export async function fetchStudentAchievements(studentId: string): Promise<{
-  items: AchievementListItem[]
+  publicItems: AchievementListItem[]
+  secretItems: AchievementListItem[]
   unlockedCount: number
   totalCount: number
 }> {
@@ -31,21 +39,22 @@ export async function fetchStudentAchievements(studentId: string): Promise<{
     (data ?? []).map((row) => [String(row.achievement_id), String(row.unlocked_at)]),
   )
 
-  const listableAchievements = getListableAchievements()
-  const items = listableAchievements.map((achievement) => ({
-    ...achievement,
-    unlocked: unlockedAtById.has(achievement.id),
-    unlockedAt: unlockedAtById.get(achievement.id) ?? null,
-  }))
+  const publicAchievements = ACHIEVEMENTS.filter((achievement) => !achievement.secret)
+  const secretAchievements = ACHIEVEMENTS.filter((achievement) => achievement.secret)
+
+  const publicItems = mapAchievementItems(publicAchievements, unlockedAtById)
+  const secretItems = mapAchievementItems(secretAchievements, unlockedAtById)
+  const allItems = [...publicItems, ...secretItems]
 
   return {
-    items,
-    unlockedCount: items.filter((item) => item.unlocked).length,
-    totalCount: items.length,
+    publicItems,
+    secretItems,
+    unlockedCount: allItems.filter((item) => item.unlocked).length,
+    totalCount: allItems.length,
   }
 }
 
-/** 系統ごとに達成済み＋次の1件（未達成）のみ返す（シークレット実績は除外） */
+/** 系統ごとに達成済み＋次の1件（未達成）のみ返す（公開実績のみ） */
 export function getVisibleAchievements(items: AchievementListItem[]): AchievementListItem[] {
   const itemById = new Map(items.map((item) => [item.id, item]))
   const visible: AchievementListItem[] = []
@@ -72,13 +81,22 @@ export function getVisibleAchievements(items: AchievementListItem[]): Achievemen
   return visible
 }
 
-/** 未達成を上、達成済みを下に並べ替える */
-export function splitVisibleAchievements(items: AchievementListItem[]): {
+/** 未達成を上、達成済みを下に並べ替える（解除済みシークレット実績を達成済みに含める） */
+export function splitVisibleAchievements(
+  publicItems: AchievementListItem[],
+  secretItems: AchievementListItem[],
+): {
   lockedItems: AchievementListItem[]
   unlockedItems: AchievementListItem[]
 } {
+  const visiblePublic = getVisibleAchievements(publicItems)
+  const unlockedSecrets = secretItems.filter((item) => item.unlocked)
+
   return {
-    lockedItems: items.filter((item) => !item.unlocked),
-    unlockedItems: items.filter((item) => item.unlocked),
+    lockedItems: visiblePublic.filter((item) => !item.unlocked),
+    unlockedItems: [
+      ...visiblePublic.filter((item) => item.unlocked),
+      ...unlockedSecrets,
+    ],
   }
 }

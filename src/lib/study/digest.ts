@@ -15,7 +15,7 @@ export type DailyStudyDigestReport = {
   dateKey: string
   dateLabel: string
   recorded: StudentStudyDigestEntry[]
-  notRecorded: Array<{ studentId: string; name: string }>
+  notRecorded: Array<{ studentId: string; name: string; email: string | null }>
 }
 
 function formatLogLine(log: StudyLog): string {
@@ -45,7 +45,7 @@ export async function buildDailyStudyDigestReport(
     await Promise.all([
       supabase
         .from('profiles')
-        .select('id, full_name, display_name')
+        .select('id, full_name, display_name, email')
         .eq('role', 'student')
         .order('full_name'),
       supabase.from('study_logs').select('*').eq('studied_on', dateKey),
@@ -64,16 +64,17 @@ export async function buildDailyStudyDigestReport(
   }
 
   const recorded: StudentStudyDigestEntry[] = []
-  const notRecorded: Array<{ studentId: string; name: string }> = []
+  const notRecorded: Array<{ studentId: string; name: string; email: string | null }> = []
 
   for (const student of students ?? []) {
     const studentLogs = (logsByStudent.get(student.id) ?? []).sort(
       (a, b) => a.created_at.localeCompare(b.created_at),
     )
     const name = getPersonName(student as { full_name: string; display_name: string })
+    const email = typeof student.email === 'string' ? student.email.trim() || null : null
 
     if (studentLogs.length === 0) {
-      notRecorded.push({ studentId: student.id, name })
+      notRecorded.push({ studentId: student.id, name, email })
       continue
     }
 
@@ -132,4 +133,10 @@ export function formatDailyStudyDigestDescription(report: DailyStudyDigestReport
   }
 
   return `${description.slice(0, 4090)}…`
+}
+
+export async function buildTodayMissingStudyReport(
+  dateKey = getJstDateKey(),
+): Promise<DailyStudyDigestReport | null> {
+  return buildDailyStudyDigestReport(dateKey)
 }

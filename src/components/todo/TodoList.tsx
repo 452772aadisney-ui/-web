@@ -1,6 +1,7 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
+import { useMemo, useState } from 'react'
 import { setHomeworkCompletion } from '@/app/todo/actions'
 import { getTodayDateKey } from '@/lib/study/dates'
 import { cn } from '@/lib/utils'
@@ -30,20 +31,27 @@ function HomeworkCheckbox({
   taskId: string
   initialCompleted: boolean
 }) {
+  const router = useRouter()
   const [completed, setCompleted] = useState(initialCompleted)
-  const [pending, startTransition] = useTransition()
+  const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleChange = (checked: boolean) => {
+  const handleChange = async (checked: boolean) => {
+    const previous = completed
     setCompleted(checked)
     setError(null)
-    startTransition(async () => {
-      const result = await setHomeworkCompletion(taskId, checked)
-      if (result.error) {
-        setCompleted(!checked)
-        setError(result.error)
-      }
-    })
+    setPending(true)
+
+    const result = await setHomeworkCompletion(taskId, checked)
+    setPending(false)
+
+    if (result.error) {
+      setCompleted(previous)
+      setError(result.error)
+      return
+    }
+
+    router.refresh()
   }
 
   return (

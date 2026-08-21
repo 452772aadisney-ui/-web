@@ -3,7 +3,7 @@ import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { getDashboardPathForRole } from '@/lib/auth/routes'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { AchievementList } from '@/components/achievements/AchievementList'
-import { fetchStudentAchievements, getVisibleAchievements, splitVisibleAchievements } from '@/lib/achievements/queries'
+import { fetchStudentAchievements, splitVisibleAchievements } from '@/lib/achievements/queries'
 
 export default async function StudentAchievementsPage() {
   const profile = await getCurrentProfile()
@@ -11,9 +11,9 @@ export default async function StudentAchievementsPage() {
   if (!profile) redirect('/login')
   if (profile.role !== 'student') redirect(getDashboardPathForRole(profile.role))
 
-  const { items, unlockedCount, totalCount } = await fetchStudentAchievements(profile.id)
-  const visibleItems = getVisibleAchievements(items)
-  const { lockedItems, unlockedItems } = splitVisibleAchievements(visibleItems)
+  const { publicItems, secretItems, unlockedCount, totalCount } =
+    await fetchStudentAchievements(profile.id)
+  const { lockedItems, unlockedItems } = splitVisibleAchievements(publicItems, secretItems)
 
   return (
     <StudentPageShell title="実績一覧" backHref="/dashboard" backLabel="マイページ">

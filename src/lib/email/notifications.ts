@@ -2,6 +2,7 @@ import { getPersonName } from '@/lib/auth/display-name'
 import { getAppBaseUrl } from '@/lib/email/config'
 import { sendEmailToMany } from '@/lib/email/send'
 import { getStudyFeedbackStamp } from '@/lib/study/feedback'
+import type { DailyStudyDigestReport } from '@/lib/study/digest'
 import {
   buildProfileTagMap,
   resolveAnnouncementAudience,
@@ -204,5 +205,26 @@ export async function notifyStudyFeedbackReceived(input: {
   await sendEmailToMany([email], {
     subject: '【受験生web】学習記録にコメントが届きました',
     text: lines.join('\n'),
+  })
+}
+
+export async function notifyStudentsMissingTodayStudyLog(
+  report: DailyStudyDigestReport,
+): Promise<{ recipientCount: number; sentCount: number; skippedCount: number }> {
+  const baseUrl = getAppBaseUrl()
+  const url = `${baseUrl}/dashboard/study`
+
+  const emails = report.notRecorded
+    .map((student) => student.email?.trim())
+    .filter((email): email is string => Boolean(email))
+
+  return sendEmailToMany(emails, {
+    subject: '【受験生web】本日の学習記録が未入力です',
+    text: [
+      '本日（' + report.dateLabel + '）の学習記録がまだ登録されていません。',
+      '忘れずに記録してください。',
+      '',
+      `記録する: ${url}`,
+    ].join('\n'),
   })
 }

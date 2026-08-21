@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { getPersonName } from '@/lib/auth/display-name'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -95,8 +96,8 @@ export function ChatRoom({
     return '管理者'
   }
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault()
+  const handleSubmit = async (event?: React.FormEvent) => {
+    event?.preventDefault()
     const trimmed = body.trim()
     if (!trimmed || sending) return
 
@@ -127,6 +128,15 @@ export function ChatRoom({
     peerLabel ??
     (currentUserRole === 'admin' ? getPersonName(studentParticipant) : '管理者')
 
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter') return
+    if (event.nativeEvent.isComposing) return
+    if (!event.ctrlKey && !event.metaKey) return
+
+    event.preventDefault()
+    void handleSubmit()
+  }
+
   return (
     <>
       {achievementDialog}
@@ -135,7 +145,18 @@ export function ChatRoom({
         <p className="text-sm text-muted">
           {currentUserRole === 'admin' ? 'チャット相手' : '管理者とのチャット'}
         </p>
-        <p className="font-bold">{peerDisplayName}</p>
+        <p className="font-bold">
+          {currentUserRole === 'admin' ? (
+            <Link
+              href={`/admin/students/${studentId}`}
+              className="hover:text-primary hover:underline"
+            >
+              {peerDisplayName}
+            </Link>
+          ) : (
+            peerDisplayName
+          )}
+        </p>
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
@@ -174,23 +195,25 @@ export function ChatRoom({
 
       <form onSubmit={handleSubmit} className="border-t border-border p-4">
         <div className="flex gap-2">
-          <input
-            type="text"
+          <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder="メッセージを入力…"
-            className="flex-1 rounded-lg border border-border bg-background px-3 py-2.5 text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            rows={2}
+            className="flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             maxLength={2000}
             disabled={sending}
           />
           <button
             type="submit"
             disabled={sending || !body.trim()}
-            className="shrink-0 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+            className="shrink-0 self-end rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
           >
             {sending ? '送信中…' : '送信'}
           </button>
         </div>
+        <p className="mt-2 text-xs text-muted">Ctrl+Enter で送信（Enter は改行）</p>
         {error && <p className="mt-2 text-sm text-error">{error}</p>}
       </form>
     </div>
