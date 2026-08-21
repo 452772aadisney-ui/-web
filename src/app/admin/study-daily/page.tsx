@@ -4,8 +4,11 @@ import { getDashboardPathForRole } from '@/lib/auth/routes'
 import { AdminPageShell } from '@/components/layout/AdminPageShell'
 import { AdminStudyDailyDateNav } from '@/components/study/AdminStudyDailyDateNav'
 import { AdminStudentDailyStudyCard } from '@/components/study/AdminStudentDailyStudyCard'
-import { getJstDateKey, isValidDateKey } from '@/lib/study/dates'
-import { fetchStudentDailyStudySummaries } from '@/lib/study/feedback-queries'
+import { getJstDateKey, isValidDateKey, shiftDateKey } from '@/lib/study/dates'
+import {
+  fetchIncompleteStudyFeedbackCount,
+  fetchStudentDailyStudySummaries,
+} from '@/lib/study/feedback-queries'
 
 export default async function AdminStudyDailyPage({
   searchParams,
@@ -31,6 +34,10 @@ export default async function AdminStudyDailyPage({
   }
 
   const summaries = await fetchStudentDailyStudySummaries(selectedDate)
+  const selectedDayIncompleteCount = summaries.filter((summary) => !summary.feedback).length
+  const prevDayIncompleteCount = await fetchIncompleteStudyFeedbackCount(
+    shiftDateKey(selectedDate, -1),
+  )
   const sortedSummaries = [...summaries].sort((a, b) => {
     const aComplete = a.feedback ? 1 : 0
     const bComplete = b.feedback ? 1 : 0
@@ -45,7 +52,11 @@ export default async function AdminStudyDailyPage({
           選択した日に学習記録が登録された生徒を表示します。スタンプとコメントを送ると、生徒の学習履歴に表示され、メールでも通知されます。
         </p>
 
-        <AdminStudyDailyDateNav selectedDate={selectedDate} />
+        <AdminStudyDailyDateNav
+          selectedDate={selectedDate}
+          selectedDayIncompleteCount={selectedDayIncompleteCount}
+          prevDayIncompleteCount={prevDayIncompleteCount}
+        />
 
         {sortedSummaries.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted">
