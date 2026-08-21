@@ -4,7 +4,6 @@ import { getCurrentProfileWithError } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { CoachingAlertBanner } from '@/components/coaching/CoachingAlertBanner'
 import { MyPageActions } from '@/components/student/MyPageActions'
-import { StarRankingBanner } from '@/components/student/StarRankingBanner'
 import { StudentQrCode } from '@/components/student/StudentQrCode'
 import { fetchStudentStarRanking } from '@/lib/achievements/ranking'
 import { fetchUnreadAnnouncementCount } from '@/lib/announcements/queries'
@@ -78,10 +77,10 @@ export default async function StudentDashboardPage() {
   return (
     <StudentPageShell title="マイページ">
       <div className="space-y-6">
-        {starRanking && <StarRankingBanner ranking={starRanking} />}
         {coachingAlert?.showAlert && <CoachingAlertBanner message={coachingAlert.message} />}
 
         <MyPageActions
+          starRanking={starRanking}
           nextCoaching={nextCoaching}
           studyStreakDays={studyStreakDays}
           unreadStudyFeedbackCount={unreadStudyFeedbackCount}

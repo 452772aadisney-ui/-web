@@ -11,6 +11,8 @@ import {
   MyPageIconMenuButton,
   MyPagePrimaryActionButton,
 } from '@/components/student/MyPageMenuButtons'
+import { StarRankingBanner } from '@/components/student/StarRankingBanner'
+import type { StudentStarRanking } from '@/lib/achievements/ranking'
 import { formatStudyStreakLabel } from '@/lib/study/streak'
 
 type MenuBadgeKey = 'studyHistory' | 'announcements' | 'chat' | 'bookshelf' | 'faqIntro'
@@ -82,6 +84,7 @@ const iconMenuActions: Array<{
 ]
 
 interface MyPageActionsProps {
+  starRanking?: StudentStarRanking | null
   nextCoaching?: CoachingBookingWithDetails | null
   studyStreakDays?: number
   unreadStudyFeedbackCount?: number
@@ -93,6 +96,7 @@ interface MyPageActionsProps {
 }
 
 export function MyPageActions({
+  starRanking,
   nextCoaching,
   studyStreakDays = 0,
   unreadStudyFeedbackCount = 0,
@@ -118,11 +122,14 @@ export function MyPageActions({
   const studyStreakLabel = formatStudyStreakLabel(studyStreakDays)
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <FaqIntroDialog open={showFaqIntro} />
       <StudyLogModeDialog open={studyDialogOpen} onClose={() => setStudyDialogOpen(false)} />
 
-      {nextCoaching ? (
+      <div className="space-y-2">
+        {starRanking && <StarRankingBanner ranking={starRanking} />}
+
+        {nextCoaching ? (
         <section className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -161,6 +168,7 @@ export function MyPageActions({
           </div>
         </section>
       )}
+      </div>
 
       <MyPagePrimaryActionButton
         label="学習を記録する"

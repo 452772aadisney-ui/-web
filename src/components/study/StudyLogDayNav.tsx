@@ -40,7 +40,7 @@ export function StudyLogDayNav({
   const hasUnreadOnNext = unreadDates.has(nextDate)
 
   const navButtonClass =
-    'relative inline-flex min-h-11 min-w-[4.5rem] items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-card'
+    'relative inline-flex min-h-11 min-w-[4.5rem] items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm font-medium transition hover:bg-card active:scale-[0.97] active:border-primary/40 active:bg-primary/10'
 
   return (
     <div className="mb-4 flex items-center justify-between gap-3">
