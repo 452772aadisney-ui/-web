@@ -1,5 +1,5 @@
 import { isUnreadEligibleContent } from '@/lib/account/content-cutoff'
-import { isVocabularyTextbook } from '@/lib/constants/textbook-tags'
+import { isVocabularyAchievementTextbook } from '@/lib/constants/textbook-detail-tags'
 import { resolveStudySubjectCategory } from '@/lib/constants/textbook-subject-categories'
 import { getJstDateKey, shiftDateKey } from '@/lib/study/dates'
 
@@ -57,7 +57,7 @@ type ChatMessageRow = {
 
 type TextbookRow = {
   id: string
-  usage_tags: string[]
+  detail_tags: string[]
 }
 
 type CoachingBookingRow = {
@@ -307,7 +307,9 @@ export function buildAchievementMetrics(input: {
   hasFirstBirthdaySinceRegistration: boolean
 }): AchievementMetrics {
   const vocabularyTextbookIds = new Set(
-    input.textbooks.filter((book) => isVocabularyTextbook(book.usage_tags)).map((book) => book.id),
+    input.textbooks
+      .filter((book) => isVocabularyAchievementTextbook(book.detail_tags))
+      .map((book) => book.id),
   )
 
   const dailyMinutes = new Map<string, number>()

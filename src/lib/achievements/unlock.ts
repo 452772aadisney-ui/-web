@@ -109,7 +109,7 @@ async function loadAchievementEvaluationContext(studentId: string) {
       .from('study_logs')
       .select('subject, duration_minutes, studied_on, textbook_id, content, created_at')
       .eq('student_id', studentId),
-    supabase.from('textbooks').select('id, usage_tags').eq('student_id', studentId),
+    supabase.from('textbooks').select('id, detail_tags').eq('student_id', studentId),
     supabase
       .from('textbooks')
       .select('id', { count: 'exact', head: true })
@@ -218,7 +218,7 @@ async function loadAchievementEvaluationContext(studentId: string) {
       })),
       textbooks: (textbooks ?? []).map((book) => ({
         id: String(book.id),
-        usage_tags: Array.isArray(book.usage_tags) ? book.usage_tags.map(String) : [],
+        detail_tags: Array.isArray(book.detail_tags) ? book.detail_tags.map(String) : [],
       })),
       textbookCount: textbookCount ?? 0,
       coachingBookings: (coachingBookings ?? []).map((row) => ({
