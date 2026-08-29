@@ -6,12 +6,14 @@ import { formatCoachingBookingDateTime } from '@/lib/coaching/format'
 import type { CoachingBookingWithDetails } from '@/types/coaching'
 import { FaqIntroDialog } from '@/components/faq/FaqIntroDialog'
 import { StudyLogModeDialog } from '@/components/study/StudyLogModeDialog'
+import { CoachingAlertBanner } from '@/components/coaching/CoachingAlertBanner'
 import {
   MYPAGE_MENU_ICONS,
   MyPageIconMenuButton,
   MyPagePrimaryActionButton,
 } from '@/components/student/MyPageMenuButtons'
 import { StarRankingBanner } from '@/components/student/StarRankingBanner'
+import { CommonTestCountdownBanner } from '@/components/student/CommonTestCountdownBanner'
 import type { StudentStarRanking } from '@/lib/achievements/ranking'
 import { formatStudyStreakLabel } from '@/lib/study/streak'
 
@@ -87,6 +89,8 @@ const iconMenuActions: Array<{
 interface MyPageActionsProps {
   starRanking?: StudentStarRanking | null
   nextCoaching?: CoachingBookingWithDetails | null
+  coachingAlertMessage?: string | null
+  commonTestDaysRemaining?: number | null
   studyStreakDays?: number
   unreadStudyFeedbackCount?: number
   unreadAnnouncementCount?: number
@@ -94,12 +98,15 @@ interface MyPageActionsProps {
   unseenTextbookCount?: number
   incompleteTodoCount?: number
   hideClassSchedule?: boolean
+  hideCoaching?: boolean
   showFaqIntro?: boolean
 }
 
 export function MyPageActions({
   starRanking,
   nextCoaching,
+  coachingAlertMessage = null,
+  commonTestDaysRemaining = null,
   studyStreakDays = 0,
   unreadStudyFeedbackCount = 0,
   unreadAnnouncementCount = 0,
@@ -107,6 +114,7 @@ export function MyPageActions({
   unseenTextbookCount = 0,
   incompleteTodoCount = 0,
   hideClassSchedule = false,
+  hideCoaching = false,
   showFaqIntro = false,
 }: MyPageActionsProps) {
   const [studyDialogOpen, setStudyDialogOpen] = useState(false)
@@ -124,16 +132,31 @@ export function MyPageActions({
     : iconMenuActions
 
   const studyStreakLabel = formatStudyStreakLabel(studyStreakDays)
+  const showCommonTestCountdown = commonTestDaysRemaining !== null
+  const showNextCoachingBanner = !hideCoaching && !coachingAlertMessage
 
   return (
     <div className="space-y-3">
       <FaqIntroDialog open={showFaqIntro} />
       <StudyLogModeDialog open={studyDialogOpen} onClose={() => setStudyDialogOpen(false)} />
 
-      <div className="space-y-2">
-        {starRanking && <StarRankingBanner ranking={starRanking} />}
+      <div className="space-y-1">
+        {coachingAlertMessage && <CoachingAlertBanner message={coachingAlertMessage} />}
 
-        {nextCoaching ? (
+        {showCommonTestCountdown ? (
+          <div className="grid grid-cols-2 gap-2">
+            {starRanking && <StarRankingBanner ranking={starRanking} className="min-w-0" />}
+            <CommonTestCountdownBanner
+              daysRemaining={commonTestDaysRemaining}
+              className="min-w-0"
+            />
+          </div>
+        ) : (
+          starRanking && <StarRankingBanner ranking={starRanking} />
+        )}
+
+        {showNextCoachingBanner &&
+          (nextCoaching ? (
         <section className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -171,7 +194,7 @@ export function MyPageActions({
             </Link>
           </div>
         </section>
-      )}
+      ))}
       </div>
 
       <MyPagePrimaryActionButton

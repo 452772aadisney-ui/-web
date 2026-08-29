@@ -9,28 +9,35 @@ import {
   fetchHomeworkTasksForStudent,
 } from '@/lib/schedule/queries'
 import { fetchTextbooksForStudent } from '@/lib/study/queries'
+import { isKisotsuGradeTag } from '@/lib/tags/grade-order'
+import { fetchGradeTagNameForProfile } from '@/lib/tags/queries'
 
 export default async function StudentCalendarPage() {
   const profile = await getCurrentProfile()
 
   if (!profile) redirect('/login')
 
+  const gradeTagName = await fetchGradeTagNameForProfile(profile.id)
+  const isKisotsuStudent = isKisotsuGradeTag(gradeTagName)
+
   const [exams, homework, textbooks, coachingBookings] = await Promise.all([
     fetchExamSchedulesForStudent(profile.id),
     fetchHomeworkTasksForStudent(profile.id),
     fetchTextbooksForStudent(profile.id),
-    fetchCoachingBookingsForStudent(profile.id),
+    isKisotsuStudent ? Promise.resolve([]) : fetchCoachingBookingsForStudent(profile.id),
   ])
 
   const events = [
     ...buildCalendarEvents(exams, homework, textbooks),
-    ...buildCoachingCalendarEvents(coachingBookings),
+    ...(isKisotsuStudent ? [] : buildCoachingCalendarEvents(coachingBookings)),
   ].sort((a, b) => a.date.localeCompare(b.date))
 
   return (
     <StudentPageShell title="カレンダー" backHref="/dashboard" backLabel="マイページ">
       <p className="mb-6 text-sm text-muted">
-        模試・小テスト、宿題・タスク、参考書、コーチング予約を一覧できます。
+        {isKisotsuStudent
+          ? '模試・小テスト、宿題・タスク、参考書を一覧できます。'
+          : '模試・小テスト、宿題・タスク、参考書、コーチング予約を一覧できます。'}
       </p>
       <ScheduleCalendar events={events} />
     </StudentPageShell>

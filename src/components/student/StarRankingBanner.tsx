@@ -1,8 +1,20 @@
 import type { StudentStarRanking } from '@/lib/achievements/ranking'
+import { cn } from '@/lib/utils'
 
-export function StarRankingBanner({ ranking }: { ranking: StudentStarRanking }) {
+export function StarRankingBanner({
+  ranking,
+  className,
+}: {
+  ranking: StudentStarRanking
+  className?: string
+}) {
   return (
-    <section className="rounded-lg border border-amber-200/70 bg-gradient-to-r from-amber-50 to-orange-50 px-3 py-2 shadow-sm">
+    <section
+      className={cn(
+        'rounded-lg border border-amber-200/70 bg-gradient-to-r from-amber-50 to-orange-50 px-3 py-2 shadow-sm',
+        className,
+      )}
+    >
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-[10px] font-semibold leading-none text-muted">獲得☆</p>

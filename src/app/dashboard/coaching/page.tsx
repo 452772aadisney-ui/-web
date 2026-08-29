@@ -10,6 +10,8 @@ import {
   getTodayDateKey,
 } from '@/lib/coaching/queries'
 import { getDayWindow } from '@/lib/coaching/week'
+import { isKisotsuGradeTag } from '@/lib/tags/grade-order'
+import { fetchGradeTagNameForProfile } from '@/lib/tags/queries'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +24,9 @@ export default async function StudentCoachingPage({
 
   if (!profile) redirect('/login')
   if (profile.role !== 'student') redirect(getDashboardPathForRole('admin'))
+
+  const gradeTagName = await fetchGradeTagNameForProfile(profile.id)
+  if (isKisotsuGradeTag(gradeTagName)) redirect('/dashboard')
 
   const params = await searchParams
   const windowStart = params.start ?? getTodayDateKey()

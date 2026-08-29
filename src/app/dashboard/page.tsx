@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentProfileWithError } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
-import { CoachingAlertBanner } from '@/components/coaching/CoachingAlertBanner'
 import { MyPageActions } from '@/components/student/MyPageActions'
 import { StudentQrCode } from '@/components/student/StudentQrCode'
 import { fetchStudentStarRanking } from '@/lib/achievements/ranking'
@@ -14,7 +13,9 @@ import { fetchUnseenTextbookCount } from '@/lib/textbooks/catalog-queries'
 import { fetchIncompleteTodoCount } from '@/lib/todo/queries'
 import { getCoachingAlertState, getNextCoachingBooking } from '@/lib/coaching/alert'
 import { fetchCoachingBookingsForStudent } from '@/lib/coaching/queries'
-import { isKisotsuGradeTag } from '@/lib/tags/grade-order'
+import { getDaysUntilCommonTest } from '@/lib/exam/common-test-countdown'
+import { getJstDateKey } from '@/lib/study/dates'
+import { isKisotsuGradeTag, showsCommonTestCountdown } from '@/lib/tags/grade-order'
 import { fetchGradeTagNameForProfile } from '@/lib/tags/queries'
 
 export default async function StudentDashboardPage() {
@@ -49,13 +50,23 @@ export default async function StudentDashboardPage() {
     )
   }
 
+  const gradeTagName =
+    profile.role === 'student' ? await fetchGradeTagNameForProfile(profile.id) : null
+  const isKisotsuStudent = isKisotsuGradeTag(gradeTagName)
+
   const coachingBookings =
-    profile.role === 'student' ? await fetchCoachingBookingsForStudent(profile.id) : []
+    profile.role === 'student' && !isKisotsuStudent
+      ? await fetchCoachingBookingsForStudent(profile.id)
+      : []
 
   const coachingAlert =
-    profile.role === 'student' ? getCoachingAlertState(coachingBookings) : null
+    profile.role === 'student' && !isKisotsuStudent
+      ? getCoachingAlertState(coachingBookings)
+      : null
   const nextCoaching =
-    profile.role === 'student' ? getNextCoachingBooking(coachingBookings) : null
+    profile.role === 'student' && !isKisotsuStudent
+      ? getNextCoachingBooking(coachingBookings)
+      : null
 
   const [unreadAnnouncementCount, unreadChatCount, unreadStudyFeedbackCount, unseenTextbookCount, incompleteTodoCount, studyStreakDays, starRanking] =
     profile.role === 'student'
@@ -70,20 +81,22 @@ export default async function StudentDashboardPage() {
         ])
       : [0, 0, 0, 0, 0, 0, null]
 
-  const gradeTagName =
-    profile.role === 'student' ? await fetchGradeTagNameForProfile(profile.id) : null
-  const isKisotsuStudent = isKisotsuGradeTag(gradeTagName)
   const showFaqIntro =
     profile.role === 'student' && profile.faq_intro_seen_at == null
+  const commonTestDaysRemaining = showsCommonTestCountdown(gradeTagName)
+    ? getDaysUntilCommonTest(getJstDateKey())
+    : null
 
   return (
     <StudentPageShell title="マイページ" mainClassName="pt-3 pb-8">
       <div className="space-y-6">
-        {coachingAlert?.showAlert && <CoachingAlertBanner message={coachingAlert.message} />}
-
         <MyPageActions
           starRanking={starRanking}
           nextCoaching={nextCoaching}
+          coachingAlertMessage={
+            coachingAlert?.showAlert ? coachingAlert.message : null
+          }
+          commonTestDaysRemaining={commonTestDaysRemaining}
           studyStreakDays={studyStreakDays}
           unreadStudyFeedbackCount={unreadStudyFeedbackCount}
           unreadAnnouncementCount={unreadAnnouncementCount}
@@ -91,6 +104,7 @@ export default async function StudentDashboardPage() {
           unseenTextbookCount={unseenTextbookCount}
           incompleteTodoCount={incompleteTodoCount}
           hideClassSchedule={isKisotsuStudent}
+          hideCoaching={isKisotsuStudent}
           showFaqIntro={showFaqIntro}
         />
 

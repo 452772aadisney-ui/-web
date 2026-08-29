@@ -3,9 +3,18 @@ export const GRADE_TAG_NAMES = ['高1', '高2', '高3', '既卒'] as const
 export type GradeTagName = (typeof GRADE_TAG_NAMES)[number]
 
 export const KISOTSU_GRADE_TAG: GradeTagName = '既卒'
+export const KOSAN3_GRADE_TAG: GradeTagName = '高3'
 
 export function isKisotsuGradeTag(gradeTagName: string | null | undefined): boolean {
   return gradeTagName === KISOTSU_GRADE_TAG
+}
+
+export function isKosan3GradeTag(gradeTagName: string | null | undefined): boolean {
+  return gradeTagName === KOSAN3_GRADE_TAG
+}
+
+export function showsCommonTestCountdown(gradeTagName: string | null | undefined): boolean {
+  return isKosan3GradeTag(gradeTagName) || isKisotsuGradeTag(gradeTagName)
 }
 
 export const UNASSIGNED_GRADE_LABEL = '学年未設定'

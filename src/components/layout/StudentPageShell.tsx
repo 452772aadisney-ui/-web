@@ -8,6 +8,8 @@ import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
 import { fetchUnreadStudyFeedbackCount } from '@/lib/study/feedback-queries'
 import { fetchUnseenTextbookCount } from '@/lib/textbooks/catalog-queries'
 import { fetchIncompleteTodoCount } from '@/lib/todo/queries'
+import { isKisotsuGradeTag } from '@/lib/tags/grade-order'
+import { fetchGradeTagNameForProfile } from '@/lib/tags/queries'
 import { HamburgerMenu } from '@/components/layout/HamburgerMenu'
 import { RecordStudentPageVisit } from '@/components/achievements/RecordStudentPageVisit'
 import {
@@ -57,6 +59,12 @@ export async function StudentPageShell({
   children,
 }: StudentPageShellProps) {
   const profile = await getCurrentProfile()
+  const gradeTagName =
+    profile?.role === 'student'
+      ? await fetchGradeTagNameForProfile(profile.id).catch(() => null)
+      : null
+  const hideCoaching = isKisotsuGradeTag(gradeTagName)
+
   const [unreadAnnouncementCount, unreadChatCount, unreadStudyFeedbackCount, unseenTextbookCount, incompleteTodoCount] =
     profile
       ? await Promise.all([
@@ -72,7 +80,9 @@ export async function StudentPageShell({
         ])
       : [0, 0, 0, 0, 0]
 
-  const menuItems: HamburgerMenuItem[] = STUDENT_HAMBURGER_ITEMS.map((item) => ({
+  const menuItems: HamburgerMenuItem[] = STUDENT_HAMBURGER_ITEMS.filter(
+    (item) => !(hideCoaching && item.href === '/dashboard/coaching'),
+  ).map((item) => ({
     ...item,
     badgeCount: getHamburgerBadgeCount(
       item.href,
