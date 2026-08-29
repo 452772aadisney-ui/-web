@@ -311,14 +311,21 @@ export function getUnlockableAchievementIds(
   if (!has('keep_going') && metrics.studyLogCount >= 1) unlockable.push('keep_going')
   if (!has('textbooks_5') && metrics.textbookCount >= 5) unlockable.push('textbooks_5')
   if (!has('textbooks_10') && metrics.textbookCount >= 10) unlockable.push('textbooks_10')
+  if (!has('textbooks_15') && metrics.textbookCount >= 15) unlockable.push('textbooks_15')
+  if (!has('textbooks_20') && metrics.textbookCount >= 20) unlockable.push('textbooks_20')
 
   if (!has('streak_3') && metrics.maxStudyStreak >= 3) unlockable.push('streak_3')
   if (!has('streak_7') && metrics.maxStudyStreak >= 7) unlockable.push('streak_7')
   if (!has('streak_14') && metrics.maxStudyStreak >= 14) unlockable.push('streak_14')
+  if (!has('streak_21') && metrics.maxStudyStreak >= 21) unlockable.push('streak_21')
   if (!has('streak_30') && metrics.maxStudyStreak >= 30) unlockable.push('streak_30')
+  if (!has('streak_45') && metrics.maxStudyStreak >= 45) unlockable.push('streak_45')
 
   if (!has('total_10h') && metrics.totalStudyMinutes >= 600) unlockable.push('total_10h')
+  if (!has('total_25h') && metrics.totalStudyMinutes >= 1500) unlockable.push('total_25h')
+  if (!has('total_50h') && metrics.totalStudyMinutes >= 3000) unlockable.push('total_50h')
   if (!has('total_100h') && metrics.totalStudyMinutes >= 6000) unlockable.push('total_100h')
+  if (!has('total_200h') && metrics.totalStudyMinutes >= 12000) unlockable.push('total_200h')
   if (!has('total_500h') && metrics.totalStudyMinutes >= 30000) unlockable.push('total_500h')
   if (!has('total_1000h') && metrics.totalStudyMinutes >= 60000) unlockable.push('total_1000h')
 
