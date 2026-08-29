@@ -16,7 +16,7 @@ export const ACHIEVEMENT_MENU_PAGE_KEYS = [
   '/dashboard/study/history',
   '/dashboard/achievements',
   '/dashboard/bookshelf',
-  '/dashboard/textbooks/register',
+  '/dashboard/textbooks/search',
   '/dashboard/calendar',
   '/dashboard/todo',
   '/dashboard/coaching',

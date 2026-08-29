@@ -6,10 +6,10 @@ import {
   type TextbookActionState,
 } from '@/app/textbooks/actions'
 import { AdminStudentCheckboxGroups } from '@/components/textbooks/AdminStudentCheckboxGroups'
+import { TextbookDetailTagFields } from '@/components/textbooks/TextbookDetailTagFields'
 import {
   TextbookDateFields,
   UsageTagFields,
-  ExamSubjectMultiSelect,
   inputClass,
 } from '@/components/textbooks/TextbookFormFields'
 import type { StudentListGroup } from '@/lib/tags/grade-order'
@@ -102,7 +102,10 @@ export function AdminBulkTextbookRegister({
             </select>
             {selectedCatalog && (
               <p className="mt-2 text-xs text-muted">
-                {selectedCatalog.subjects.join('・')}
+                {(selectedCatalog.detail_tags.length > 0
+                  ? selectedCatalog.detail_tags
+                  : selectedCatalog.subjects
+                ).join('・')}
                 {selectedCatalog.usage_tags.length > 0
                   ? ` / ${selectedCatalog.usage_tags.join('・')}`
                   : ''}
@@ -115,7 +118,7 @@ export function AdminBulkTextbookRegister({
               <span className="mb-1.5 block text-sm font-medium">教材名</span>
               <input type="text" name="name" required={mode === 'manual'} className={inputClass} />
             </label>
-            <ExamSubjectMultiSelect />
+            <TextbookDetailTagFields />
           </>
         )}
 

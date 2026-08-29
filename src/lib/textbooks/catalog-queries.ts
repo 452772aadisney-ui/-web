@@ -15,6 +15,11 @@ function mapCatalog(row: Record<string, unknown>): TextbookCatalog {
     name: row.name as string,
     subjects: (row.subjects as string[]) ?? [],
     usage_tags: (row.usage_tags as string[]) ?? [],
+    detail_tags: (row.detail_tags as string[]) ?? [],
+    cover_url: (row.cover_url as string | null) ?? null,
+    publisher: (row.publisher as string | null) ?? null,
+    target_universities: (row.target_universities as string[]) ?? [],
+    study_purposes: (row.study_purposes as string[]) ?? [],
     visibility: row.visibility as TextbookCatalog['visibility'],
     created_by: (row.created_by as string | null) ?? null,
     created_at: row.created_at as string,
@@ -39,6 +44,7 @@ type TextbookRow = {
   id: string
   name: string
   subjects: string[]
+  detail_tags: string[]
   usage_tags: string[]
   catalog_id: string | null
   student_id: string
@@ -48,7 +54,7 @@ async function fetchAllTextbooksForAdmin(): Promise<TextbookRow[]> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('textbooks')
-    .select('id, name, subjects, usage_tags, catalog_id, student_id')
+    .select('id, name, subjects, detail_tags, usage_tags, catalog_id, student_id')
     .order('name')
 
   if (error) {
@@ -56,7 +62,7 @@ async function fetchAllTextbooksForAdmin(): Promise<TextbookRow[]> {
 
     const { data: fallbackData, error: fallbackError } = await supabase
       .from('textbooks')
-      .select('id, name, subjects, usage_tags, student_id')
+      .select('id, name, subjects, detail_tags, usage_tags, student_id')
       .order('name')
 
     if (fallbackError) {
@@ -64,9 +70,10 @@ async function fetchAllTextbooksForAdmin(): Promise<TextbookRow[]> {
       return []
     }
 
-    return ((fallbackData ?? []) as Omit<TextbookRow, 'catalog_id'>[]).map((book) => ({
+    return ((fallbackData ?? []) as Omit<TextbookRow, 'catalog_id' | 'detail_tags'>[]).map((book) => ({
       ...book,
       catalog_id: null,
+      detail_tags: [],
     }))
   }
 
@@ -143,6 +150,7 @@ export async function fetchAdminBookshelfOverview(): Promise<AdminBookshelfOverv
       key,
       name: book.name,
       subjects: book.subjects ?? [],
+      detail_tags: book.detail_tags ?? [],
       usage_tags: book.usage_tags ?? [],
       users: [user],
       textbookIdsByStudent: { [book.student_id]: book.id },
@@ -176,6 +184,11 @@ export async function fetchAdminBookshelfOverview(): Promise<AdminBookshelfOverv
       name: sample.name,
       subjects: sample.subjects ?? [],
       usage_tags: sample.usage_tags ?? [],
+      detail_tags: [],
+      cover_url: null,
+      publisher: null,
+      target_universities: [],
+      study_purposes: [],
       visibility: 'private',
       created_by: null,
       created_at: '',
@@ -219,7 +232,7 @@ export async function fetchTextbookCatalog(): Promise<TextbookCatalog[]> {
 }
 
 export async function fetchTextbookCatalogForStudent(
-  studentId: string,
+  _studentId: string,
 ): Promise<TextbookCatalog[]> {
   const supabase = await createClient()
   const { data, error } = await supabase

@@ -4,6 +4,11 @@ import { evaluateAndUnlockAchievements, type UnlockedAchievement } from '@/lib/a
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { TEXTBOOK_USAGE_TAGS } from '@/lib/constants/textbook-tags'
+import {
+  canStudentEditTextbookSubjectTags,
+  parseDetailTagsFromForm,
+  resolveTextbookSubjectTags,
+} from '@/lib/textbooks/subject-tags'
 import { parseOptionalDate, validateDateRange } from '@/lib/textbooks/format'
 
 export type TextbookActionState = {
@@ -12,8 +17,8 @@ export type TextbookActionState = {
   unlockedAchievements?: UnlockedAchievement[]
 }
 
-function parseSubjects(formData: FormData, allowedSubjects: string[]): string[] {
-  return allowedSubjects.filter((subject) => formData.get(`subject_${subject}`) === 'on')
+function parseTextbookTags(formData: FormData) {
+  return resolveTextbookSubjectTags(parseDetailTagsFromForm(formData))
 }
 
 function parseUsageTags(formData: FormData): string[] {
@@ -93,6 +98,7 @@ function revalidateTextbookPaths(studentId: string) {
   revalidatePath('/dashboard/profile')
   revalidatePath('/dashboard/bookshelf')
   revalidatePath('/dashboard/textbooks/register')
+  revalidatePath('/dashboard/textbooks/search')
   revalidatePath('/dashboard/study')
   revalidatePath('/dashboard/calendar')
   revalidatePath('/dashboard')
@@ -120,13 +126,12 @@ export async function createTextbook(
 
   const supabase = await createClient()
   const name = String(formData.get('name') ?? '').trim()
-  const allowedSubjects = (await getAllowedSubjectsForStudent(studentId)) ?? []
-  const subjects = parseSubjects(formData, allowedSubjects)
+  const { subjects, detail_tags: detailTags } = parseTextbookTags(formData)
   const usageTags = parseUsageTags(formData)
   const { startDate, plannedEndDate, error: dateError } = parseTextbookDates(formData)
 
   if (!name) return { error: '教材名を入力してください' }
-  if (subjects.length === 0) return { error: '科目タグを1つ以上選択してください' }
+  if (detailTags.length === 0) return { error: '科目タグを1つ以上選択してください' }
   if (usageTags.length === 0) return { error: '用途タグを1つ以上選択してください' }
   if (dateError) return { error: dateError }
 
@@ -136,6 +141,7 @@ export async function createTextbook(
     student_id: studentId,
     name,
     subjects,
+    detail_tags: detailTags,
     usage_tags: usageTags,
     start_date: startDate,
     planned_end_date: plannedEndDate,
@@ -170,32 +176,33 @@ export async function createTextbooksForStudents(
 
   let name = String(formData.get('name') ?? '').trim()
   let subjects: string[] = []
+  let detailTags: string[] = []
   let usageTags = parseUsageTags(formData)
   const { startDate, plannedEndDate, error: dateError } = parseTextbookDates(formData)
 
   if (catalogId) {
     const { data: catalog } = await supabase
       .from('textbook_catalog')
-      .select('name, subjects, usage_tags')
+      .select('name, subjects, detail_tags, usage_tags')
       .eq('id', catalogId)
-      .maybeSingle<{ name: string; subjects: string[]; usage_tags: string[] }>()
+      .maybeSingle<{ name: string; subjects: string[]; detail_tags: string[]; usage_tags: string[] }>()
 
     if (!catalog) return { error: '本棚の参考書が見つかりません' }
 
     name = catalog.name
     subjects = catalog.subjects
+    detailTags = catalog.detail_tags ?? []
     if (usageTags.length === 0) {
       usageTags = catalog.usage_tags
     }
   } else {
-    subjects = formData
-      .getAll('subjects')
-      .map((value) => String(value).trim())
-      .filter(Boolean)
+    const parsed = parseTextbookTags(formData)
+    subjects = parsed.subjects
+    detailTags = parsed.detail_tags
   }
 
   if (!name) return { error: '教材名を入力してください' }
-  if (subjects.length === 0) return { error: '科目タグを1つ以上指定してください' }
+  if (detailTags.length === 0) return { error: '科目タグを1つ以上指定してください' }
   if (usageTags.length === 0) return { error: '用途タグを1つ以上選択してください' }
   if (dateError) return { error: dateError }
 
@@ -203,6 +210,7 @@ export async function createTextbooksForStudents(
     student_id: studentId,
     name,
     subjects,
+    detail_tags: detailTags,
     usage_tags: usageTags,
     start_date: startDate,
     planned_end_date: plannedEndDate,
@@ -241,7 +249,9 @@ export async function addTextbookFromCatalog(
   const supabase = await createClient()
   const { data: catalog } = await supabase
     .from('textbook_catalog')
-    .select('id, name, subjects, usage_tags, visibility')
+    .select(
+      'id, name, subjects, usage_tags, visibility, cover_url, publisher, detail_tags',
+    )
     .eq('id', catalogId)
     .maybeSingle<{
       id: string
@@ -249,6 +259,9 @@ export async function addTextbookFromCatalog(
       subjects: string[]
       usage_tags: string[]
       visibility: string
+      cover_url: string | null
+      publisher: string | null
+      detail_tags: string[]
     }>()
 
   if (!catalog) return { error: '参考書が見つかりません' }
@@ -275,11 +288,19 @@ export async function addTextbookFromCatalog(
     return { error: '用途タグを1つ以上選択してください' }
   }
 
+  const subjects =
+    catalog.subjects.length > 0
+      ? catalog.subjects
+      : resolveTextbookSubjectTags(catalog.detail_tags ?? []).subjects
+
   const { error } = await supabase.from('textbooks').insert({
     student_id: studentId,
     name: catalog.name,
-    subjects: catalog.subjects,
+    subjects,
     usage_tags: finalUsageTags,
+    detail_tags: catalog.detail_tags ?? [],
+    cover_url: catalog.cover_url,
+    publisher: catalog.publisher,
     start_date: startDate,
     planned_end_date: plannedEndDate,
     catalog_id: catalog.id,
@@ -310,22 +331,46 @@ export async function updateTextbook(
   const supabase = await createClient()
   const textbookId = String(formData.get('textbookId') ?? '').trim()
   const name = String(formData.get('name') ?? '').trim()
-  const allowedSubjects = (await getAllowedSubjectsForStudent(studentId)) ?? []
-  const subjects = parseSubjects(formData, allowedSubjects)
   const usageTags = parseUsageTags(formData)
   const { startDate, plannedEndDate, error: dateError } = parseTextbookDates(formData)
 
   if (!textbookId) return { error: '教材が指定されていません' }
   if (!name) return { error: '教材名を入力してください' }
-  if (subjects.length === 0) return { error: '科目タグを1つ以上選択してください' }
   if (usageTags.length === 0) return { error: '用途タグを1つ以上選択してください' }
   if (dateError) return { error: dateError }
+
+  const { data: existing } = await supabase
+    .from('textbooks')
+    .select('catalog_id, registered_by, subjects, detail_tags')
+    .eq('id', textbookId)
+    .eq('student_id', studentId)
+    .maybeSingle<{
+      catalog_id: string | null
+      registered_by: string | null
+      subjects: string[]
+      detail_tags: string[]
+    }>()
+
+  if (!existing) return { error: '教材が見つかりません' }
+
+  let subjects = existing.subjects
+  let detailTags = existing.detail_tags ?? []
+
+  if (canStudentEditTextbookSubjectTags(existing, studentId)) {
+    const parsed = parseTextbookTags(formData)
+    if (parsed.detail_tags.length === 0) {
+      return { error: '科目タグを1つ以上選択してください' }
+    }
+    subjects = parsed.subjects
+    detailTags = parsed.detail_tags
+  }
 
   const { error } = await supabase
     .from('textbooks')
     .update({
       name,
       subjects,
+      detail_tags: detailTags,
       usage_tags: usageTags,
       start_date: startDate,
       planned_end_date: plannedEndDate,

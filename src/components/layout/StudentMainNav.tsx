@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
   { href: '/dashboard/study', label: '学習記録' },
-  { href: '/dashboard/bookshelf', label: '本棚' },
+  { href: '/dashboard/bookshelf', label: 'My本棚' },
   { href: '/dashboard/calendar', label: 'カレンダー' },
   { href: '/dashboard/todo', label: 'ToDoリスト' },
   { href: '/dashboard/coaching', label: 'コーチング' },

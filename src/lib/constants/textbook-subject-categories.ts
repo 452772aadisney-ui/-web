@@ -1,36 +1,31 @@
-/** 本棚リスト選択用の科目カテゴリ → 教材タグ（subjects）の対応 */
-export const TEXTBOOK_SUBJECT_CATEGORIES = [
-  { label: '英語', subjects: ['英語'] },
-  { label: '数学', subjects: ['数学IA', '数学IIBC', '数学III'] },
-  { label: '現代文', subjects: ['現代文'] },
-  { label: '古文/漢文', subjects: ['古文', '漢文'] },
-  { label: '物理', subjects: ['物理', '物理基礎'] },
-  { label: '化学', subjects: ['化学', '化学基礎'] },
-  { label: '生物', subjects: ['生物', '生物基礎'] },
-  { label: '地学', subjects: ['地学', '地学基礎'] },
-  { label: '日本史', subjects: ['日本史'] },
-  { label: '世界史', subjects: ['世界史'] },
-  { label: '地理', subjects: ['地理'] },
-  { label: '公共/倫理/政治経済', subjects: ['公共', '倫理', '政治経済'] },
-  { label: '情報', subjects: ['情報'] },
-  { label: '小論文', subjects: ['小論文'] },
-] as const
+/** 本棚・学習記録用の教科（親グループ） */
+import {
+  TEXTBOOK_DETAIL_TAG_GROUPS,
+  getDetailTagsForGroup,
+} from '@/lib/constants/textbook-detail-tags'
+import {
+  getParentGroupsForProfile,
+  resolveStudySubjectCategory as resolveParentGroup,
+  textbookMatchesParentGroup,
+  type TextbookParentGroupLabel,
+} from '@/lib/textbooks/subject-tags'
 
-export type TextbookSubjectCategoryLabel =
-  (typeof TEXTBOOK_SUBJECT_CATEGORIES)[number]['label']
+export const TEXTBOOK_SUBJECT_CATEGORIES = TEXTBOOK_DETAIL_TAG_GROUPS.map((group) => ({
+  label: group.label,
+  subjects: [...group.tags],
+}))
+
+export type TextbookSubjectCategoryLabel = TextbookParentGroupLabel
 
 export function getSubjectTagsForCategory(categoryLabel: string): string[] {
-  const category = TEXTBOOK_SUBJECT_CATEGORIES.find((item) => item.label === categoryLabel)
-  return category ? [...category.subjects] : []
+  return getDetailTagsForGroup(categoryLabel)
 }
 
 export function catalogMatchesCategory(
-  catalogSubjects: string[],
-  categoryLabel: string,
+  item: { subjects: string[]; detail_tags?: string[] },
+  categoryLabel: TextbookSubjectCategoryLabel,
 ): boolean {
-  const tags = getSubjectTagsForCategory(categoryLabel)
-  if (tags.length === 0) return false
-  return tags.some((tag) => catalogSubjects.includes(tag))
+  return textbookMatchesParentGroup(item, categoryLabel)
 }
 
 export function isStudySubjectCategoryLabel(
@@ -39,35 +34,27 @@ export function isStudySubjectCategoryLabel(
   return TEXTBOOK_SUBJECT_CATEGORIES.some((category) => category.label === value)
 }
 
-/** プロフィールの使用科目から、学習記録用の科目カテゴリ一覧を返す */
 export function getStudySubjectCategoriesForProfile(
   profileSubjects: string[],
 ): TextbookSubjectCategoryLabel[] {
-  return TEXTBOOK_SUBJECT_CATEGORIES.filter((category) =>
-    category.subjects.some((tag) => profileSubjects.includes(tag)),
-  ).map((category) => category.label)
+  return getParentGroupsForProfile(profileSubjects)
 }
 
-/** 保存済みの科目名（詳細タグ含む）を学習記録用カテゴリに変換 */
 export function resolveStudySubjectCategory(
   subject: string,
 ): TextbookSubjectCategoryLabel | null {
-  if (isStudySubjectCategoryLabel(subject)) return subject
-
-  const category = TEXTBOOK_SUBJECT_CATEGORIES.find((item) =>
-    (item.subjects as readonly string[]).includes(subject),
-  )
-  return category?.label ?? null
+  return resolveParentGroup(subject)
 }
 
-/** 参考書のタグから学習記録用カテゴリを決定（プロフィール科目に合う最初のカテゴリ） */
 export function deriveStudyCategoryFromTextbook(
   textbookSubjects: string[],
   profileSubjects: string[],
+  detailTags: string[] = [],
 ): TextbookSubjectCategoryLabel | null {
+  const item = { subjects: textbookSubjects, detail_tags: detailTags }
   for (const category of TEXTBOOK_SUBJECT_CATEGORIES) {
     if (
-      category.subjects.some((tag) => textbookSubjects.includes(tag)) &&
+      catalogMatchesCategory(item, category.label) &&
       profileIncludesStudyCategory(profileSubjects, category.label)
     ) {
       return category.label
@@ -87,19 +74,21 @@ export function profileIncludesStudyCategory(
   profileSubjects: string[],
   categoryLabel: string,
 ): boolean {
-  const tags = getSubjectTagsForCategory(categoryLabel)
-  return tags.some((tag) => profileSubjects.includes(tag))
+  return getParentGroupsForProfile(profileSubjects).includes(
+    categoryLabel as TextbookSubjectCategoryLabel,
+  )
 }
 
-export function filterTextbooksByStudyCategory<T extends { subjects: string[] }>(
+export function filterTextbooksByStudyCategory<T extends { subjects: string[]; detail_tags?: string[] }>(
   textbooks: T[],
   categoryLabel: string,
 ): T[] {
   if (!categoryLabel) return []
-  return textbooks.filter((book) => catalogMatchesCategory(book.subjects, categoryLabel))
+  return textbooks.filter((book) =>
+    catalogMatchesCategory(book, categoryLabel as TextbookSubjectCategoryLabel),
+  )
 }
 
-/** URL パラメータとプロフィール科目から、初期表示する科目カテゴリを決める */
 export function resolveInitialSubjectCategoryForProfile(
   profileSubjects: string[],
   param?: string,

@@ -5,6 +5,11 @@ export interface TextbookCatalog {
   name: string
   subjects: string[]
   usage_tags: string[]
+  detail_tags: string[]
+  cover_url: string | null
+  publisher: string | null
+  target_universities: string[]
+  study_purposes: string[]
   visibility: TextbookCatalogVisibility
   created_by: string | null
   created_at: string
@@ -32,6 +37,7 @@ export interface AdminBookshelfStudentEntry {
   key: string
   name: string
   subjects: string[]
+  detail_tags: string[]
   usage_tags: string[]
   users: TextbookUser[]
   textbookIdsByStudent: Record<string, string>
@@ -48,6 +54,9 @@ export interface Textbook {
   name: string
   subjects: string[]
   usage_tags: string[]
+  detail_tags: string[]
+  cover_url: string | null
+  publisher: string | null
   start_date: string | null
   planned_end_date: string | null
   catalog_id: string | null

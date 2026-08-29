@@ -3,8 +3,12 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { TEXTBOOK_USAGE_TAGS } from '@/lib/constants/textbook-tags'
+import {
+  parseDetailTagsFromForm,
+  resolveTextbookSubjectTags,
+} from '@/lib/textbooks/subject-tags'
+import { resolveTextbookCoverUrl } from '@/lib/textbooks/cover-url'
 import type { TextbookCatalogVisibility } from '@/types/textbook'
-
 export type CatalogActionState = {
   error?: string
   success?: boolean
@@ -30,20 +34,37 @@ async function assertAdmin(): Promise<{ userId: string } | { error: string }> {
 }
 
 function parseSubjects(formData: FormData): string[] {
-  const fromMulti = formData
-    .getAll('subjects')
-    .map((value) => String(value).trim())
-    .filter(Boolean)
-  if (fromMulti.length > 0) return fromMulti
+  return resolveTextbookSubjectTags(parseDetailTagsFromForm(formData)).subjects
+}
 
-  return String(formData.get('subjects') ?? '')
-    .split(',')
-    .map((value) => value.trim())
+function parseDetailTags(formData: FormData): string[] {
+  return resolveTextbookSubjectTags(parseDetailTagsFromForm(formData)).detail_tags
+}
+function parseUsageTags(formData: FormData): string[] {
+  return TEXTBOOK_USAGE_TAGS.filter((tag) => formData.get(`usage_${tag}`) === 'on')
+}
+
+function parseStringList(formData: FormData, name: string): string[] {
+  return formData
+    .getAll(name)
+    .map((value) => String(value).trim())
     .filter(Boolean)
 }
 
-function parseUsageTags(formData: FormData): string[] {
-  return TEXTBOOK_USAGE_TAGS.filter((tag) => formData.get(`usage_${tag}`) === 'on')
+function parseOptionalText(formData: FormData, name: string): string | null {
+  const value = String(formData.get(name) ?? '').trim()
+  return value || null
+}
+
+function parseCatalogMetadata(formData: FormData) {
+  const rawCoverUrl = parseOptionalText(formData, 'coverUrl')
+  return {
+    detail_tags: parseStringList(formData, 'detailTags'),
+    publisher: parseOptionalText(formData, 'publisher'),
+    cover_url: resolveTextbookCoverUrl(rawCoverUrl),
+    study_purposes: parseStringList(formData, 'studyPurposes'),
+    target_universities: parseStringList(formData, 'targetUniversities'),
+  }
 }
 
 function parseStudentIds(formData: FormData): string[] {
@@ -65,6 +86,7 @@ function parseTextbookIdsJson(formData: FormData): Record<string, string> {
 
 function revalidateCatalogPaths(studentIds: string[] = []) {
   revalidatePath('/admin/bookshelf')
+  revalidatePath('/admin/bookshelf/search')
   revalidatePath('/admin/textbooks')
   revalidatePath('/dashboard/bookshelf')
   revalidatePath('/dashboard')
@@ -82,8 +104,9 @@ async function syncStudentAssignments(input: {
   catalogId: string | null
   name: string
   subjects: string[]
+  detailTags: string[]
   usageTags: string[]
-}): Promise<CatalogActionState> {
+  metadata?: ReturnType<typeof parseCatalogMetadata>}): Promise<CatalogActionState> {
   const supabase = await createClient()
   const selectedStudentIds = input.selectedStudentIds
   const currentStudentIds = Object.keys(input.textbookIdsByStudent)
@@ -106,8 +129,15 @@ async function syncStudentAssignments(input: {
         .update({
           name: input.name,
           subjects: input.subjects,
+          detail_tags: input.detailTags,
           usage_tags: input.usageTags,
           catalog_id: input.catalogId,
+          ...(input.metadata
+            ? {
+                cover_url: input.metadata.cover_url,
+                publisher: input.metadata.publisher,
+              }
+            : {}),
         })
         .eq('id', textbookId)
 
@@ -119,10 +149,17 @@ async function syncStudentAssignments(input: {
       student_id: studentId,
       name: input.name,
       subjects: input.subjects,
+      detail_tags: input.detailTags,
       usage_tags: input.usageTags,
       catalog_id: input.catalogId,
       registered_by: input.userId,
       is_seen_by_student: false,
+      ...(input.metadata
+        ? {
+            cover_url: input.metadata.cover_url,
+            publisher: input.metadata.publisher,
+          }
+        : {}),
     })
 
     if (error) {
@@ -147,11 +184,13 @@ export async function createTextbookCatalogEntry(
   const supabase = await createClient()
   const name = String(formData.get('name') ?? '').trim()
   const subjects = parseSubjects(formData)
+  const detailTags = parseDetailTags(formData)
   const usageTags = parseUsageTags(formData)
+  const metadata = parseCatalogMetadata(formData)
   const visibility = String(formData.get('visibility') ?? 'public') as TextbookCatalogVisibility
 
   if (!name) return { error: '参考書名を入力してください' }
-  if (subjects.length === 0) return { error: '科目タグを1つ以上入力してください' }
+  if (detailTags.length === 0) return { error: '科目タグを1つ以上選択してください' }
   if (usageTags.length === 0) return { error: '用途タグを1つ以上選択してください' }
   if (visibility !== 'public' && visibility !== 'private') {
     return { error: '公開設定が不正です' }
@@ -163,6 +202,7 @@ export async function createTextbookCatalogEntry(
     usage_tags: usageTags,
     visibility,
     created_by: auth.userId,
+    ...metadata,
   })
 
   if (error) return { error: '参考書の登録に失敗しました' }
@@ -184,14 +224,16 @@ export async function updateAdminBookshelfCatalogEntry(
   const createCatalogMaster = formData.get('createCatalogMaster') === 'on'
   const name = String(formData.get('name') ?? '').trim()
   const subjects = parseSubjects(formData)
+  const detailTags = parseDetailTags(formData)
   const usageTags = parseUsageTags(formData)
+  const metadata = parseCatalogMetadata(formData)
   const visibility = String(formData.get('visibility') ?? 'public') as TextbookCatalogVisibility
   const selectedStudentIds = parseStudentIds(formData)
   const textbookIdsByStudent = parseTextbookIdsJson(formData)
 
   if (!catalogId) return { error: '参考書が指定されていません' }
   if (!name) return { error: '参考書名を入力してください' }
-  if (subjects.length === 0) return { error: '科目タグを1つ以上入力してください' }
+  if (detailTags.length === 0) return { error: '科目タグを1つ以上選択してください' }
   if (usageTags.length === 0) return { error: '用途タグを1つ以上選択してください' }
   if (visibility !== 'public' && visibility !== 'private') {
     return { error: '公開設定が不正です' }
@@ -207,6 +249,7 @@ export async function updateAdminBookshelfCatalogEntry(
         subjects,
         usage_tags: usageTags,
         visibility,
+        ...metadata,
       })
       .eq('id', catalogId)
 
@@ -252,7 +295,9 @@ export async function updateAdminBookshelfCatalogEntry(
     catalogId: targetCatalogId,
     name,
     subjects,
+    detailTags,
     usageTags,
+    metadata,
   })
 }
 
@@ -266,14 +311,16 @@ export async function updateAdminBookshelfStudentEntry(
   const supabase = await createClient()
   const name = String(formData.get('name') ?? '').trim()
   const subjects = parseSubjects(formData)
+  const detailTags = parseDetailTags(formData)
   const usageTags = parseUsageTags(formData)
+  const metadata = parseCatalogMetadata(formData)
   const visibility = String(formData.get('visibility') ?? 'private') as TextbookCatalogVisibility
   const createCatalogMaster = formData.get('createCatalogMaster') === 'on'
   const selectedStudentIds = parseStudentIds(formData)
   const textbookIdsByStudent = parseTextbookIdsJson(formData)
 
   if (!name) return { error: '参考書名を入力してください' }
-  if (subjects.length === 0) return { error: '科目タグを1つ以上入力してください' }
+  if (detailTags.length === 0) return { error: '科目タグを1つ以上選択してください' }
   if (usageTags.length === 0) return { error: '用途タグを1つ以上選択してください' }
 
   let catalogId: string | null = null
@@ -291,6 +338,7 @@ export async function updateAdminBookshelfStudentEntry(
         usage_tags: usageTags,
         visibility,
         created_by: auth.userId,
+        ...metadata,
       })
       .select('id')
       .single<{ id: string }>()
@@ -306,7 +354,9 @@ export async function updateAdminBookshelfStudentEntry(
     catalogId,
     name,
     subjects,
+    detailTags,
     usageTags,
+    metadata,
   })
 }
 

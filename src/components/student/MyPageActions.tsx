@@ -6,6 +6,7 @@ import { formatCoachingBookingDateTime } from '@/lib/coaching/format'
 import type { CoachingBookingWithDetails } from '@/types/coaching'
 import { FaqIntroDialog } from '@/components/faq/FaqIntroDialog'
 import { StudyLogModeDialog } from '@/components/study/StudyLogModeDialog'
+import { TextbookRegisterModeDialog } from '@/components/textbooks/TextbookRegisterModeDialog'
 import { CoachingAlertBanner } from '@/components/coaching/CoachingAlertBanner'
 import {
   MYPAGE_MENU_ICONS,
@@ -20,12 +21,13 @@ import { formatStudyStreakLabel } from '@/lib/study/streak'
 type MenuBadgeKey = 'studyHistory' | 'announcements' | 'chat' | 'bookshelf' | 'faqIntro' | 'todo'
 
 const iconMenuActions: Array<{
-  href: string
+  href?: string
   label: string
   iconSrc: string
   badgeKey?: MenuBadgeKey
   openInNewTab?: boolean
   externalConfirmMessage?: string
+  opensTextbookRegisterDialog?: boolean
 }> = [
   {
     href: '/dashboard/study/history',
@@ -34,20 +36,15 @@ const iconMenuActions: Array<{
     badgeKey: 'studyHistory',
   },
   {
-    href: '/dashboard/achievements',
-    label: '実績一覧',
-    iconSrc: MYPAGE_MENU_ICONS.achievements,
-  },
-  {
     href: '/dashboard/bookshelf',
-    label: '本棚',
+    label: 'My本棚',
     iconSrc: MYPAGE_MENU_ICONS.bookshelf,
     badgeKey: 'bookshelf',
   },
   {
-    href: '/dashboard/textbooks/register',
     label: '教材登録',
     iconSrc: MYPAGE_MENU_ICONS.textbookRegister,
+    opensTextbookRegisterDialog: true,
   },
   {
     href: '/dashboard/calendar',
@@ -67,16 +64,21 @@ const iconMenuActions: Array<{
     badgeKey: 'announcements',
   },
   {
+    href: 'https://mates.students-web.jp/sign-in',
+    label: '授業予定',
+    iconSrc: MYPAGE_MENU_ICONS.classSchedule,
+    externalConfirmMessage: '生徒web(外部リンク)を開きます',
+  },
+  {
     href: '/dashboard/chat',
     label: 'メッセージ',
     iconSrc: MYPAGE_MENU_ICONS.message,
     badgeKey: 'chat',
   },
   {
-    href: 'https://mates.students-web.jp/sign-in',
-    label: '授業予定',
-    iconSrc: MYPAGE_MENU_ICONS.classSchedule,
-    externalConfirmMessage: '生徒web(外部リンク)を開きます',
+    href: '/dashboard/achievements',
+    label: '実績一覧',
+    iconSrc: MYPAGE_MENU_ICONS.achievements,
   },
   {
     href: '/dashboard/faq',
@@ -118,6 +120,7 @@ export function MyPageActions({
   showFaqIntro = false,
 }: MyPageActionsProps) {
   const [studyDialogOpen, setStudyDialogOpen] = useState(false)
+  const [textbookRegisterDialogOpen, setTextbookRegisterDialogOpen] = useState(false)
   const badgeCounts: Record<MenuBadgeKey, number> = {
     studyHistory: unreadStudyFeedbackCount,
     announcements: unreadAnnouncementCount,
@@ -139,6 +142,10 @@ export function MyPageActions({
     <div className="space-y-3">
       <FaqIntroDialog open={showFaqIntro} />
       <StudyLogModeDialog open={studyDialogOpen} onClose={() => setStudyDialogOpen(false)} />
+      <TextbookRegisterModeDialog
+        open={textbookRegisterDialogOpen}
+        onClose={() => setTextbookRegisterDialogOpen(false)}
+      />
 
       {coachingAlertMessage && <CoachingAlertBanner message={coachingAlertMessage} />}
 
@@ -207,13 +214,18 @@ export function MyPageActions({
       <div className="grid grid-cols-3 gap-3">
         {visibleMenuActions.map((action) => (
           <MyPageIconMenuButton
-            key={action.href}
+            key={action.label}
             href={action.href}
             label={action.label}
             iconSrc={action.iconSrc}
             badgeCount={action.badgeKey ? badgeCounts[action.badgeKey] : undefined}
             openInNewTab={action.openInNewTab}
             externalConfirmMessage={action.externalConfirmMessage}
+            onClick={
+              action.opensTextbookRegisterDialog
+                ? () => setTextbookRegisterDialogOpen(true)
+                : undefined
+            }
           />
         ))}
       </div>

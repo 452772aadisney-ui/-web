@@ -71,13 +71,14 @@ export function MyPagePrimaryActionButton({
 }
 
 interface MyPageIconMenuButtonProps {
-  href: string
+  href?: string
   label: string
   iconSrc: string
   badgeCount?: number
   className?: string
   openInNewTab?: boolean
   externalConfirmMessage?: string
+  onClick?: () => void
 }
 
 export function MyPageIconMenuButton({
@@ -88,6 +89,7 @@ export function MyPageIconMenuButton({
   className,
   openInNewTab,
   externalConfirmMessage,
+  onClick,
 }: MyPageIconMenuButtonProps) {
   const buttonClassName = cn(
     'relative flex min-h-[5.75rem] flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card px-3 py-4 text-center shadow-sm transition hover:bg-background active:scale-[0.92] active:border-primary/30 active:bg-primary/10',
@@ -105,6 +107,14 @@ export function MyPageIconMenuButton({
       )}
     </>
   )
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={buttonClassName}>
+        {content}
+      </button>
+    )
+  }
 
   if (externalConfirmMessage) {
     return (
@@ -124,7 +134,7 @@ export function MyPageIconMenuButton({
 
   return (
     <Link
-      href={href}
+      href={href ?? '#'}
       target={openInNewTab ? '_blank' : undefined}
       rel={openInNewTab ? 'noopener noreferrer' : undefined}
       className={buttonClassName}

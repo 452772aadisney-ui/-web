@@ -11,8 +11,10 @@ import {
   type TextbookActionState,
 } from '@/app/textbooks/actions'
 import { useAchievementUnlockDialog } from '@/components/achievements/useAchievementUnlockDialog'
+import { TextbookBookshelfListItem } from '@/components/textbooks/TextbookCatalogListItem'
+import { TextbookDetailTagFields } from '@/components/textbooks/TextbookDetailTagFields'
+import { TextbookSubjectTagsReadOnly } from '@/components/textbooks/TextbookSubjectTagsReadOnly'
 import {
-  SubjectTagFields,
   TextbookDateFields,
   UsageTagFields,
   inputClass,
@@ -23,7 +25,9 @@ import {
   getStudySubjectCategoriesForProfile,
   type TextbookSubjectCategoryLabel,
 } from '@/lib/constants/textbook-subject-categories'
+import { cn } from '@/lib/utils'
 import { formatTextbookPeriod } from '@/lib/textbooks/format'
+import { canStudentEditTextbookSubjectTags } from '@/lib/textbooks/subject-tags'
 import type { Textbook, TextbookCatalog } from '@/types/textbook'
 
 const initialState: TextbookActionState = {}
@@ -40,7 +44,7 @@ interface StudentBookshelfManagerProps {
   registeredCatalogIds: string[]
   editHref?: string
   initialSubject: TextbookSubjectCategoryLabel
-  variant: 'list' | 'register'
+  variant: 'list' | 'register' | 'register-create-only'
 }
 
 function SubjectCategorySelect({
@@ -75,12 +79,10 @@ function SubjectCategorySelect({
 function TextbookEditForm({
   book,
   studentId,
-  profileSubjects,
   onCancel,
 }: {
   book: Textbook
   studentId: string
-  profileSubjects: string[]
   onCancel: () => void
 }) {
   const router = useRouter()
@@ -96,6 +98,8 @@ function TextbookEditForm({
     }
   }, [state.success, onCancel, router])
 
+  const canEditSubjectTags = canStudentEditTextbookSubjectTags(book, studentId)
+
   return (
     <form action={formAction} className="min-w-0 space-y-4 rounded-lg border border-primary/30 bg-blue-50/30 p-4">
       <input type="hidden" name="textbookId" value={book.id} />
@@ -105,7 +109,11 @@ function TextbookEditForm({
         </span>
         <input type="text" name="name" required defaultValue={book.name} className={inputClass} />
       </label>
-      <SubjectTagFields profileSubjects={profileSubjects} selectedSubjects={book.subjects} />
+      {canEditSubjectTags ? (
+        <TextbookDetailTagFields defaultDetailTags={book.detail_tags} />
+      ) : (
+        <TextbookSubjectTagsReadOnly detailTags={book.detail_tags} subjects={book.subjects} />
+      )}
       <UsageTagFields selectedUsageTags={book.usage_tags} />
       <TextbookDateFields startDate={book.start_date} plannedEndDate={book.planned_end_date} />
       {state.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error">{state.error}</p>}
@@ -163,7 +171,10 @@ function CatalogRegisterForm({
     return catalog.filter((item) => {
       if (registered.has(item.id)) return false
       if (item.visibility === 'public') {
-        return catalogMatchesCategory(item.subjects, categoryLabel)
+        return catalogMatchesCategory(
+          { subjects: item.subjects, detail_tags: item.detail_tags },
+          categoryLabel,
+        )
       }
       return false
     })
@@ -263,7 +274,7 @@ function CreateRegisterForm({
         />
       </label>
 
-      <SubjectTagFields profileSubjects={profileSubjects} />
+      <TextbookDetailTagFields />
       <UsageTagFields />
       <TextbookDateFields />
 
@@ -298,7 +309,7 @@ function StudentTextbookList({
   const [editingId, setEditingId] = useState<string | null>(null)
 
   if (textbooks.length === 0) {
-    const registerHref = `/dashboard/textbooks/register?subject=${encodeURIComponent(selectedSubject)}`
+    const registerHref = '/dashboard/textbooks/search'
 
     return (
       <div className="space-y-3">
@@ -315,52 +326,47 @@ function StudentTextbookList({
   }
 
   return (
-    <ul className="space-y-3">
+    <ul className="grid grid-cols-2 gap-3">
       {textbooks.map((book) => (
-        <li key={book.id} className="rounded-lg border border-border">
+        <li key={book.id} className={cn('min-w-0', editingId === book.id && 'col-span-2')}>
           {editingId === book.id ? (
-            <div className="p-4">
+            <div className="rounded-xl border border-border bg-card p-4">
               <TextbookEditForm
                 book={book}
                 studentId={studentId}
-                profileSubjects={profileSubjects}
                 onCancel={() => setEditingId(null)}
               />
             </div>
           ) : (
-            <div className="flex items-start justify-between gap-4 px-4 py-3">
-              <div>
-                <p className="font-medium">{book.name}</p>
-                <p className="mt-1 text-xs text-muted">
-                  {book.subjects.join('・')}
-                  {book.usage_tags.length > 0 ? ` / ${book.usage_tags.join('・')}` : ''}
-                </p>
-                <p className="mt-1 text-xs text-muted">
-                  期間: {formatTextbookPeriod(book.start_date, book.planned_end_date)}
-                </p>
-                {!book.is_seen_by_student && (
-                  <span className="mt-2 inline-block rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700">
-                    新規
-                  </span>
-                )}
-              </div>
-              <div className="flex shrink-0 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setEditingId(book.id)}
-                  className="text-xs text-primary hover:underline"
-                >
-                  編集
-                </button>
-                <form action={deleteTextbook}>
-                  <input type="hidden" name="textbookId" value={book.id} />
-                  <input type="hidden" name="studentId" value={studentId} />
-                  <button type="submit" className="text-xs text-error hover:underline">
-                    削除
+            <TextbookBookshelfListItem
+              name={book.name}
+              coverUrl={book.cover_url}
+              publisher={book.publisher}
+              detailTags={book.detail_tags}
+              subjects={book.subjects}
+              usageTags={book.usage_tags}
+              periodLabel={formatTextbookPeriod(book.start_date, book.planned_end_date)}
+              isNew={!book.is_seen_by_student}
+              layout="grid"
+              actions={
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setEditingId(book.id)}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    編集
                   </button>
-                </form>
-              </div>
-            </div>
+                  <form action={deleteTextbook}>
+                    <input type="hidden" name="textbookId" value={book.id} />
+                    <input type="hidden" name="studentId" value={studentId} />
+                    <button type="submit" className="text-xs text-error hover:underline">
+                      削除
+                    </button>
+                  </form>
+                </>
+              }
+            />
           )}
         </li>
       ))}
@@ -522,6 +528,10 @@ export function StudentBookshelfManager({
   initialSubject,
   variant,
 }: StudentBookshelfManagerProps) {
+  if (variant === 'register-create-only') {
+    return <CreateRegisterForm studentId={studentId} profileSubjects={profileSubjects} />
+  }
+
   if (variant === 'list') {
     return (
       <StudentTextbookListWithCategories
