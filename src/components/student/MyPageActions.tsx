@@ -140,9 +140,9 @@ export function MyPageActions({
       <FaqIntroDialog open={showFaqIntro} />
       <StudyLogModeDialog open={studyDialogOpen} onClose={() => setStudyDialogOpen(false)} />
 
-      <div className="space-y-1">
-        {coachingAlertMessage && <CoachingAlertBanner message={coachingAlertMessage} />}
+      {coachingAlertMessage && <CoachingAlertBanner message={coachingAlertMessage} />}
 
+      <div className="space-y-1">
         {showCommonTestCountdown ? (
           <div className="grid grid-cols-2 gap-2">
             {starRanking && <StarRankingBanner ranking={starRanking} className="min-w-0" />}

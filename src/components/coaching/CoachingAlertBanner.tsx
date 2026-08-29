@@ -9,7 +9,7 @@ export function CoachingAlertBanner({ message }: CoachingAlertBannerProps) {
     <section className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 shadow-sm">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-amber-900">コーチングの予約が必要です</p>
+          <p className="text-xs font-semibold text-amber-900">コーチング予約が必要です</p>
           <p className="mt-0.5 text-[11px] leading-snug text-amber-800">{message}</p>
         </div>
         <Link

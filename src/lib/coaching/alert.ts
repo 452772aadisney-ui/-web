@@ -39,9 +39,9 @@ export function getCoachingAlertState(
   let message = ''
   if (showAlert) {
     if (daysSinceLast === null) {
-      message = 'コーチングの予約がまだありません。週1回のコーチングを予約してください。'
+      message = 'まだコーチングを受けていません。週1回コーチングを受けましょう。'
     } else {
-      message = `コーチングを受けてから${daysSinceLast}日経過しています。週1回のコーチングを予約してください。`
+      message = `前回から${daysSinceLast}日経過しています。週1回コーチングを受けましょう。`
     }
   }
 
