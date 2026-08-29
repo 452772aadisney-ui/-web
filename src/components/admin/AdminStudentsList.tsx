@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { formatLastSignInAt } from '@/lib/auth/last-sign-in'
+import { formatLastAccessedAt } from '@/lib/auth/last-access'
 import { getPersonName } from '@/lib/auth/display-name'
 import type { StudentListGroup } from '@/lib/tags/grade-order'
 
@@ -60,7 +60,7 @@ export function AdminStudentsList({ groups }: AdminStudentsListProps) {
                         <p className="font-medium">{getPersonName(student)}</p>
                         <p className="mt-1 truncate text-xs text-muted">{student.email}</p>
                         <p className="mt-2 text-xs text-muted">
-                          最終ログイン: {formatLastSignInAt(student.last_sign_in_at)}
+                          最終アクセス: {formatLastAccessedAt(student.last_accessed_at)}
                         </p>
                       </div>
                       <div className="mt-3 flex items-end justify-between gap-2">

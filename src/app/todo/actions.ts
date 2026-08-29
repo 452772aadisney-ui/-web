@@ -28,15 +28,23 @@ export async function setHomeworkCompletion(
   if (!homeworkTaskId) return { error: '宿題が指定されていません' }
 
   if (completed) {
-    const { error } = await supabase.from('homework_completions').upsert(
-      {
+    const { data: existing, error: selectError } = await supabase
+      .from('homework_completions')
+      .select('id')
+      .eq('student_id', user.id)
+      .eq('homework_task_id', homeworkTaskId)
+      .maybeSingle()
+
+    if (selectError) return { error: '完了の確認に失敗しました' }
+
+    if (!existing) {
+      const { error } = await supabase.from('homework_completions').insert({
         student_id: user.id,
         homework_task_id: homeworkTaskId,
         completed_at: new Date().toISOString(),
-      },
-      { onConflict: 'student_id,homework_task_id' },
-    )
-    if (error) return { error: '完了の保存に失敗しました' }
+      })
+      if (error) return { error: '完了の保存に失敗しました' }
+    }
   } else {
     const { error } = await supabase
       .from('homework_completions')

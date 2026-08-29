@@ -13,21 +13,28 @@ import {
 } from '@/lib/study/chart-data'
 import { getTodayDateKey } from '@/lib/study/dates'
 import { AdminStudentTodoTable } from '@/components/todo/AdminTodoTables'
+import { buildTodoItems } from '@/lib/todo/build-items'
 import {
+  fetchApplicationTasksForStudent,
+  fetchHomeworkCompletionsForStudent,
+} from '@/lib/todo/queries'
+import {
+  fetchHomeworkTasksForStudent,
+  fetchQuizSchedulesForStudent,
+} from '@/lib/schedule/queries'
+import { getPersonName } from '@/lib/auth/display-name'
+import { AdminStudentQuizSection } from '@/components/quizzes/AdminQuizScoreTable'
+import { fetchStudentQuizAssignments } from '@/lib/quizzes/queries'
+import { groupStudentsByGrade } from '@/lib/tags/grade-order'
+import { fetchGradeTagNamesByStudentId, fetchStudentTags, fetchTagIdsForProfile } from '@/lib/tags/queries'
+import {
+  fetchStudentList,
   fetchStudentProfile,
   fetchStudyLogsForStudent,
   fetchTextbooksForStudent,
 } from '@/lib/study/queries'
 import { AdminStudentProfileForm } from '@/components/admin/AdminStudentProfileForm'
 import { StudentTagAssignForm } from '@/components/tags/StudentTagAssignForm'
-import { fetchHomeworkTasksForStudent } from '@/lib/schedule/queries'
-import { fetchHomeworkCompletionsForStudent } from '@/lib/todo/queries'
-import { getPersonName } from '@/lib/auth/display-name'
-import { AdminStudentQuizSection } from '@/components/quizzes/AdminQuizScoreTable'
-import { fetchStudentQuizAssignments } from '@/lib/quizzes/queries'
-import { groupStudentsByGrade } from '@/lib/tags/grade-order'
-import { fetchGradeTagNamesByStudentId, fetchStudentTags, fetchTagIdsForProfile } from '@/lib/tags/queries'
-import { fetchStudentList } from '@/lib/study/queries'
 
 export default async function AdminStudentStudyPage({
   params,
@@ -51,11 +58,13 @@ export default async function AdminStudentStudyPage({
     notFound()
   }
 
-  const [logs, textbooks, homework, completions, allTags, assignedTagIds, quizAssignments, students, gradeTagByStudentId] =
+  const [logs, textbooks, homework, quizzes, applications, completions, allTags, assignedTagIds, quizAssignments, students, gradeTagByStudentId] =
     await Promise.all([
     fetchStudyLogsForStudent(id),
     fetchTextbooksForStudent(id),
     fetchHomeworkTasksForStudent(id),
+    fetchQuizSchedulesForStudent(id),
+    fetchApplicationTasksForStudent(id),
     fetchHomeworkCompletionsForStudent(id),
     fetchStudentTags(),
     fetchTagIdsForProfile(id),
@@ -63,6 +72,8 @@ export default async function AdminStudentStudyPage({
     fetchStudentList(),
     fetchGradeTagNamesByStudentId(),
   ])
+
+  const todoItems = buildTodoItems(homework, quizzes, applications, completions)
 
   const studentGroups = groupStudentsByGrade(students, gradeTagByStudentId)
 
@@ -151,9 +162,9 @@ export default async function AdminStudentStudyPage({
           <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
             <h2 className="mb-1 text-lg font-bold">宿題・ToDo 状況</h2>
             <p className="mb-6 text-sm text-muted">
-              生徒が ToDo リストでチェックした宿題の完了・未完了を確認できます。
+              生徒に配信された ToDo（宿題・小テスト・申込関連）の完了・未完了を確認できます。
             </p>
-            <AdminStudentTodoTable homework={homework} completions={completions} />
+            <AdminStudentTodoTable items={todoItems} />
           </section>
 
           <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">

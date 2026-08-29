@@ -55,16 +55,18 @@ function HomeworkCheckbox({
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <input
-        type="checkbox"
-        checked={completed}
-        disabled={pending}
-        onChange={(e) => handleChange(e.target.checked)}
-        className="h-4 w-4 rounded border-border text-primary focus:ring-primary/20"
-        aria-label="宿題を完了にする"
-      />
-      {error && <span className="text-xs text-error">{error}</span>}
+    <div className="flex flex-col items-center gap-1">
+      <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-border bg-background hover:bg-card has-disabled:cursor-not-allowed has-disabled:opacity-50">
+        <input
+          type="checkbox"
+          checked={completed}
+          disabled={pending}
+          onChange={(e) => handleChange(e.target.checked)}
+          className="h-5 w-5 shrink-0 cursor-pointer accent-primary disabled:cursor-not-allowed"
+          aria-label="宿題を完了にする"
+        />
+      </label>
+      {error && <span className="max-w-20 text-center text-[10px] leading-tight text-error">{error}</span>}
     </div>
   )
 }
@@ -81,14 +83,14 @@ function TodoRow({ item, today }: { item: TodoItem; today: string }) {
         isOverdue && !item.completed && 'border-red-200 bg-red-50/50',
       )}
     >
-      <div className="mt-0.5 w-5 shrink-0">
+      <div className="shrink-0">
         {isHomework && item.homeworkTaskId ? (
           <HomeworkCheckbox
             taskId={item.homeworkTaskId}
             initialCompleted={item.completed}
           />
         ) : (
-          <span className="inline-block h-4 w-4" aria-hidden />
+          <span className="inline-block h-11 w-11" aria-hidden />
         )}
       </div>
 

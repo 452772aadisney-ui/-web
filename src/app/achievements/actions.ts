@@ -48,5 +48,14 @@ export async function recordStudentPageVisit(pathname: string): Promise<Unlocked
     return []
   }
 
+  const { error: accessError } = await supabase
+    .from('profiles')
+    .update({ last_accessed_at: new Date().toISOString() })
+    .eq('id', user.id)
+
+  if (accessError) {
+    console.error('[achievements] last_accessed_at update failed:', accessError)
+  }
+
   return evaluateAndUnlockAchievements(user.id)
 }

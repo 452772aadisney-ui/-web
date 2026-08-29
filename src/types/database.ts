@@ -12,6 +12,7 @@ export interface Profile {
   role: UserRole
   admin_since: string | null
   faq_intro_seen_at: string | null
+  last_accessed_at: string | null
   created_at: string
   updated_at: string
 }
