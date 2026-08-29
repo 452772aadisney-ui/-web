@@ -1,8 +1,15 @@
+import { cache } from 'react'
 import { createClient } from '@/lib/supabase/server'
+import { buildTodoItems } from '@/lib/todo/build-items'
+import {
+  fetchHomeworkTasksForStudent,
+  fetchQuizSchedulesForStudent,
+} from '@/lib/schedule/queries'
 import type {
   ApplicationTask,
   ApplicationTaskWithTargets,
   HomeworkCompletion,
+  TodoCompletions,
 } from '@/types/todo'
 
 type ApplicationTaskRow = ApplicationTask & {
@@ -42,6 +49,48 @@ export async function fetchAllHomeworkCompletions(): Promise<HomeworkCompletion[
   const { data } = await supabase.from('homework_completions').select('*')
   return (data as HomeworkCompletion[]) ?? []
 }
+
+export async function fetchTodoCompletionsForStudent(
+  studentId: string,
+): Promise<TodoCompletions> {
+  const supabase = await createClient()
+  const [{ data: homeworkRows }, { data: quizRows }, { data: applicationRows }] =
+    await Promise.all([
+      supabase
+        .from('homework_completions')
+        .select('homework_task_id')
+        .eq('student_id', studentId),
+      supabase
+        .from('quiz_schedule_completions')
+        .select('exam_schedule_id')
+        .eq('student_id', studentId),
+      supabase
+        .from('application_task_completions')
+        .select('application_task_id')
+        .eq('student_id', studentId),
+    ])
+
+  return {
+    homework: new Set((homeworkRows ?? []).map((row) => String(row.homework_task_id))),
+    quiz: new Set((quizRows ?? []).map((row) => String(row.exam_schedule_id))),
+    application: new Set(
+      (applicationRows ?? []).map((row) => String(row.application_task_id)),
+    ),
+  }
+}
+
+export const fetchIncompleteTodoCount = cache(async (studentId: string): Promise<number> => {
+  const [homework, quizzes, applications, completions] = await Promise.all([
+    fetchHomeworkTasksForStudent(studentId),
+    fetchQuizSchedulesForStudent(studentId),
+    fetchApplicationTasksForStudent(studentId),
+    fetchTodoCompletionsForStudent(studentId),
+  ])
+
+  return buildTodoItems(homework, quizzes, applications, completions).filter(
+    (item) => !item.completed,
+  ).length
+})
 
 export async function fetchApplicationTasksWithTargets(): Promise<ApplicationTaskWithTargets[]> {
   const supabase = await createClient()

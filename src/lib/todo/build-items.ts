@@ -1,15 +1,13 @@
 import type { TodoItem } from '@/types/todo'
 import type { ExamSchedule, HomeworkTask } from '@/types/schedule'
-import type { ApplicationTask, HomeworkCompletion } from '@/types/todo'
+import type { ApplicationTask, TodoCompletions } from '@/types/todo'
 
 export function buildTodoItems(
   homework: HomeworkTask[],
   quizzes: ExamSchedule[],
   applications: ApplicationTask[],
-  completions: HomeworkCompletion[],
+  completions: TodoCompletions,
 ): TodoItem[] {
-  const completedIds = new Set(completions.map((c) => c.homework_task_id))
-
   const items: TodoItem[] = []
 
   for (const task of homework) {
@@ -20,7 +18,8 @@ export function buildTodoItems(
       subject: task.subject,
       dueDate: task.due_date,
       description: task.description || undefined,
-      completed: completedIds.has(task.id),
+      completed: completions.homework.has(task.id),
+      sourceId: task.id,
       homeworkTaskId: task.id,
     })
   }
@@ -33,7 +32,8 @@ export function buildTodoItems(
       subject: quiz.subject || undefined,
       dueDate: quiz.scheduled_on,
       description: quiz.note || undefined,
-      completed: false,
+      completed: completions.quiz.has(quiz.id),
+      sourceId: quiz.id,
     })
   }
 
@@ -44,7 +44,8 @@ export function buildTodoItems(
       title: app.title,
       dueDate: app.due_date,
       description: app.description || undefined,
-      completed: false,
+      completed: completions.application.has(app.id),
+      sourceId: app.id,
     })
   }
 

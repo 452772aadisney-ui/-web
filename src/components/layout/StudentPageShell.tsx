@@ -7,6 +7,7 @@ import { fetchUnreadAnnouncementCount } from '@/lib/announcements/queries'
 import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
 import { fetchUnreadStudyFeedbackCount } from '@/lib/study/feedback-queries'
 import { fetchUnseenTextbookCount } from '@/lib/textbooks/catalog-queries'
+import { fetchIncompleteTodoCount } from '@/lib/todo/queries'
 import { HamburgerMenu } from '@/components/layout/HamburgerMenu'
 import { RecordStudentPageVisit } from '@/components/achievements/RecordStudentPageVisit'
 import {
@@ -28,6 +29,7 @@ function getHamburgerBadgeCount(
   unreadChatCount: number,
   unreadStudyFeedbackCount: number,
   unseenTextbookCount: number,
+  incompleteTodoCount: number,
 ): number | undefined {
   if (href === '/dashboard/announcements' && unreadAnnouncementCount > 0) {
     return unreadAnnouncementCount
@@ -41,6 +43,9 @@ function getHamburgerBadgeCount(
   if (href === '/dashboard/bookshelf' && unseenTextbookCount > 0) {
     return unseenTextbookCount
   }
+  if (href === '/dashboard/todo' && incompleteTodoCount > 0) {
+    return incompleteTodoCount
+  }
   return undefined
 }
 
@@ -52,7 +57,7 @@ export async function StudentPageShell({
   children,
 }: StudentPageShellProps) {
   const profile = await getCurrentProfile()
-  const [unreadAnnouncementCount, unreadChatCount, unreadStudyFeedbackCount, unseenTextbookCount] =
+  const [unreadAnnouncementCount, unreadChatCount, unreadStudyFeedbackCount, unseenTextbookCount, incompleteTodoCount] =
     profile
       ? await Promise.all([
           fetchUnreadAnnouncementCount(profile.id).catch(() => 0),
@@ -61,8 +66,11 @@ export async function StudentPageShell({
           profile.role === 'student'
             ? fetchUnseenTextbookCount(profile.id).catch(() => 0)
             : Promise.resolve(0),
+          profile.role === 'student'
+            ? fetchIncompleteTodoCount(profile.id).catch(() => 0)
+            : Promise.resolve(0),
         ])
-      : [0, 0, 0, 0]
+      : [0, 0, 0, 0, 0]
 
   const menuItems: HamburgerMenuItem[] = STUDENT_HAMBURGER_ITEMS.map((item) => ({
     ...item,
@@ -72,6 +80,7 @@ export async function StudentPageShell({
       unreadChatCount,
       unreadStudyFeedbackCount,
       unseenTextbookCount,
+      incompleteTodoCount,
     ),
   }))
 

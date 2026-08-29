@@ -5,7 +5,7 @@ import { TodoList } from '@/components/todo/TodoList'
 import { buildTodoItems } from '@/lib/todo/build-items'
 import {
   fetchApplicationTasksForStudent,
-  fetchHomeworkCompletionsForStudent,
+  fetchTodoCompletionsForStudent,
 } from '@/lib/todo/queries'
 import {
   fetchHomeworkTasksForStudent,
@@ -21,7 +21,7 @@ export default async function StudentTodoPage() {
     fetchHomeworkTasksForStudent(profile.id),
     fetchQuizSchedulesForStudent(profile.id),
     fetchApplicationTasksForStudent(profile.id),
-    fetchHomeworkCompletionsForStudent(profile.id),
+    fetchTodoCompletionsForStudent(profile.id),
   ])
 
   const items = buildTodoItems(homework, quizzes, applications, completions)

@@ -15,7 +15,7 @@ import { StarRankingBanner } from '@/components/student/StarRankingBanner'
 import type { StudentStarRanking } from '@/lib/achievements/ranking'
 import { formatStudyStreakLabel } from '@/lib/study/streak'
 
-type MenuBadgeKey = 'studyHistory' | 'announcements' | 'chat' | 'bookshelf' | 'faqIntro'
+type MenuBadgeKey = 'studyHistory' | 'announcements' | 'chat' | 'bookshelf' | 'faqIntro' | 'todo'
 
 const iconMenuActions: Array<{
   href: string
@@ -56,6 +56,7 @@ const iconMenuActions: Array<{
     href: '/dashboard/todo',
     label: 'ToDo',
     iconSrc: MYPAGE_MENU_ICONS.todo,
+    badgeKey: 'todo',
   },
   {
     href: '/dashboard/announcements',
@@ -91,6 +92,7 @@ interface MyPageActionsProps {
   unreadAnnouncementCount?: number
   unreadChatCount?: number
   unseenTextbookCount?: number
+  incompleteTodoCount?: number
   hideClassSchedule?: boolean
   showFaqIntro?: boolean
 }
@@ -103,6 +105,7 @@ export function MyPageActions({
   unreadAnnouncementCount = 0,
   unreadChatCount = 0,
   unseenTextbookCount = 0,
+  incompleteTodoCount = 0,
   hideClassSchedule = false,
   showFaqIntro = false,
 }: MyPageActionsProps) {
@@ -113,6 +116,7 @@ export function MyPageActions({
     chat: unreadChatCount,
     bookshelf: unseenTextbookCount,
     faqIntro: showFaqIntro ? 1 : 0,
+    todo: incompleteTodoCount,
   }
 
   const visibleMenuActions = hideClassSchedule

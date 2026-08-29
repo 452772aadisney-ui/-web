@@ -16,7 +16,7 @@ import { AdminStudentTodoTable } from '@/components/todo/AdminTodoTables'
 import { buildTodoItems } from '@/lib/todo/build-items'
 import {
   fetchApplicationTasksForStudent,
-  fetchHomeworkCompletionsForStudent,
+  fetchTodoCompletionsForStudent,
 } from '@/lib/todo/queries'
 import {
   fetchHomeworkTasksForStudent,
@@ -65,7 +65,7 @@ export default async function AdminStudentStudyPage({
     fetchHomeworkTasksForStudent(id),
     fetchQuizSchedulesForStudent(id),
     fetchApplicationTasksForStudent(id),
-    fetchHomeworkCompletionsForStudent(id),
+    fetchTodoCompletionsForStudent(id),
     fetchStudentTags(),
     fetchTagIdsForProfile(id),
     fetchStudentQuizAssignments(id),
