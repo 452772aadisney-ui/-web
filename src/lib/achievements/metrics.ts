@@ -11,16 +11,30 @@ export type AchievementMetrics = {
   maxDailyStudyMinutes: number
   maxSingleSubjectDailyMinutes: number
   maxSubjectsInOneDay: number
+  maxSubjectsWithTwoHoursInOneDay: number
   textbookCount: number
   completedCoachingCount: number
   hasCoachingMonthWith4Plus: boolean
   eligibleAnnouncementReadCount: number
   studyHistoryViewCount: number
   studentChatMessageCount: number
+  completedTodoCount: number
+  hasCalendarExamView: boolean
+  hasStudyLogDetailedMemo: boolean
+  hasWeekendWarriorStudy: boolean
+  hasFridayNightStudyLog: boolean
+  hasChristmasStudyBothDays: boolean
+  hasNewYearStudyLog: boolean
+  hasMonthlyAugust50h: boolean
+  hasMonthlySeptember100h: boolean
+  hasMonthlyOctober100h: boolean
+  hasMonthlyNovember100h: boolean
+  hasMonthlyDecember100h: boolean
   hasTargetSchool: boolean
   hasBirthday: boolean
   hasOpenedAllMenus: boolean
   hasFirstBirthdaySinceRegistration: boolean
+  hasStudentChatMessageNight: boolean
   hasStudyLogEarlyMorning: boolean
   hasStudyLogLunch: boolean
   hasStudyLogAfternoonLight: boolean
@@ -33,7 +47,12 @@ type StudyLogRow = {
   duration_minutes: number
   studied_on: string
   textbook_id: string | null
+  content?: string
   created_at?: string
+}
+
+type ChatMessageRow = {
+  created_at: string
 }
 
 type TextbookRow = {
@@ -91,6 +110,103 @@ export function hasFirstBirthdaySinceRegistration(
 
   const firstBirthdayKey = `${firstBirthdayYear}-${month}-${day}`
   return todayKey >= firstBirthdayKey
+}
+
+function getWeekdayFromDateKey(dateKey: string): number {
+  const [year, month, day] = dateKey.split('-').map(Number)
+  return new Date(year, month - 1, day).getDay()
+}
+
+function maxSubjectsWithMinMinutesPerDay(
+  dailySubjectMinutes: Map<string, Map<string, number>>,
+  minMinutes: number,
+): number {
+  let max = 0
+  for (const subjectMinutes of dailySubjectMinutes.values()) {
+    const count = Array.from(subjectMinutes.values()).filter((minutes) => minutes >= minMinutes).length
+    max = Math.max(max, count)
+  }
+  return max
+}
+
+function hasWeekendStudy16PlusHours(dailyMinutes: Map<string, number>): boolean {
+  for (const [dateKey, minutes] of dailyMinutes) {
+    if (getWeekdayFromDateKey(dateKey) !== 6) continue
+    const sundayMinutes = dailyMinutes.get(shiftDateKey(dateKey, 1)) ?? 0
+    if (minutes + sundayMinutes >= 960) return true
+  }
+  return false
+}
+
+function hasCalendarMonthStudyMinutes(
+  studyLogs: StudyLogRow[],
+  month: number,
+  minMinutes: number,
+): boolean {
+  const totals = new Map<string, number>()
+  for (const log of studyLogs) {
+    const monthNumber = Number(log.studied_on.slice(5, 7))
+    if (monthNumber !== month) continue
+    const monthKey = log.studied_on.slice(0, 7)
+    totals.set(monthKey, (totals.get(monthKey) ?? 0) + log.duration_minutes)
+  }
+  return Array.from(totals.values()).some((total) => total >= minMinutes)
+}
+
+function hasChristmasStudyBothDays(studiedOnDates: string[]): boolean {
+  const byYear = new Map<number, Set<string>>()
+  for (const dateKey of studiedOnDates) {
+    const monthDay = dateKey.slice(5)
+    if (monthDay !== '12-24' && monthDay !== '12-25') continue
+    const year = Number(dateKey.slice(0, 4))
+    const dates = byYear.get(year) ?? new Set<string>()
+    dates.add(monthDay)
+    byYear.set(year, dates)
+  }
+  return Array.from(byYear.values()).some(
+    (dates) => dates.has('12-24') && dates.has('12-25'),
+  )
+}
+
+function getJstWeekday(iso: string): number {
+  const weekday = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Tokyo',
+    weekday: 'short',
+  }).format(new Date(iso))
+  const map: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  }
+  return map[weekday] ?? -1
+}
+
+function getJstHour(iso: string): number {
+  return Number(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Tokyo',
+      hour: 'numeric',
+      hour12: false,
+    }).format(new Date(iso)),
+  )
+}
+
+function hasFridayNightStudyLog(studyLogs: StudyLogRow[]): boolean {
+  return studyLogs.some((log) => {
+    if (!log.created_at) return false
+    return getJstWeekday(log.created_at) === 5 && getJstHour(log.created_at) >= 21
+  })
+}
+
+function hasStudentChatMessageAtNight(messages: ChatMessageRow[]): boolean {
+  return messages.some((message) => {
+    const minutes = getJstMinutesSinceMidnight(message.created_at)
+    return isMinutesInOvernightRange(minutes, 22, 0, 1, 0)
+  })
 }
 
 function getJstMinutesSinceMidnight(iso: string): number {
@@ -182,6 +298,9 @@ export function buildAchievementMetrics(input: {
   eligibleAnnouncementReadCount: number
   studyHistoryViewCount: number
   studentChatMessageCount: number
+  studentChatMessages: ChatMessageRow[]
+  completedTodoCount: number
+  hasCalendarExamView: boolean
   hasTargetSchool: boolean
   hasBirthday: boolean
   hasOpenedAllMenus: boolean
@@ -227,6 +346,9 @@ export function buildAchievementMetrics(input: {
     ),
   )
 
+  const maxSubjectsWithTwoHoursInOneDay = maxSubjectsWithMinMinutesPerDay(dailySubjectMinutes, 120)
+  const studiedOnDates = input.studyLogs.map((log) => log.studied_on)
+
   const monthCounts = new Map<string, number>()
   let completedCoachingCount = 0
   for (const booking of input.coachingBookings) {
@@ -246,16 +368,30 @@ export function buildAchievementMetrics(input: {
     maxDailyStudyMinutes,
     maxSingleSubjectDailyMinutes,
     maxSubjectsInOneDay,
+    maxSubjectsWithTwoHoursInOneDay,
     textbookCount: input.textbookCount,
     completedCoachingCount,
     hasCoachingMonthWith4Plus: Array.from(monthCounts.values()).some((count) => count >= 4),
     eligibleAnnouncementReadCount: input.eligibleAnnouncementReadCount,
     studyHistoryViewCount: input.studyHistoryViewCount,
     studentChatMessageCount: input.studentChatMessageCount,
+    completedTodoCount: input.completedTodoCount,
+    hasCalendarExamView: input.hasCalendarExamView,
+    hasStudyLogDetailedMemo: input.studyLogs.some((log) => (log.content?.trim().length ?? 0) >= 10),
+    hasWeekendWarriorStudy: hasWeekendStudy16PlusHours(dailyMinutes),
+    hasFridayNightStudyLog: hasFridayNightStudyLog(input.studyLogs),
+    hasChristmasStudyBothDays: hasChristmasStudyBothDays(studiedOnDates),
+    hasNewYearStudyLog: studiedOnDates.some((dateKey) => dateKey.endsWith('-01-01')),
+    hasMonthlyAugust50h: hasCalendarMonthStudyMinutes(input.studyLogs, 8, 3000),
+    hasMonthlySeptember100h: hasCalendarMonthStudyMinutes(input.studyLogs, 9, 6000),
+    hasMonthlyOctober100h: hasCalendarMonthStudyMinutes(input.studyLogs, 10, 6000),
+    hasMonthlyNovember100h: hasCalendarMonthStudyMinutes(input.studyLogs, 11, 6000),
+    hasMonthlyDecember100h: hasCalendarMonthStudyMinutes(input.studyLogs, 12, 6000),
     hasTargetSchool: input.hasTargetSchool,
     hasBirthday: input.hasBirthday,
     hasOpenedAllMenus: input.hasOpenedAllMenus,
     hasFirstBirthdaySinceRegistration: input.hasFirstBirthdaySinceRegistration,
+    hasStudentChatMessageNight: hasStudentChatMessageAtNight(input.studentChatMessages),
     hasStudyLogEarlyMorning: hasStudyLogInTimeRange(input.studyLogs, {
       type: 'same-day',
       startHour: 5,
@@ -320,6 +456,8 @@ export function getUnlockableAchievementIds(
   if (!has('streak_21') && metrics.maxStudyStreak >= 21) unlockable.push('streak_21')
   if (!has('streak_30') && metrics.maxStudyStreak >= 30) unlockable.push('streak_30')
   if (!has('streak_45') && metrics.maxStudyStreak >= 45) unlockable.push('streak_45')
+  if (!has('streak_60') && metrics.maxStudyStreak >= 60) unlockable.push('streak_60')
+  if (!has('streak_100') && metrics.maxStudyStreak >= 100) unlockable.push('streak_100')
 
   if (!has('total_10h') && metrics.totalStudyMinutes >= 600) unlockable.push('total_10h')
   if (!has('total_25h') && metrics.totalStudyMinutes >= 1500) unlockable.push('total_25h')
@@ -348,6 +486,52 @@ export function getUnlockableAchievementIds(
 
   if (!has('subjects_3_day') && metrics.maxSubjectsInOneDay >= 3) {
     unlockable.push('subjects_3_day')
+  }
+  if (!has('subjects_3_day_2h') && metrics.maxSubjectsWithTwoHoursInOneDay >= 3) {
+    unlockable.push('subjects_3_day_2h')
+  }
+  if (!has('subjects_5_day_2h') && metrics.maxSubjectsWithTwoHoursInOneDay >= 5) {
+    unlockable.push('subjects_5_day_2h')
+  }
+
+  if (!has('todo_first') && metrics.completedTodoCount >= 1) unlockable.push('todo_first')
+  if (!has('todo_5') && metrics.completedTodoCount >= 5) unlockable.push('todo_5')
+
+  if (!has('calendar_exam_view') && metrics.hasCalendarExamView) {
+    unlockable.push('calendar_exam_view')
+  }
+
+  if (!has('study_log_detailed_memo') && metrics.hasStudyLogDetailedMemo) {
+    unlockable.push('study_log_detailed_memo')
+  }
+
+  if (!has('weekend_warrior') && metrics.hasWeekendWarriorStudy) {
+    unlockable.push('weekend_warrior')
+  }
+  if (!has('friday_night_study') && metrics.hasFridayNightStudyLog) {
+    unlockable.push('friday_night_study')
+  }
+  if (!has('christmas_study') && metrics.hasChristmasStudyBothDays) {
+    unlockable.push('christmas_study')
+  }
+  if (!has('new_year_study') && metrics.hasNewYearStudyLog) {
+    unlockable.push('new_year_study')
+  }
+
+  if (!has('monthly_aug_50h') && metrics.hasMonthlyAugust50h) {
+    unlockable.push('monthly_aug_50h')
+  }
+  if (!has('monthly_sep_100h') && metrics.hasMonthlySeptember100h) {
+    unlockable.push('monthly_sep_100h')
+  }
+  if (!has('monthly_oct_100h') && metrics.hasMonthlyOctober100h) {
+    unlockable.push('monthly_oct_100h')
+  }
+  if (!has('monthly_nov_100h') && metrics.hasMonthlyNovember100h) {
+    unlockable.push('monthly_nov_100h')
+  }
+  if (!has('monthly_dec_100h') && metrics.hasMonthlyDecember100h) {
+    unlockable.push('monthly_dec_100h')
   }
 
   if (!has('coaching_first') && metrics.completedCoachingCount >= 1) {
@@ -387,6 +571,9 @@ export function getUnlockableAchievementIds(
   }
   if (!has('chat_messages_50') && metrics.studentChatMessageCount >= 50) {
     unlockable.push('chat_messages_50')
+  }
+  if (!has('chat_night_consultation') && metrics.hasStudentChatMessageNight) {
+    unlockable.push('chat_night_consultation')
   }
 
   if (!has('study_log_early_morning') && metrics.hasStudyLogEarlyMorning) {

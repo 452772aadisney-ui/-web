@@ -1,11 +1,13 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { evaluateAndUnlockAchievements, type UnlockedAchievement } from '@/lib/achievements/unlock'
 import { createClient } from '@/lib/supabase/server'
 import type { TodoCategory } from '@/types/todo'
 
 export type TodoActionState = {
   error?: string
+  unlockedAchievements?: UnlockedAchievement[]
 }
 
 function revalidateTodoPaths(studentId: string) {
@@ -98,7 +100,13 @@ export async function setTodoCompletion(
   if (result.error) return result
 
   revalidateTodoPaths(user.id)
-  return {}
+  revalidatePath('/dashboard/achievements')
+
+  const unlockedAchievements = completed
+    ? await evaluateAndUnlockAchievements(user.id)
+    : []
+
+  return { unlockedAchievements }
 }
 
 /** @deprecated setTodoCompletion を使用 */

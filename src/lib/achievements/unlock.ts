@@ -11,6 +11,9 @@ import {
   hasFirstBirthdaySinceRegistration,
 } from '@/lib/achievements/metrics'
 import { createClient } from '@/lib/supabase/server'
+import { fetchExamSchedulesForStudent } from '@/lib/schedule/queries'
+
+const CALENDAR_PAGE_KEY = '/dashboard/calendar'
 
 export type UnlockedAchievement = {
   id: string
@@ -93,6 +96,10 @@ async function loadAchievementEvaluationContext(studentId: string) {
     { data: pageVisits },
     { data: announcementReads },
     { count: studentChatMessageCount },
+    { data: studentChatMessages },
+    { count: homeworkCompletionCount },
+    { count: quizCompletionCount },
+    { count: applicationCompletionCount },
   ] = await Promise.all([
     supabase
       .from('student_achievements')
@@ -100,7 +107,7 @@ async function loadAchievementEvaluationContext(studentId: string) {
       .eq('student_id', studentId),
     supabase
       .from('study_logs')
-      .select('subject, duration_minutes, studied_on, textbook_id, created_at')
+      .select('subject, duration_minutes, studied_on, textbook_id, content, created_at')
       .eq('student_id', studentId),
     supabase.from('textbooks').select('id, usage_tags').eq('student_id', studentId),
     supabase
@@ -130,7 +137,29 @@ async function loadAchievementEvaluationContext(studentId: string) {
       .select('id', { count: 'exact', head: true })
       .eq('student_id', studentId)
       .eq('sender_id', studentId),
+    supabase
+      .from('chat_messages')
+      .select('created_at')
+      .eq('student_id', studentId)
+      .eq('sender_id', studentId),
+    supabase
+      .from('homework_completions')
+      .select('id', { count: 'exact', head: true })
+      .eq('student_id', studentId),
+    supabase
+      .from('quiz_schedule_completions')
+      .select('id', { count: 'exact', head: true })
+      .eq('student_id', studentId),
+    supabase
+      .from('application_task_completions')
+      .select('id', { count: 'exact', head: true })
+      .eq('student_id', studentId),
   ])
+
+  const examSchedules = await fetchExamSchedulesForStudent(studentId)
+  const hasOwnExamSchedule = examSchedules.some(
+    (schedule) => schedule.exam_type === 'mock_exam' || schedule.exam_type === 'quiz',
+  )
 
   const slotDateById = new Map(
     (coachingSlots ?? []).map((slot) => [String(slot.id), String(slot.slot_date)]),
@@ -145,6 +174,9 @@ async function loadAchievementEvaluationContext(studentId: string) {
     (row) => String(row.page_key) === STUDY_HISTORY_PAGE_KEY,
   )
   const studyHistoryViewCount = Number(studyHistoryVisit?.visit_count ?? 0)
+  const completedTodoCount =
+    (homeworkCompletionCount ?? 0) + (quizCompletionCount ?? 0) + (applicationCompletionCount ?? 0)
+  const hasCalendarExamView = visitedPageKeys.has(CALENDAR_PAGE_KEY) && hasOwnExamSchedule
 
   const targetSchools = Array.isArray(profile?.target_schools) ? profile.target_schools : []
   const accountCreatedAt = String(profile?.created_at ?? '')
@@ -181,6 +213,7 @@ async function loadAchievementEvaluationContext(studentId: string) {
         duration_minutes: Number(log.duration_minutes),
         studied_on: String(log.studied_on),
         textbook_id: log.textbook_id ? String(log.textbook_id) : null,
+        content: log.content ? String(log.content) : undefined,
         created_at: log.created_at ? String(log.created_at) : undefined,
       })),
       textbooks: (textbooks ?? []).map((book) => ({
@@ -195,6 +228,11 @@ async function loadAchievementEvaluationContext(studentId: string) {
       eligibleAnnouncementReadCount,
       studyHistoryViewCount,
       studentChatMessageCount: studentChatMessageCount ?? 0,
+      studentChatMessages: (studentChatMessages ?? []).map((message) => ({
+        created_at: String(message.created_at),
+      })),
+      completedTodoCount,
+      hasCalendarExamView,
       hasTargetSchool: targetSchools.some((school) => String(school).trim().length > 0),
       hasBirthday: Boolean(profile?.birthday),
       hasOpenedAllMenus,

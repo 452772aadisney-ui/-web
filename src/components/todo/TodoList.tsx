@@ -3,7 +3,9 @@
 import { useRouter } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { setTodoCompletion } from '@/app/todo/actions'
+import { useAchievementUnlockDialog } from '@/components/achievements/useAchievementUnlockDialog'
 import { getTodayDateKey } from '@/lib/study/dates'
+import type { UnlockedAchievement } from '@/lib/achievements/unlock'
 import { cn } from '@/lib/utils'
 import type { TodoCategory, TodoItem } from '@/types/todo'
 
@@ -37,6 +39,8 @@ function TodoCheckbox({
   const [completed, setCompleted] = useState(initialCompleted)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [lastUnlockedAchievements, setLastUnlockedAchievements] = useState<UnlockedAchievement[]>([])
+  const { dialog: achievementDialog } = useAchievementUnlockDialog(lastUnlockedAchievements)
 
   const handleToggle = async () => {
     if (pending) return
@@ -56,11 +60,17 @@ function TodoCheckbox({
       return
     }
 
+    if (result.unlockedAchievements?.length) {
+      setLastUnlockedAchievements(result.unlockedAchievements)
+    }
+
     router.refresh()
   }
 
   return (
-    <button
+    <>
+      {achievementDialog}
+      <button
       type="button"
       onClick={handleToggle}
       disabled={pending}
@@ -87,6 +97,7 @@ function TodoCheckbox({
         <path d="M5 13l4 4L19 7" />
       </svg>
     </button>
+    </>
   )
 }
 
