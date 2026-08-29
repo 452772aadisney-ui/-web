@@ -2,6 +2,7 @@ import {
   TEXTBOOK_DETAIL_TAG_GROUPS,
   type TextbookDetailTagGroupLabel,
 } from '@/lib/constants/textbook-detail-tags'
+import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
 
 export type TextbookParentGroupLabel = TextbookDetailTagGroupLabel
 
@@ -42,6 +43,31 @@ export function resolveTextbookSubjectTags(detailTags: string[]): {
   return { detail_tags, subjects }
 }
 
+const EXAM_SUBJECT_PARENT_GROUP: Record<string, TextbookParentGroupLabel> = Object.fromEntries(
+  EXAM_SUBJECTS.map((subject) => {
+    if (subject === '英語') return [subject, '英語']
+    if (subject === '情報') return [subject, '情報']
+    if (subject.startsWith('数学')) return [subject, '数学']
+    if (['現代文', '古文', '漢文', '小論文'].includes(subject)) return [subject, '国語']
+    if (
+      ['物理', '物理基礎', '化学', '化学基礎', '生物', '生物基礎', '地学', '地学基礎'].includes(
+        subject,
+      )
+    ) {
+      return [subject, '理科']
+    }
+    if (['日本史', '世界史', '地理', '倫理', '政治経済'].includes(subject)) {
+      return [subject, '社会']
+    }
+    return [subject, '国語']
+  }),
+)
+
+/** プロフィールの使用科目（大学受験科目）から親グループを解決 */
+export function getParentGroupForExamSubject(subject: string): TextbookParentGroupLabel | null {
+  return EXAM_SUBJECT_PARENT_GROUP[subject] ?? null
+}
+
 export function getParentGroupsForProfile(profileSubjects: string[]): TextbookParentGroupLabel[] {
   const parents = new Set<TextbookParentGroupLabel>()
   for (const subject of profileSubjects) {
@@ -49,7 +75,10 @@ export function getParentGroupsForProfile(profileSubjects: string[]): TextbookPa
       parents.add(subject)
       continue
     }
-    const parent = getParentGroupForDetailTag(subject)
+    const parent =
+      getParentGroupForDetailTag(subject) ??
+      getParentGroupForExamSubject(subject) ??
+      resolveStudySubjectCategory(subject)
     if (parent) parents.add(parent)
   }
   return TEXTBOOK_PARENT_GROUP_LABELS.filter((label) => parents.has(label))
@@ -78,6 +107,9 @@ export function resolveStudySubjectCategory(subject: string): TextbookParentGrou
 
   const fromDetail = getParentGroupForDetailTag(subject)
   if (fromDetail) return fromDetail
+
+  const fromExam = getParentGroupForExamSubject(subject)
+  if (fromExam) return fromExam
 
   const legacyMap: Record<string, TextbookParentGroupLabel> = {
     現代文: '国語',
