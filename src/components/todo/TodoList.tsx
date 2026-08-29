@@ -60,37 +60,33 @@ function TodoCheckbox({
   }
 
   return (
-    <div className="flex flex-col items-center gap-1">
-      <button
-        type="button"
-        onClick={handleToggle}
-        disabled={pending}
-        aria-label={completed ? 'ToDo を未完了に戻す' : 'ToDo を完了にする'}
-        aria-pressed={completed}
-        className={cn(
-          'flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border-2 transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50',
-          completed
-            ? 'border-primary bg-primary text-white'
-            : 'border-primary bg-white text-primary',
-        )}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className={cn('h-6 w-6', completed ? 'opacity-100' : 'opacity-0')}
-          aria-hidden
-        >
-          <path d="M5 13l4 4L19 7" />
-        </svg>
-      </button>
-      {error && (
-        <span className="max-w-20 text-center text-[10px] leading-tight text-error">{error}</span>
+    <button
+      type="button"
+      onClick={handleToggle}
+      disabled={pending}
+      aria-label={completed ? 'ToDo を未完了に戻す' : 'ToDo を完了にする'}
+      aria-pressed={completed}
+      title={error ?? undefined}
+      className={cn(
+        'flex h-5 w-5 shrink-0 items-center justify-center rounded border transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50',
+        completed
+          ? 'border-green-600 bg-green-600 text-white'
+          : 'border-border bg-card text-transparent hover:border-muted',
       )}
-    </div>
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={cn('h-3 w-3', completed ? 'opacity-100' : 'opacity-0')}
+        aria-hidden
+      >
+        <path d="M5 13l4 4L19 7" />
+      </svg>
+    </button>
   )
 }
 
@@ -100,18 +96,16 @@ function TodoRow({ item, today }: { item: TodoItem; today: string }) {
   return (
     <li
       className={cn(
-        'flex items-start gap-3 rounded-lg border border-border p-4',
+        'flex items-center gap-3 rounded-lg border border-border p-4',
         item.completed && 'bg-background opacity-70',
         isOverdue && !item.completed && 'border-red-200 bg-red-50/50',
       )}
     >
-      <div className="shrink-0">
-        <TodoCheckbox
-          category={item.category}
-          taskId={item.sourceId}
-          initialCompleted={item.completed}
-        />
-      </div>
+      <TodoCheckbox
+        category={item.category}
+        taskId={item.sourceId}
+        initialCompleted={item.completed}
+      />
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
@@ -148,9 +142,6 @@ function TodoRow({ item, today }: { item: TodoItem; today: string }) {
         </p>
         {item.description && (
           <p className="mt-1 text-xs text-muted">{item.description}</p>
-        )}
-        {!item.completed && (
-          <p className="mt-2 text-xs text-primary">左のボタンを押すと完了できます</p>
         )}
       </div>
     </li>
@@ -189,7 +180,7 @@ export function TodoList({ items }: TodoListProps) {
           未完了 ({pending.length})
         </h2>
         <p className="mt-1 text-sm text-muted">
-          左のボタンを押すと「完了」になります。
+          チェックを入れると「完了」になります。
         </p>
 
         {pending.length === 0 ? (
