@@ -14,7 +14,10 @@ export default async function TextbookSearchPublishersPage() {
 
   const catalog = await fetchTextbookCatalogForStudent(profile.id)
   const publishers = [
-    ...new Set([...TEXTBOOK_PUBLISHERS, ...getUniquePublishersFromCatalog(catalog)]),
+    ...new Set([
+      ...TEXTBOOK_PUBLISHERS,
+      ...getUniquePublishersFromCatalog(catalog, { publicOnly: true, searchableOnly: true }),
+    ]),
   ].sort((a, b) => a.localeCompare(b, 'ja'))
 
   return (

@@ -11,6 +11,7 @@ export interface TextbookCatalog {
   target_universities: string[]
   study_purposes: string[]
   visibility: TextbookCatalogVisibility
+  is_searchable: boolean
   created_by: string | null
   created_at: string
   updated_at: string

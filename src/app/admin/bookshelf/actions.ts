@@ -201,6 +201,7 @@ export async function createTextbookCatalogEntry(
     subjects,
     usage_tags: usageTags,
     visibility,
+    is_searchable: true,
     created_by: auth.userId,
     ...metadata,
   })
@@ -267,6 +268,7 @@ export async function updateAdminBookshelfCatalogEntry(
         subjects,
         usage_tags: usageTags,
         visibility,
+        is_searchable: false,
         created_by: auth.userId,
       })
       .select('id')
@@ -337,6 +339,7 @@ export async function updateAdminBookshelfStudentEntry(
         subjects,
         usage_tags: usageTags,
         visibility,
+        is_searchable: false,
         created_by: auth.userId,
         ...metadata,
       })

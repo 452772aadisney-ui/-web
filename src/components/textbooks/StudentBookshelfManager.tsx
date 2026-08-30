@@ -170,7 +170,7 @@ function CatalogRegisterForm({
     const registered = new Set(registeredCatalogIds)
     return catalog.filter((item) => {
       if (registered.has(item.id)) return false
-      if (item.visibility === 'public') {
+      if (item.visibility === 'public' && item.is_searchable !== false) {
         return catalogMatchesCategory(
           { subjects: item.subjects, detail_tags: item.detail_tags },
           categoryLabel,

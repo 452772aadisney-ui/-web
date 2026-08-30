@@ -8,6 +8,7 @@ import {
   type AdminEditingCatalog,
 } from '@/components/textbooks/AdminBookshelfEditModal'
 import { TextbookCoverImage } from '@/components/textbooks/TextbookCoverImage'
+import { TextbookPublisherBadge } from '@/components/textbooks/TextbookPublisherBadge'
 import {
   filterTextbookCatalog,
   parseSearchListParam,
@@ -47,11 +48,7 @@ function AdminCatalogGridItem({
 
       <div className="mt-3 flex min-h-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-1.5">
-          {item.publisher && (
-            <span className="inline-block rounded bg-muted px-2 py-0.5 text-[10px] font-medium text-muted">
-              {item.publisher}
-            </span>
-          )}
+          <TextbookPublisherBadge publisher={item.publisher} />
           <span
             className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
               item.visibility === 'public'

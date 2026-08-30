@@ -250,7 +250,7 @@ export async function addTextbookFromCatalog(
   const { data: catalog } = await supabase
     .from('textbook_catalog')
     .select(
-      'id, name, subjects, usage_tags, visibility, cover_url, publisher, detail_tags',
+      'id, name, subjects, usage_tags, visibility, is_searchable, cover_url, publisher, detail_tags',
     )
     .eq('id', catalogId)
     .maybeSingle<{
@@ -259,6 +259,7 @@ export async function addTextbookFromCatalog(
       subjects: string[]
       usage_tags: string[]
       visibility: string
+      is_searchable: boolean
       cover_url: string | null
       publisher: string | null
       detail_tags: string[]
@@ -266,7 +267,14 @@ export async function addTextbookFromCatalog(
 
   if (!catalog) return { error: '参考書が見つかりません' }
 
-  if (catalog.visibility === 'private') {
+  if (!actor.isAdmin) {
+    if (catalog.visibility !== 'public') {
+      return { error: 'この参考書は非公開のため選択できません' }
+    }
+    if (catalog.is_searchable === false) {
+      return { error: 'この参考書は検索から登録できません' }
+    }
+  } else if (catalog.visibility === 'private') {
     const { data: existingPrivate } = await supabase
       .from('textbooks')
       .select('id')

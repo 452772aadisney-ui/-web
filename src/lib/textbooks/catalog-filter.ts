@@ -15,15 +15,17 @@ function normalizeQuery(value: string | undefined): string {
 export function filterTextbookCatalog(
   catalog: TextbookCatalog[],
   filters: TextbookCatalogSearchFilters,
-  options?: { excludeCatalogIds?: Set<string>; publicOnly?: boolean },
+  options?: { excludeCatalogIds?: Set<string>; publicOnly?: boolean; searchableOnly?: boolean },
 ): TextbookCatalog[] {
   const query = normalizeQuery(filters.query)
   const detailTags = filters.detailTags ?? []
   const exclude = options?.excludeCatalogIds ?? new Set<string>()
   const publicOnly = options?.publicOnly ?? true
+  const searchableOnly = options?.searchableOnly ?? publicOnly
 
   return catalog.filter((item) => {
     if (publicOnly && item.visibility !== 'public') return false
+    if (searchableOnly && item.is_searchable === false) return false
     if (exclude.has(item.id)) return false
 
     if (query) {
@@ -65,9 +67,17 @@ export function filterTextbookCatalog(
   })
 }
 
-export function getUniquePublishersFromCatalog(catalog: TextbookCatalog[]): string[] {
+export function getUniquePublishersFromCatalog(
+  catalog: TextbookCatalog[],
+  options?: { publicOnly?: boolean; searchableOnly?: boolean },
+): string[] {
+  const publicOnly = options?.publicOnly ?? false
+  const searchableOnly = options?.searchableOnly ?? false
+  const filtered = publicOnly || searchableOnly
+    ? filterTextbookCatalog(catalog, {}, { publicOnly, searchableOnly })
+    : catalog
   const publishers = new Set<string>()
-  for (const item of catalog) {
+  for (const item of filtered) {
     if (item.publisher?.trim()) publishers.add(item.publisher.trim())
   }
   return [...publishers].sort((a, b) => a.localeCompare(b, 'ja'))

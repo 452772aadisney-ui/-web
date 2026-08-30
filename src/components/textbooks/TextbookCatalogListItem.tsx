@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { addTextbookFromCatalog } from '@/app/textbooks/actions'
 import { TextbookCoverImage } from '@/components/textbooks/TextbookCoverImage'
+import { TextbookPublisherBadge } from '@/components/textbooks/TextbookPublisherBadge'
 import type { TextbookCatalog } from '@/types/textbook'
 
 interface TextbookCatalogListItemProps {
@@ -76,11 +77,7 @@ export function TextbookCatalogListItem({
         />
 
         <div className="mt-3 flex min-h-0 flex-1 flex-col">
-          {item.publisher && (
-            <span className="inline-block w-fit rounded bg-muted px-2 py-0.5 text-[10px] font-medium text-muted">
-              {item.publisher}
-            </span>
-          )}
+          <TextbookPublisherBadge publisher={item.publisher} />
           <h3 className="mt-1 line-clamp-3 text-xs font-bold leading-snug">{item.name}</h3>
 
           {displayTags.length > 0 && (
@@ -105,11 +102,7 @@ export function TextbookCatalogListItem({
         />
 
         <div className="min-w-0 flex-1">
-          {item.publisher && (
-            <span className="inline-block rounded bg-muted px-2 py-0.5 text-[10px] font-medium text-muted">
-              {item.publisher}
-            </span>
-          )}
+          <TextbookPublisherBadge publisher={item.publisher} />
           <h3 className="mt-1 line-clamp-2 text-sm font-bold leading-snug">{item.name}</h3>
 
           {displayTags.length > 0 && (
@@ -159,11 +152,7 @@ export function TextbookBookshelfListItem({
       <article className="flex h-full flex-col rounded-xl border border-border bg-card p-3 shadow-sm">
         <TextbookCoverImage name={name} coverUrl={coverUrl} className="mx-auto h-28 w-20" />
         <div className="mt-3 flex min-h-0 flex-1 flex-col">
-          {publisher && (
-            <span className="inline-block w-fit rounded bg-muted px-2 py-0.5 text-[10px] font-medium text-muted">
-              {publisher}
-            </span>
-          )}
+          <TextbookPublisherBadge publisher={publisher} />
           <h3 className="mt-1 line-clamp-3 text-xs font-bold leading-snug">{name}</h3>
           <p className="mt-1 line-clamp-2 text-[10px] text-muted">
             {displayTags}
@@ -186,11 +175,7 @@ export function TextbookBookshelfListItem({
       <div className="flex gap-3">
         <TextbookCoverImage name={name} coverUrl={coverUrl} className="h-24 w-16" />
         <div className="min-w-0 flex-1">
-          {publisher && (
-            <span className="inline-block rounded bg-muted px-2 py-0.5 text-[10px] font-medium text-muted">
-              {publisher}
-            </span>
-          )}
+          <TextbookPublisherBadge publisher={publisher} />
           <h3 className="mt-1 text-sm font-bold leading-snug">{name}</h3>
           <p className="mt-1 text-[11px] text-muted">
             {displayTags}

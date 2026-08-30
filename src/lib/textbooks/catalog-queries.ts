@@ -21,6 +21,7 @@ function mapCatalog(row: Record<string, unknown>): TextbookCatalog {
     target_universities: (row.target_universities as string[]) ?? [],
     study_purposes: (row.study_purposes as string[]) ?? [],
     visibility: row.visibility as TextbookCatalog['visibility'],
+    is_searchable: row.is_searchable !== false,
     created_by: (row.created_by as string | null) ?? null,
     created_at: row.created_at as string,
     updated_at: row.updated_at as string,
@@ -190,6 +191,7 @@ export async function fetchAdminBookshelfOverview(): Promise<AdminBookshelfOverv
       target_universities: [],
       study_purposes: [],
       visibility: 'private',
+      is_searchable: false,
       created_by: null,
       created_at: '',
       updated_at: '',
@@ -238,6 +240,8 @@ export async function fetchTextbookCatalogForStudent(
   const { data, error } = await supabase
     .from('textbook_catalog')
     .select('*')
+    .eq('visibility', 'public')
+    .eq('is_searchable', true)
     .order('name')
 
   if (error) {
