@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import {
   cancelCoachingBooking,
   completeCoachingBooking,
@@ -49,7 +50,15 @@ export function AdminCoachingBookings({ bookings }: AdminCoachingBookingsProps) 
                       <p className="mt-2 text-sm">伝言: {booking.student_note}</p>
                     )}
                   </div>
-                  <div className="flex shrink-0 gap-3">
+                  <div className="flex shrink-0 flex-wrap items-center gap-3">
+                    {booking.student && (
+                      <Link
+                        href={`/admin/coaching/karte/${booking.student.id}?booking=${booking.id}&coach=${booking.coach_id}`}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        カルテ
+                      </Link>
+                    )}
                     <form action={completeCoachingBooking}>
                       <input type="hidden" name="bookingId" value={booking.id} />
                       <button type="submit" className="text-xs text-primary hover:underline">

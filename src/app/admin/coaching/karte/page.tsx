@@ -3,24 +3,24 @@ import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { getDashboardPathForRole } from '@/lib/auth/routes'
 import { AdminPageShell } from '@/components/layout/AdminPageShell'
 import { AdminCoachingNav } from '@/components/coaching/AdminCoachingNav'
-import { AdminCoachingBookings } from '@/components/coaching/AdminCoachingBookings'
-import { fetchCoachingBookingsForAdmin } from '@/lib/coaching/queries'
+import { AdminCoachingKarteStudentList } from '@/components/coaching/AdminCoachingKarteStudentList'
+import { fetchStudentList } from '@/lib/study/queries'
 
-export default async function AdminCoachingBookingsPage() {
+export default async function AdminCoachingKartePage() {
   const profile = await getCurrentProfile()
 
   if (!profile) redirect('/login')
   if (profile.role !== 'admin') redirect(getDashboardPathForRole('student'))
 
-  const bookings = await fetchCoachingBookingsForAdmin()
+  const students = await fetchStudentList()
 
   return (
-    <AdminPageShell title="予約確認" backHref="/admin/coaching" backLabel="コーチング" wide>
+    <AdminPageShell title="カルテ" backHref="/admin/coaching" backLabel="コーチング" wide>
       <AdminCoachingNav />
       <p className="mb-6 text-sm text-muted">
-        生徒から入ったコーチング予約の確認・完了・キャンセルができます。
+        生徒を選んでコーチングカルテを入力・閲覧します。
       </p>
-      <AdminCoachingBookings bookings={bookings} />
+      <AdminCoachingKarteStudentList students={students} />
     </AdminPageShell>
   )
 }

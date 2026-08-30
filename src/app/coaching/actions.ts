@@ -1,6 +1,7 @@
 'use server'
 
 import { evaluateAndUnlockAchievements, type UnlockedAchievement } from '@/lib/achievements/unlock'
+import { isCoachingKarteTableMissingError } from '@/lib/coaching/karte-table'
 import { revalidatePath } from 'next/cache'
 import { notifyCoachingBookingCreated, notifyCoachingBookingCancelled, notifyCoachingBookingRescheduled } from '@/lib/discord/notifications'
 import {
@@ -28,7 +29,10 @@ export type CoachingActionState = {
 
 function revalidateCoachingPaths() {
   revalidatePath('/admin/coaching')
+  revalidatePath('/admin/coaching/slots')
+  revalidatePath('/admin/coaching/instructors')
   revalidatePath('/admin/coaching/bookings')
+  revalidatePath('/admin/coaching/karte', 'layout')
   revalidatePath('/dashboard/coaching')
   revalidatePath('/dashboard/calendar')
   revalidatePath('/dashboard')
@@ -644,5 +648,54 @@ async function completeCoachingBookingAction(formData: FormData): Promise<Coachi
   await evaluateAndUnlockAchievements(String(booking.student_id))
 
   revalidateCoachingPaths()
+  return { success: true }
+}
+
+export async function createCoachingKarteEntry(
+  _prev: CoachingActionState,
+  formData: FormData,
+): Promise<CoachingActionState> {
+  const authError = await assertAdmin()
+  if (authError) return { error: authError }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'ログインが必要です' }
+
+  const studentId = String(formData.get('studentId') ?? '').trim()
+  const bookingId = String(formData.get('bookingId') ?? '').trim()
+  const coachId = String(formData.get('coachId') ?? '').trim()
+  const sessionDate = String(formData.get('sessionDate') ?? '').trim()
+  const discussionContent = String(formData.get('discussionContent') ?? '').trim()
+  const nextCommitments = String(formData.get('nextCommitments') ?? '').trim()
+
+  if (!studentId) return { error: '生徒が指定されていません' }
+  if (!sessionDate) return { error: '面談日を入力してください' }
+  if (!discussionContent) return { error: '話した内容を入力してください' }
+
+  const { error } = await supabase.from('coaching_karte_entries').insert({
+    student_id: studentId,
+    booking_id: bookingId || null,
+    coach_id: coachId || null,
+    session_date: sessionDate,
+    discussion_content: discussionContent,
+    next_commitments: nextCommitments,
+    created_by: user.id,
+  })
+
+  if (error) {
+    if (isCoachingKarteTableMissingError(error.message)) {
+      return {
+        error:
+          'カルテ用のデータベースが未設定です。Supabase に 044_coaching_karte.sql を適用してください。',
+      }
+    }
+    return { error: 'カルテの保存に失敗しました' }
+  }
+
+  revalidateCoachingPaths()
+  revalidatePath(`/admin/coaching/karte/${studentId}`)
   return { success: true }
 }

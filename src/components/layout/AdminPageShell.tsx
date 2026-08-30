@@ -17,6 +17,7 @@ interface AdminPageShellProps {
   backLabel?: string
   showMainNav?: boolean
   wide?: boolean
+  extraWide?: boolean
   children: ReactNode
 }
 
@@ -26,6 +27,7 @@ export async function AdminPageShell({
   backLabel,
   showMainNav = true,
   wide = false,
+  extraWide = false,
   children,
 }: AdminPageShellProps) {
   const profile = await getCurrentProfile()
@@ -35,7 +37,11 @@ export async function AdminPageShell({
     : 0
 
   const menuItems: HamburgerMenuItem[] = ADMIN_HAMBURGER_ITEMS.map((item) => ({ ...item }))
-  const containerClass = wide ? 'max-w-6xl' : 'max-w-3xl'
+  const containerClass = extraWide
+    ? 'max-w-[1440px]'
+    : wide
+      ? 'max-w-6xl'
+      : 'max-w-3xl'
 
   return (
     <div className="min-h-dvh">

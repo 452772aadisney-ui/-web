@@ -48,3 +48,21 @@ export type AvailableCoachingSlot = CoachingSlotWithCoach & {
   start_time: string
   is_available: true
 }
+
+export interface CoachingKarteEntry {
+  id: string
+  student_id: string
+  booking_id: string | null
+  coach_id: string | null
+  session_date: string
+  discussion_content: string
+  next_commitments: string
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type CoachingKarteEntryWithDetails = CoachingKarteEntry & {
+  coach?: Pick<CoachingCoach, 'id' | 'name'> | null
+  created_by_profile?: { id: string; full_name: string; display_name: string } | null
+}
