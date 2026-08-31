@@ -47,12 +47,14 @@ export function catalogToEditingItem(
 interface AdminBookshelfEditModalProps {
   item: AdminEditingItem
   studentGroups: StudentListGroup[]
+  publishers: string[]
   onClose: () => void
 }
 
 export function AdminBookshelfEditModal({
   item,
   studentGroups,
+  publishers,
   onClose,
 }: AdminBookshelfEditModalProps) {
   const isCatalog = item.kind === 'catalog'
@@ -150,6 +152,7 @@ export function AdminBookshelfEditModal({
 
           {isCatalog ? (
             <TextbookCatalogMetadataFields
+              publishers={publishers}
               defaultPublisher={item.publisher}
               defaultCoverUrl={item.cover_url}
               defaultDetailTags={item.detail_tags}

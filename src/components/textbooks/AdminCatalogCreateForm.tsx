@@ -7,7 +7,7 @@ import { UsageTagFields, inputClass } from '@/components/textbooks/TextbookFormF
 
 const initialState: CatalogActionState = {}
 
-export function AdminCatalogCreateForm() {
+export function AdminCatalogCreateForm({ publishers }: { publishers: string[] }) {
   const [state, formAction, pending] = useActionState(createTextbookCatalogEntry, initialState)
 
   return (
@@ -19,7 +19,7 @@ export function AdminCatalogCreateForm() {
         <input type="text" name="name" required placeholder="例: チャート式 数学IA" className={inputClass} />
       </label>
 
-      <TextbookCatalogMetadataFields />
+      <TextbookCatalogMetadataFields publishers={publishers} />
 
       <UsageTagFields />
 

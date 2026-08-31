@@ -3,9 +3,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { getDashboardPathForRole } from '@/lib/auth/routes'
 import { AdminPageShell } from '@/components/layout/AdminPageShell'
-import { TEXTBOOK_PUBLISHERS } from '@/lib/constants/textbook-search'
-import { getUniquePublishersFromCatalog } from '@/lib/textbooks/catalog-filter'
-import { fetchTextbookCatalog } from '@/lib/textbooks/catalog-queries'
+import { fetchTextbookPublisherOptions } from '@/lib/textbooks/publisher-options'
 
 export default async function AdminBookshelfSearchPublishersPage() {
   const profile = await getCurrentProfile()
@@ -13,10 +11,7 @@ export default async function AdminBookshelfSearchPublishersPage() {
   if (!profile) redirect('/login')
   if (profile.role !== 'admin') redirect(getDashboardPathForRole('student'))
 
-  const catalog = await fetchTextbookCatalog()
-  const publishers = [
-    ...new Set([...TEXTBOOK_PUBLISHERS, ...getUniquePublishersFromCatalog(catalog)]),
-  ].sort((a, b) => a.localeCompare(b, 'ja'))
+  const publishers = await fetchTextbookPublisherOptions()
 
   return (
     <AdminPageShell

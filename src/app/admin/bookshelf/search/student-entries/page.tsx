@@ -6,6 +6,7 @@ import { AdminStudentRegisteredEntries } from '@/components/textbooks/AdminStude
 import { groupStudentsByGrade } from '@/lib/tags/grade-order'
 import { fetchGradeTagNamesByStudentId } from '@/lib/tags/queries'
 import { fetchAdminBookshelfOverview } from '@/lib/textbooks/catalog-queries'
+import { fetchTextbookPublisherOptions } from '@/lib/textbooks/publisher-options'
 import { fetchStudentList } from '@/lib/study/queries'
 
 export default async function AdminBookshelfStudentEntriesPage() {
@@ -14,10 +15,11 @@ export default async function AdminBookshelfStudentEntriesPage() {
   if (!profile) redirect('/login')
   if (profile.role !== 'admin') redirect(getDashboardPathForRole('student'))
 
-  const [overview, students, gradeTagByStudentId] = await Promise.all([
+  const [overview, students, gradeTagByStudentId, publishers] = await Promise.all([
     fetchAdminBookshelfOverview(),
     fetchStudentList(),
     fetchGradeTagNamesByStudentId(),
+    fetchTextbookPublisherOptions(),
   ])
 
   const studentGroups = groupStudentsByGrade(students, gradeTagByStudentId)
@@ -29,7 +31,11 @@ export default async function AdminBookshelfStudentEntriesPage() {
       backLabel="検索メニュー"
       wide
     >
-      <AdminStudentRegisteredEntries overview={overview} studentGroups={studentGroups} />
+      <AdminStudentRegisteredEntries
+        overview={overview}
+        studentGroups={studentGroups}
+        publishers={publishers}
+      />
     </AdminPageShell>
   )
 }

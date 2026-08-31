@@ -8,6 +8,7 @@ import { AdminCatalogCreateForm } from '@/components/textbooks/AdminCatalogCreat
 import { groupStudentsByGrade } from '@/lib/tags/grade-order'
 import { fetchGradeTagNamesByStudentId } from '@/lib/tags/queries'
 import { fetchTextbookCatalog } from '@/lib/textbooks/catalog-queries'
+import { fetchTextbookPublisherOptions } from '@/lib/textbooks/publisher-options'
 import { fetchStudentList } from '@/lib/study/queries'
 
 export default async function AdminBookshelfCreatePage() {
@@ -16,10 +17,11 @@ export default async function AdminBookshelfCreatePage() {
   if (!profile) redirect('/login')
   if (profile.role !== 'admin') redirect(getDashboardPathForRole('student'))
 
-  const [students, gradeTagByStudentId, catalog] = await Promise.all([
+  const [students, gradeTagByStudentId, catalog, publishers] = await Promise.all([
     fetchStudentList(),
     fetchGradeTagNamesByStudentId(),
     fetchTextbookCatalog(),
+    fetchTextbookPublisherOptions(),
   ])
 
   const studentGroups = groupStudentsByGrade(students, gradeTagByStudentId)
@@ -34,7 +36,7 @@ export default async function AdminBookshelfCreatePage() {
             参考書名・科目タグ・用途・表紙などを設定して本棚マスタに登録します。
           </p>
           <div className="mt-6">
-            <AdminCatalogCreateForm />
+            <AdminCatalogCreateForm publishers={publishers} />
           </div>
         </section>
 

@@ -20,6 +20,7 @@ interface AdminTextbookCatalogSearchResultsProps {
   catalog: TextbookCatalog[]
   overview: AdminBookshelfOverview
   studentGroups: StudentListGroup[]
+  publishers: string[]
   query?: string
   tags?: string | string[]
   publisher?: string
@@ -84,6 +85,7 @@ export function AdminTextbookCatalogSearchResults({
   catalog,
   overview,
   studentGroups,
+  publishers,
   query,
   tags,
   publisher,
@@ -148,6 +150,7 @@ export function AdminTextbookCatalogSearchResults({
         <AdminBookshelfEditModal
           item={editingItem}
           studentGroups={studentGroups}
+          publishers={publishers}
           onClose={handleCloseModal}
         />
       )}

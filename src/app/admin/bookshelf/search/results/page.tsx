@@ -9,6 +9,7 @@ import {
   fetchAdminBookshelfOverview,
   fetchTextbookCatalog,
 } from '@/lib/textbooks/catalog-queries'
+import { fetchTextbookPublisherOptions } from '@/lib/textbooks/publisher-options'
 import { fetchStudentList } from '@/lib/study/queries'
 
 export default async function AdminBookshelfSearchResultsPage({
@@ -28,11 +29,12 @@ export default async function AdminBookshelfSearchResultsPage({
   if (profile.role !== 'admin') redirect(getDashboardPathForRole('student'))
 
   const params = await searchParams
-  const [catalog, overview, students, gradeTagByStudentId] = await Promise.all([
+  const [catalog, overview, students, gradeTagByStudentId, publishers] = await Promise.all([
     fetchTextbookCatalog(),
     fetchAdminBookshelfOverview(),
     fetchStudentList(),
     fetchGradeTagNamesByStudentId(),
+    fetchTextbookPublisherOptions(),
   ])
 
   const studentGroups = groupStudentsByGrade(students, gradeTagByStudentId)
@@ -58,6 +60,7 @@ export default async function AdminBookshelfSearchResultsPage({
         catalog={catalog}
         overview={overview}
         studentGroups={studentGroups}
+        publishers={publishers}
         query={params.q}
         tags={params.tags}
         publisher={params.publisher}

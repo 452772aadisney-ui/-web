@@ -3,14 +3,15 @@
 import { useState } from 'react'
 import { TEXTBOOK_DETAIL_TAG_GROUPS } from '@/lib/constants/textbook-detail-tags'
 import {
-  TEXTBOOK_PUBLISHERS,
   TEXTBOOK_STUDY_PURPOSES,
   TEXTBOOK_TARGET_UNIVERSITIES,
 } from '@/lib/constants/textbook-search'
 import { cn } from '@/lib/utils'
 import { inputClass } from '@/components/textbooks/TextbookFormFields'
+import { TextbookPublisherSelect } from '@/components/textbooks/TextbookPublisherSelect'
 
 interface TextbookCatalogMetadataFieldsProps {
+  publishers: string[]
   defaultPublisher?: string | null
   defaultCoverUrl?: string | null
   defaultDetailTags?: string[]
@@ -19,6 +20,7 @@ interface TextbookCatalogMetadataFieldsProps {
 }
 
 export function TextbookCatalogMetadataFields({
+  publishers,
   defaultPublisher = '',
   defaultCoverUrl = '',
   defaultDetailTags = [],
@@ -49,22 +51,7 @@ export function TextbookCatalogMetadataFields({
 
   return (
     <div className="space-y-4">
-      <label className="block">
-        <span className="mb-1.5 block text-sm font-medium">出版社</span>
-        <input
-          type="text"
-          name="publisher"
-          list="textbook-publishers"
-          defaultValue={defaultPublisher ?? ''}
-          placeholder="例: 旺文社"
-          className={inputClass}
-        />
-        <datalist id="textbook-publishers">
-          {TEXTBOOK_PUBLISHERS.map((publisher) => (
-            <option key={publisher} value={publisher} />
-          ))}
-        </datalist>
-      </label>
+      <TextbookPublisherSelect publishers={publishers} defaultPublisher={defaultPublisher} />
 
       <label className="block">
         <span className="mb-1.5 block text-sm font-medium">表紙画像URL</span>

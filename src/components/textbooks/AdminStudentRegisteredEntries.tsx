@@ -13,6 +13,7 @@ import type { AdminBookshelfOverview, AdminBookshelfStudentEntry } from '@/types
 interface AdminStudentRegisteredEntriesProps {
   overview: AdminBookshelfOverview
   studentGroups: StudentListGroup[]
+  publishers: string[]
 }
 
 function StudentEntryCard({
@@ -52,6 +53,7 @@ function StudentEntryCard({
 export function AdminStudentRegisteredEntries({
   overview,
   studentGroups,
+  publishers,
 }: AdminStudentRegisteredEntriesProps) {
   const router = useRouter()
   const [editingItem, setEditingItem] = useState<AdminEditingStudent | null>(null)
@@ -91,6 +93,7 @@ export function AdminStudentRegisteredEntries({
         <AdminBookshelfEditModal
           item={editingItem}
           studentGroups={studentGroups}
+          publishers={publishers}
           onClose={handleCloseModal}
         />
       )}
