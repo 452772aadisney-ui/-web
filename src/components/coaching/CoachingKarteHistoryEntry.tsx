@@ -8,6 +8,7 @@ import {
   type CoachingActionState,
 } from '@/app/coaching/actions'
 import type { CoachingCoach, CoachingKarteEntryWithDetails } from '@/types/coaching'
+import { AutoResizeTextarea } from '@/components/ui/AutoResizeTextarea'
 import { getPersonName } from '@/lib/auth/display-name'
 
 const initialState: CoachingActionState = {}
@@ -86,9 +87,10 @@ export function CoachingKarteHistoryEntry({
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium">話した内容 *</span>
-            <textarea
+            <AutoResizeTextarea
               name="discussionContent"
-              rows={6}
+              minRows={4}
+              maxRows={20}
               required
               defaultValue={entry.discussion_content}
               className={fieldClass}
@@ -97,9 +99,10 @@ export function CoachingKarteHistoryEntry({
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium">次回までの約束事</span>
-            <textarea
+            <AutoResizeTextarea
               name="nextCommitments"
-              rows={4}
+              minRows={3}
+              maxRows={20}
               defaultValue={entry.next_commitments}
               className={fieldClass}
             />

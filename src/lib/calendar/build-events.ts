@@ -92,3 +92,22 @@ export function buildCoachingCalendarEvents(
     })
     .sort((a, b) => a.date.localeCompare(b.date))
 }
+
+export function buildQuizAssignmentCalendarEvents(
+  assignments: Array<{
+    assignment: { id: string; scheduled_on: string; note: string }
+    master: { title: string; subject: string; max_score: number }
+    result: { score: number; max_score: number } | null
+  }>,
+): CalendarEvent[] {
+  return assignments.map(({ assignment, master, result }) => ({
+    id: `quiz-assignment-${assignment.id}`,
+    date: assignment.scheduled_on,
+    type: 'quiz' as const,
+    title: master.title,
+    subject: master.subject || undefined,
+    detail: result
+      ? `得点 ${result.score} / ${result.max_score}`
+      : assignment.note || `満点 ${master.max_score}`,
+  }))
+}

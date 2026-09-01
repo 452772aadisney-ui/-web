@@ -2,8 +2,9 @@ import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { ScheduleCalendar } from '@/components/schedule/ScheduleCalendar'
-import { buildCalendarEvents, buildCoachingCalendarEvents } from '@/lib/calendar/build-events'
+import { buildCalendarEvents, buildCoachingCalendarEvents, buildQuizAssignmentCalendarEvents } from '@/lib/calendar/build-events'
 import { fetchCoachingBookingsForStudent } from '@/lib/coaching/queries'
+import { fetchStudentQuizAssignments } from '@/lib/quizzes/queries'
 import {
   fetchExamSchedulesForStudent,
   fetchHomeworkTasksForStudent,
@@ -20,15 +21,17 @@ export default async function StudentCalendarPage() {
   const gradeTagName = await fetchGradeTagNameForProfile(profile.id)
   const isKisotsuStudent = isKisotsuGradeTag(gradeTagName)
 
-  const [exams, homework, textbooks, coachingBookings] = await Promise.all([
+  const [exams, homework, textbooks, coachingBookings, quizAssignments] = await Promise.all([
     fetchExamSchedulesForStudent(profile.id),
     fetchHomeworkTasksForStudent(profile.id),
     fetchTextbooksForStudent(profile.id),
     isKisotsuStudent ? Promise.resolve([]) : fetchCoachingBookingsForStudent(profile.id),
+    fetchStudentQuizAssignments(profile.id),
   ])
 
   const events = [
     ...buildCalendarEvents(exams, homework, textbooks),
+    ...buildQuizAssignmentCalendarEvents(quizAssignments),
     ...(isKisotsuStudent ? [] : buildCoachingCalendarEvents(coachingBookings)),
   ].sort((a, b) => a.date.localeCompare(b.date))
 

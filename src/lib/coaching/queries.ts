@@ -6,7 +6,10 @@ import {
   getTodayDateKey,
   slotDateTimeKey,
 } from '@/lib/coaching/slot-times'
-import { getWeekdays, parseDateKey } from '@/lib/coaching/week'
+import { getWeekdays, getWeekStartMonday, parseDateKey } from '@/lib/coaching/week'
+import { fetchStudentList } from '@/lib/study/queries'
+import { isKisotsuGradeTag } from '@/lib/tags/grade-order'
+import { fetchGradeTagNamesByStudentId } from '@/lib/tags/queries'
 import type {
   AvailableCoachingSlot,
   CoachingBooking,
@@ -338,3 +341,38 @@ export function slotEndsAtIso(slotDate: string, startTime: string): string {
 }
 
 export { slotDateTimeKey, parseDateKey, getTodayDateKey }
+
+export async function fetchStudentsWithoutCoachingBookingThisWeek(): Promise<
+  Array<{
+    id: string
+    full_name: string
+    display_name: string
+    email: string
+    student_code: string | null
+  }>
+> {
+  const weekDates = getWeekdays(getWeekStartMonday()).map((day) => day.date)
+  const [students, gradeTagByStudentId] = await Promise.all([
+    fetchStudentList(),
+    fetchGradeTagNamesByStudentId(),
+  ])
+
+  const supabase = await createClient()
+  const { data: bookings, error } = await supabase
+    .from('coaching_bookings')
+    .select('student_id, coaching_slots!inner(slot_date)')
+    .eq('status', 'scheduled')
+    .in('coaching_slots.slot_date', weekDates)
+
+  if (error) {
+    console.error('[coaching] unbooked students query failed:', error.message)
+    return []
+  }
+
+  const bookedStudentIds = new Set((bookings ?? []).map((row) => String(row.student_id)))
+
+  return students
+    .filter((student) => !bookedStudentIds.has(student.id))
+    .filter((student) => !isKisotsuGradeTag(gradeTagByStudentId.get(student.id)))
+    .sort((a, b) => a.full_name.localeCompare(b.full_name, 'ja'))
+}

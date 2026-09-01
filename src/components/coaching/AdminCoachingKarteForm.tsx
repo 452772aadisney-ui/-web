@@ -7,6 +7,7 @@ import {
   type CoachingActionState,
 } from '@/app/coaching/actions'
 import { CoachingKarteHistoryEntry } from '@/components/coaching/CoachingKarteHistoryEntry'
+import { AutoResizeTextarea } from '@/components/ui/AutoResizeTextarea'
 import {
   clearKarteDraft,
   loadKarteDraft,
@@ -132,9 +133,10 @@ export function AdminCoachingKarteForm({
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium">話した内容 *</span>
-            <textarea
+            <AutoResizeTextarea
               name="discussionContent"
-              rows={6}
+              minRows={4}
+              maxRows={20}
               required
               value={discussionContent}
               onChange={(event) => setDiscussionContent(event.target.value)}
@@ -145,9 +147,10 @@ export function AdminCoachingKarteForm({
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium">次回までの約束事</span>
-            <textarea
+            <AutoResizeTextarea
               name="nextCommitments"
-              rows={4}
+              minRows={3}
+              maxRows={20}
               value={nextCommitments}
               onChange={(event) => setNextCommitments(event.target.value)}
               placeholder="生徒との約束・宿題・次回確認事項など"

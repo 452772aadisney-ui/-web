@@ -150,9 +150,21 @@ export async function loadAvailableCoachingSlotsForWindow(
   coachId: string,
   windowStart: string,
 ): Promise<AvailableCoachingSlot[]> {
-  const studentResult = await assertStudent()
-  if ('error' in studentResult) return []
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return []
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle<{ role: string }>()
+
+  if (profile?.role !== 'student' && profile?.role !== 'admin') return []
   if (!coachId || !windowStart) return []
+
   const dateKeys = getDayWindow(windowStart).map((day) => day.date)
   return fetchAvailableCoachingSlots(coachId, dateKeys)
 }
@@ -283,18 +295,11 @@ export async function toggleCoachingSlot(formData: FormData): Promise<CoachingAc
   return applyCoachingSlotOpenState(coachId, [{ slotDate, startTime }], open)
 }
 
-export async function bookCoachingSlot(
-  _prev: CoachingActionState,
-  formData: FormData,
-): Promise<CoachingActionState> {
-  const studentResult = await assertStudent()
-  if ('error' in studentResult) return { error: studentResult.error }
-
-  const slotId = String(formData.get('slotId') ?? '').trim()
-  const studentNote = String(formData.get('studentNote') ?? '').trim()
-
-  if (!slotId) return { error: '予約枠を選択してください' }
-
+async function performCoachingBooking(
+  studentId: string,
+  slotId: string,
+  studentNote: string,
+): Promise<{ error?: string; bookingId?: string }> {
   const supabase = await createClient()
 
   const { data: slot, error: slotError } = await supabase
@@ -304,13 +309,10 @@ export async function bookCoachingSlot(
     .maybeSingle<{ id: string; coach_id: string; starts_at: string; is_open: boolean }>()
 
   if (slotError || !slot) return { error: '予約枠が見つかりません' }
-
   if (!slot.is_open) return { error: 'この予約枠は現在予約できません' }
-
   if (new Date(slot.starts_at) <= new Date()) {
     return { error: 'この予約枠は既に過ぎています' }
   }
-
   if (await isCoachingSlotOccupied(slotId)) {
     return { error: 'この予約枠は既に埋まっています' }
   }
@@ -319,7 +321,7 @@ export async function bookCoachingSlot(
     .from('coaching_bookings')
     .select('id, status')
     .eq('slot_id', slotId)
-    .eq('student_id', studentResult.userId)
+    .eq('student_id', studentId)
     .maybeSingle<{ id: string; status: string }>()
 
   let bookingId: string
@@ -328,7 +330,7 @@ export async function bookCoachingSlot(
     const { data: updated, error: updateError } = await supabase
       .from('coaching_bookings')
       .update({
-        student_id: studentResult.userId,
+        student_id: studentId,
         coach_id: slot.coach_id,
         student_note: studentNote,
         status: 'scheduled',
@@ -339,17 +341,14 @@ export async function bookCoachingSlot(
       .select('id')
       .single<{ id: string }>()
 
-    if (updateError || !updated) {
-      return { error: '予約に失敗しました' }
-    }
-
+    if (updateError || !updated) return { error: '予約に失敗しました' }
     bookingId = updated.id
   } else {
     const { data: created, error } = await supabase
       .from('coaching_bookings')
       .insert({
         slot_id: slotId,
-        student_id: studentResult.userId,
+        student_id: studentId,
         coach_id: slot.coach_id,
         student_note: studentNote,
         status: 'scheduled',
@@ -367,7 +366,7 @@ export async function bookCoachingSlot(
 
   try {
     await notifyCoachingBookingCreated({
-      studentId: studentResult.userId,
+      studentId,
       slotId,
       coachId: slot.coach_id,
       startsAt: slot.starts_at,
@@ -375,7 +374,7 @@ export async function bookCoachingSlot(
     })
 
     const calendarEventId = await createCoachingBookingCalendarEvent({
-      studentId: studentResult.userId,
+      studentId,
       slotId,
       coachId: slot.coach_id,
       startsAt: slot.starts_at,
@@ -392,9 +391,60 @@ export async function bookCoachingSlot(
     console.error('[coaching] booking notification failed:', notificationError)
   }
 
+  return { bookingId }
+}
+
+export async function bookCoachingSlot(
+  _prev: CoachingActionState,
+  formData: FormData,
+): Promise<CoachingActionState> {
+  const studentResult = await assertStudent()
+  if ('error' in studentResult) return { error: studentResult.error }
+
+  const slotId = String(formData.get('slotId') ?? '').trim()
+  const studentNote = String(formData.get('studentNote') ?? '').trim()
+
+  if (!slotId) return { error: '予約枠を選択してください' }
+
+  const result = await performCoachingBooking(studentResult.userId, slotId, studentNote)
+  if (result.error) return { error: result.error }
+
   revalidateCoachingPaths()
   const unlockedAchievements = await evaluateAndUnlockAchievements(studentResult.userId)
   return { success: true, unlockedAchievements }
+}
+
+export async function adminBookCoachingSlot(
+  _prev: CoachingActionState,
+  formData: FormData,
+): Promise<CoachingActionState> {
+  const authError = await assertAdmin()
+  if (authError) return { error: authError }
+
+  const studentId = String(formData.get('studentId') ?? '').trim()
+  const slotId = String(formData.get('slotId') ?? '').trim()
+  const studentNote = String(formData.get('studentNote') ?? '').trim()
+
+  if (!studentId) return { error: '生徒を選択してください' }
+  if (!slotId) return { error: '予約枠を選択してください' }
+
+  const supabase = await createClient()
+  const { data: studentProfile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', studentId)
+    .maybeSingle<{ role: string }>()
+
+  if (studentProfile?.role !== 'student') {
+    return { error: '有効な生徒が選択されていません' }
+  }
+
+  const result = await performCoachingBooking(studentId, slotId, studentNote)
+  if (result.error) return { error: result.error }
+
+  revalidateCoachingPaths()
+  await evaluateAndUnlockAchievements(studentId)
+  return { success: true }
 }
 
 export async function rescheduleCoachingBooking(
