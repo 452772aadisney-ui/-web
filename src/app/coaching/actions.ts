@@ -13,6 +13,7 @@ import { createClient } from '@/lib/supabase/server'
 import {
   fetchCoachingGridForWeek,
   fetchAvailableCoachingSlots,
+  isCoachingSlotOccupied,
   slotEndsAtIso,
   slotStartsAtIso,
   type CoachingGridSlot,
@@ -310,15 +311,16 @@ export async function bookCoachingSlot(
     return { error: 'この予約枠は既に過ぎています' }
   }
 
+  if (await isCoachingSlotOccupied(slotId)) {
+    return { error: 'この予約枠は既に埋まっています' }
+  }
+
   const { data: slotBooking } = await supabase
     .from('coaching_bookings')
     .select('id, status')
     .eq('slot_id', slotId)
+    .eq('student_id', studentResult.userId)
     .maybeSingle<{ id: string; status: string }>()
-
-  if (slotBooking?.status === 'scheduled') {
-    return { error: 'この予約枠は既に埋まっています' }
-  }
 
   let bookingId: string
 
@@ -470,15 +472,16 @@ export async function rescheduleCoachingBooking(
     return { error: 'この予約枠は既に過ぎています' }
   }
 
+  if (await isCoachingSlotOccupied(newSlotId)) {
+    return { error: 'この予約枠は既に埋まっています' }
+  }
+
   const { data: slotBooking } = await supabase
     .from('coaching_bookings')
     .select('id, status')
     .eq('slot_id', newSlotId)
+    .eq('student_id', studentResult.userId)
     .maybeSingle<{ id: string; status: string }>()
-
-  if (slotBooking?.status === 'scheduled' && slotBooking.id !== bookingId) {
-    return { error: 'この予約枠は既に埋まっています' }
-  }
 
   const nextNote = studentNote || booking.student_note
   const oldSlotId = booking.slot_id

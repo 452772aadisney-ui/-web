@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import {
   buildSlotDateTime,
   buildSlotEndDateTime,
@@ -99,6 +100,48 @@ export async function fetchCoachingCoaches(activeOnly = false): Promise<Coaching
   return (data as CoachingCoach[]) ?? []
 }
 
+/** 予約済み（scheduled）の slot_id を取得（RLSを迂回して占有状況のみ判定） */
+async function fetchOccupiedCoachingSlotIds(slotIds: string[]): Promise<Set<string>> {
+  if (slotIds.length === 0) return new Set()
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('get_occupied_coaching_slot_ids', {
+    p_slot_ids: slotIds,
+  })
+
+  if (!error && Array.isArray(data)) {
+    return new Set(data.map(String))
+  }
+
+  const admin = createAdminClient()
+  if (!admin) {
+    console.error(
+      '[coaching] occupied slot lookup failed:',
+      error?.message ?? 'admin client unavailable',
+    )
+    return new Set()
+  }
+
+  const { data: fallbackRows, error: fallbackError } = await admin
+    .from('coaching_bookings')
+    .select('slot_id')
+    .in('slot_id', slotIds)
+    .eq('status', 'scheduled')
+
+  if (fallbackError) {
+    console.error('[coaching] occupied slot fallback failed:', fallbackError.message)
+    return new Set()
+  }
+
+  return new Set(((fallbackRows ?? []) as { slot_id: string }[]).map((row) => row.slot_id))
+}
+
+/** 指定枠が他生徒により予約済みか（scheduled） */
+export async function isCoachingSlotOccupied(slotId: string): Promise<boolean> {
+  const occupied = await fetchOccupiedCoachingSlotIds([slotId])
+  return occupied.has(slotId)
+}
+
 async function fetchBookingsBySlotIds(
   slotIds: string[],
 ): Promise<Map<string, CoachingBooking>> {
@@ -139,7 +182,7 @@ export async function fetchCoachingGridForWeek(
   }
 
   const slots = ((data as CoachingSlot[]) ?? []).map(normalizeSlot)
-  const bookingsBySlot = await fetchBookingsBySlotIds(slots.map((s) => s.id))
+  const occupiedSlotIds = await fetchOccupiedCoachingSlotIds(slots.map((s) => s.id))
 
   return slots.map((slot) => ({
     id: slot.id,
@@ -149,7 +192,7 @@ export async function fetchCoachingGridForWeek(
     starts_at: slot.starts_at,
     ends_at: slot.ends_at,
     is_open: slot.is_open,
-    is_booked: bookingsBySlot.has(slot.id),
+    is_booked: occupiedSlotIds.has(slot.id),
   }))
 }
 
@@ -185,10 +228,10 @@ export async function fetchAvailableCoachingSlots(
   }
 
   const slots = ((data as SlotRow[]) ?? []).map((row) => normalizeSlot(row))
-  const bookingsBySlot = await fetchBookingsBySlotIds(slots.map((s) => s.id))
+  const occupiedSlotIds = await fetchOccupiedCoachingSlotIds(slots.map((s) => s.id))
 
   return slots
-    .filter((slot) => !bookingsBySlot.has(slot.id))
+    .filter((slot) => !occupiedSlotIds.has(slot.id))
     .filter((slot) => buildSlotDateTime(slot.slot_date!, slot.start_time!) > now)
     .map((slot) => {
       const coachRow = (data as SlotRow[]).find((r) => r.id === slot.id)?.coaching_coaches
