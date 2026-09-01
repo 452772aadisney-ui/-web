@@ -16,7 +16,7 @@ export default async function AdminCoachingPage() {
   const unbookedStudents = await fetchStudentsWithoutCoachingBookingThisWeek()
 
   return (
-    <AdminPageShell title="コーチング" backHref="/admin" backLabel="管理画面" wide>
+    <AdminPageShell title="コーチング" backHref="/admin" backLabel="管理画面">
       <AdminCoachingMenu />
       <AdminCoachingUnbookedList students={unbookedStudents} />
       <AdminCoachingMenuDescriptions />
