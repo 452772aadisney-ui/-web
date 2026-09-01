@@ -5,6 +5,7 @@ import { getPersonName } from '@/lib/auth/display-name'
 import { AdminPageShell } from '@/components/layout/AdminPageShell'
 import { AdminCoachingNav } from '@/components/coaching/AdminCoachingNav'
 import { AdminCoachingKarteForm } from '@/components/coaching/AdminCoachingKarteForm'
+import { AdminCoachingKarteQuizForm } from '@/components/coaching/AdminCoachingKarteQuizForm'
 import { CoachingKarteMigrationNotice } from '@/components/coaching/CoachingKarteMigrationNotice'
 import { DailyStudyBarChart } from '@/components/study/DailyStudyBarChart'
 import { SubjectStudyPieChart } from '@/components/study/SubjectStudyPieChart'
@@ -90,6 +91,7 @@ export default async function AdminCoachingKarteStudentPage({
               </div>
             </dl>
           </section>
+          <AdminCoachingKarteQuizForm studentId={studentId} />
         </aside>
 
         <div className="min-w-0 space-y-6">

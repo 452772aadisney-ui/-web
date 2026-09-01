@@ -702,3 +702,84 @@ export async function createCoachingKarteEntry(
   revalidatePath(`/admin/coaching/karte/${studentId}`)
   return { success: true }
 }
+
+export async function updateCoachingKarteEntry(
+  _prev: CoachingActionState,
+  formData: FormData,
+): Promise<CoachingActionState> {
+  const authError = await assertAdmin()
+  if (authError) return { error: authError }
+
+  const entryId = String(formData.get('entryId') ?? '').trim()
+  const studentId = String(formData.get('studentId') ?? '').trim()
+  const coachId = String(formData.get('coachId') ?? '').trim()
+  const sessionDate = String(formData.get('sessionDate') ?? '').trim()
+  const discussionContent = String(formData.get('discussionContent') ?? '').trim()
+  const nextCommitments = String(formData.get('nextCommitments') ?? '').trim()
+
+  if (!entryId) return { error: '記録が指定されていません' }
+  if (!studentId) return { error: '生徒が指定されていません' }
+  if (!sessionDate) return { error: '面談日を入力してください' }
+  if (!discussionContent) return { error: '話した内容を入力してください' }
+
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('coaching_karte_entries')
+    .update({
+      coach_id: coachId || null,
+      session_date: sessionDate,
+      discussion_content: discussionContent,
+      next_commitments: nextCommitments,
+    })
+    .eq('id', entryId)
+    .eq('student_id', studentId)
+
+  if (error) {
+    if (isCoachingKarteTableMissingError(error.message)) {
+      return {
+        error:
+          'カルテ用のデータベースが未設定です。Supabase に 044_coaching_karte.sql を適用してください。',
+      }
+    }
+    return { error: 'カルテの更新に失敗しました' }
+  }
+
+  revalidateCoachingPaths()
+  revalidatePath(`/admin/coaching/karte/${studentId}`)
+  return { success: true }
+}
+
+export async function deleteCoachingKarteEntry(
+  _prev: CoachingActionState,
+  formData: FormData,
+): Promise<CoachingActionState> {
+  const authError = await assertAdmin()
+  if (authError) return { error: authError }
+
+  const entryId = String(formData.get('entryId') ?? '').trim()
+  const studentId = String(formData.get('studentId') ?? '').trim()
+
+  if (!entryId) return { error: '記録が指定されていません' }
+  if (!studentId) return { error: '生徒が指定されていません' }
+
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('coaching_karte_entries')
+    .delete()
+    .eq('id', entryId)
+    .eq('student_id', studentId)
+
+  if (error) {
+    if (isCoachingKarteTableMissingError(error.message)) {
+      return {
+        error:
+          'カルテ用のデータベースが未設定です。Supabase に 044_coaching_karte.sql を適用してください。',
+      }
+    }
+    return { error: 'カルテの削除に失敗しました' }
+  }
+
+  revalidateCoachingPaths()
+  revalidatePath(`/admin/coaching/karte/${studentId}`)
+  return { success: true }
+}

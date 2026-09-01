@@ -1,13 +1,18 @@
 'use client'
 
-import { useActionState, useEffect } from 'react'
+import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   createCoachingKarteEntry,
   type CoachingActionState,
 } from '@/app/coaching/actions'
+import { CoachingKarteHistoryEntry } from '@/components/coaching/CoachingKarteHistoryEntry'
+import {
+  clearKarteDraft,
+  loadKarteDraft,
+  saveKarteDraft,
+} from '@/lib/coaching/karte-draft'
 import type { CoachingCoach, CoachingKarteEntryWithDetails } from '@/types/coaching'
-import { getPersonName } from '@/lib/auth/display-name'
 
 const initialState: CoachingActionState = {}
 const fieldClass =
@@ -34,22 +39,66 @@ export function AdminCoachingKarteForm({
 }: AdminCoachingKarteFormProps) {
   const router = useRouter()
   const [state, formAction, pending] = useActionState(createCoachingKarteEntry, initialState)
+  const [sessionDate, setSessionDate] = useState(defaultSessionDate)
+  const [coachId, setCoachId] = useState(defaultCoachId ?? '')
+  const [discussionContent, setDiscussionContent] = useState('')
+  const [nextCommitments, setNextCommitments] = useState('')
+  const [bookingId, setBookingId] = useState(defaultBookingId ?? '')
+  const [draftLoaded, setDraftLoaded] = useState(false)
+  const [draftSaved, setDraftSaved] = useState(false)
+
+  useEffect(() => {
+    const draft = loadKarteDraft(studentId)
+    if (draft) {
+      setSessionDate(draft.sessionDate)
+      setCoachId(draft.coachId)
+      setDiscussionContent(draft.discussionContent)
+      setNextCommitments(draft.nextCommitments)
+      if (draft.bookingId) setBookingId(draft.bookingId)
+      setDraftLoaded(true)
+    }
+  }, [studentId])
 
   useEffect(() => {
     if (state.success) {
+      clearKarteDraft(studentId)
+      setSessionDate(defaultSessionDate)
+      setCoachId(defaultCoachId ?? '')
+      setDiscussionContent('')
+      setNextCommitments('')
+      setBookingId(defaultBookingId ?? '')
+      setDraftSaved(false)
+      setDraftLoaded(false)
       router.refresh()
     }
-  }, [state.success, router])
+  }, [
+    state.success,
+    router,
+    studentId,
+    defaultSessionDate,
+    defaultCoachId,
+    defaultBookingId,
+  ])
+
+  function handleDraftSave() {
+    saveKarteDraft(studentId, {
+      sessionDate,
+      coachId,
+      discussionContent,
+      nextCommitments,
+      bookingId,
+    })
+    setDraftSaved(true)
+    setDraftLoaded(false)
+  }
 
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
         <h2 className="text-lg font-bold">今回のコーチング内容</h2>
-        <form key={history[0]?.id ?? 'empty'} action={formAction} className="mt-4 space-y-4">
+        <form action={formAction} className="mt-4 space-y-4">
           <input type="hidden" name="studentId" value={studentId} />
-          {defaultBookingId && (
-            <input type="hidden" name="bookingId" value={defaultBookingId} />
-          )}
+          {bookingId && <input type="hidden" name="bookingId" value={bookingId} />}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
@@ -58,7 +107,8 @@ export function AdminCoachingKarteForm({
                 type="date"
                 name="sessionDate"
                 required
-                defaultValue={defaultSessionDate}
+                value={sessionDate}
+                onChange={(event) => setSessionDate(event.target.value)}
                 className={fieldClass}
               />
             </label>
@@ -66,7 +116,8 @@ export function AdminCoachingKarteForm({
               <span className="mb-1.5 block text-sm font-medium">担当講師</span>
               <select
                 name="coachId"
-                defaultValue={defaultCoachId ?? ''}
+                value={coachId}
+                onChange={(event) => setCoachId(event.target.value)}
                 className={fieldClass}
               >
                 <option value="">未選択</option>
@@ -85,6 +136,8 @@ export function AdminCoachingKarteForm({
               name="discussionContent"
               rows={6}
               required
+              value={discussionContent}
+              onChange={(event) => setDiscussionContent(event.target.value)}
               placeholder="面談で話した内容を記録"
               className={fieldClass}
             />
@@ -95,11 +148,23 @@ export function AdminCoachingKarteForm({
             <textarea
               name="nextCommitments"
               rows={4}
+              value={nextCommitments}
+              onChange={(event) => setNextCommitments(event.target.value)}
               placeholder="生徒との約束・宿題・次回確認事項など"
               className={fieldClass}
             />
           </label>
 
+          {draftLoaded && (
+            <p className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800">
+              前回の一時保存内容を復元しました
+            </p>
+          )}
+          {draftSaved && (
+            <p className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800">
+              一時保存しました
+            </p>
+          )}
           {state.error && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error">{state.error}</p>
           )}
@@ -109,13 +174,22 @@ export function AdminCoachingKarteForm({
             </p>
           )}
 
-          <button
-            type="submit"
-            disabled={pending || !tableAvailable}
-            className="rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white disabled:opacity-60"
-          >
-            {pending ? '保存中…' : 'カルテを保存'}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={pending || !tableAvailable}
+              className="rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+            >
+              {pending ? '保存中…' : 'カルテを保存'}
+            </button>
+            <button
+              type="button"
+              onClick={handleDraftSave}
+              className="rounded-lg border border-border px-5 py-2.5 text-sm font-medium"
+            >
+              一時保存
+            </button>
+          </div>
         </form>
       </section>
 
@@ -126,27 +200,12 @@ export function AdminCoachingKarteForm({
         ) : (
           <ul className="mt-4 space-y-4">
             {history.map((entry) => (
-              <li key={entry.id} className="rounded-lg border border-border bg-background p-4">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                  <span className="font-medium text-foreground">{entry.session_date}</span>
-                  {entry.coach?.name && <span>担当: {entry.coach.name}</span>}
-                  {entry.created_by_profile && (
-                    <span>記録: {getPersonName(entry.created_by_profile)}</span>
-                  )}
-                </div>
-                <div className="mt-3 space-y-3 text-sm">
-                  <div>
-                    <p className="text-xs font-medium text-muted">話した内容</p>
-                    <p className="mt-1 whitespace-pre-wrap">{entry.discussion_content}</p>
-                  </div>
-                  {entry.next_commitments.trim() && (
-                    <div>
-                      <p className="text-xs font-medium text-muted">次回までの約束事</p>
-                      <p className="mt-1 whitespace-pre-wrap">{entry.next_commitments}</p>
-                    </div>
-                  )}
-                </div>
-              </li>
+              <CoachingKarteHistoryEntry
+                key={entry.id}
+                entry={entry}
+                coaches={coaches}
+                tableAvailable={tableAvailable}
+              />
             ))}
           </ul>
         )}

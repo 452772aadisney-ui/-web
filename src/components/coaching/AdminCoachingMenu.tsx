@@ -31,7 +31,7 @@ const menuItems = [
 
 export function AdminCoachingMenu() {
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3">
       {menuItems.map((item) => (
         <MyPageIconMenuButton
           key={item.href}
