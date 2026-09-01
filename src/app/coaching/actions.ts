@@ -10,6 +10,7 @@ import {
   updateCoachingBookingCalendarEvent,
 } from '@/lib/google-calendar/events'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import {
   fetchCoachingGridForWeek,
   fetchAvailableCoachingSlots,
@@ -295,12 +296,34 @@ export async function toggleCoachingSlot(formData: FormData): Promise<CoachingAc
   return applyCoachingSlotOpenState(coachId, [{ slotDate, startTime }], open)
 }
 
+async function getCoachingBookingWriteClient(studentId: string) {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user || user.id === studentId) return supabase
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle<{ role: string }>()
+
+  if (profile?.role === 'admin') {
+    const admin = createAdminClient()
+    if (admin) return admin
+  }
+
+  return supabase
+}
+
 async function performCoachingBooking(
   studentId: string,
   slotId: string,
   studentNote: string,
 ): Promise<{ error?: string; bookingId?: string }> {
   const supabase = await createClient()
+  const writeClient = await getCoachingBookingWriteClient(studentId)
 
   const { data: slot, error: slotError } = await supabase
     .from('coaching_slots')
@@ -317,7 +340,7 @@ async function performCoachingBooking(
     return { error: 'この予約枠は既に埋まっています' }
   }
 
-  const { data: slotBooking } = await supabase
+  const { data: slotBooking } = await writeClient
     .from('coaching_bookings')
     .select('id, status')
     .eq('slot_id', slotId)
@@ -327,7 +350,7 @@ async function performCoachingBooking(
   let bookingId: string
 
   if (slotBooking?.status === 'cancelled') {
-    const { data: updated, error: updateError } = await supabase
+    const { data: updated, error: updateError } = await writeClient
       .from('coaching_bookings')
       .update({
         student_id: studentId,
@@ -344,7 +367,7 @@ async function performCoachingBooking(
     if (updateError || !updated) return { error: '予約に失敗しました' }
     bookingId = updated.id
   } else {
-    const { data: created, error } = await supabase
+    const { data: created, error } = await writeClient
       .from('coaching_bookings')
       .insert({
         slot_id: slotId,
@@ -382,7 +405,7 @@ async function performCoachingBooking(
     })
 
     if (calendarEventId) {
-      await supabase
+      await writeClient
         .from('coaching_bookings')
         .update({ google_calendar_event_id: calendarEventId })
         .eq('id', bookingId)
