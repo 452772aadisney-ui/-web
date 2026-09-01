@@ -699,6 +699,10 @@ export async function completeCoachingBooking(formData: FormData): Promise<void>
   await completeCoachingBookingAction(formData)
 }
 
+export async function markCoachingBookingNoShow(formData: FormData): Promise<void> {
+  await markCoachingBookingNoShowAction(formData)
+}
+
 async function completeCoachingBookingAction(formData: FormData): Promise<CoachingActionState> {
   if (await assertAdmin()) return { error: '管理者権限が必要です' }
 
@@ -722,6 +726,33 @@ async function completeCoachingBookingAction(formData: FormData): Promise<Coachi
   if (error) return { error: '更新に失敗しました' }
 
   await evaluateAndUnlockAchievements(String(booking.student_id))
+
+  revalidateCoachingPaths()
+  return { success: true }
+}
+
+async function markCoachingBookingNoShowAction(formData: FormData): Promise<CoachingActionState> {
+  if (await assertAdmin()) return { error: '管理者権限が必要です' }
+
+  const bookingId = String(formData.get('bookingId') ?? '').trim()
+  if (!bookingId) return { error: '予約が指定されていません' }
+
+  const supabase = await createClient()
+  const { data: booking, error: fetchError } = await supabase
+    .from('coaching_bookings')
+    .select('id, status')
+    .eq('id', bookingId)
+    .maybeSingle<{ id: string; status: string }>()
+
+  if (fetchError || !booking) return { error: '予約が見つかりません' }
+  if (booking.status !== 'scheduled') return { error: '未実施にできる予約ではありません' }
+
+  const { error } = await supabase
+    .from('coaching_bookings')
+    .update({ status: 'no_show' })
+    .eq('id', bookingId)
+
+  if (error) return { error: '更新に失敗しました' }
 
   revalidateCoachingPaths()
   return { success: true }

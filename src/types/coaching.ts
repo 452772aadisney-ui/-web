@@ -1,4 +1,11 @@
-export type CoachingBookingStatus = 'scheduled' | 'completed' | 'cancelled'
+export type CoachingBookingStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show'
+
+export const COACHING_BOOKING_STATUS_LABELS: Record<CoachingBookingStatus, string> = {
+  scheduled: '予約済',
+  completed: '完了',
+  cancelled: 'キャンセル',
+  no_show: '未実施',
+}
 
 export interface CoachingCoach {
   id: string
