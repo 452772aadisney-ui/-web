@@ -23,7 +23,7 @@ export async function AdminCoachingUnbookedList({ students }: AdminCoachingUnboo
     <section className="mt-8 rounded-2xl border border-amber-200 bg-amber-50/40 p-6 shadow-sm">
       <h2 className="text-lg font-bold">今週（{weekLabel}）未予約の生徒</h2>
       <p className="mt-1 text-sm text-muted">
-        月〜日の間に scheduled のコーチング予約がない生徒です（既卒除く）。
+        月〜日の間にコーチング予約がなく、かつ今週実施済みでもない生徒です（既卒除く）。
       </p>
 
       {students.length === 0 ? (

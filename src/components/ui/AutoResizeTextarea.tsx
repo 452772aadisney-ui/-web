@@ -46,7 +46,7 @@ export function AutoResizeTextarea({
       const el = event.currentTarget
       const start = el.selectionStart ?? 0
       const end = el.selectionEnd ?? 0
-      const tab = '  '
+      const tab = '\u3000'
       const nextValue = `${el.value.substring(0, start)}${tab}${el.value.substring(end)}`
 
       const valueSetter = Object.getOwnPropertyDescriptor(

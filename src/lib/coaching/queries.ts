@@ -361,7 +361,7 @@ export async function fetchStudentsWithoutCoachingBookingThisWeek(): Promise<
   const { data: bookings, error } = await supabase
     .from('coaching_bookings')
     .select('student_id, coaching_slots!inner(slot_date)')
-    .eq('status', 'scheduled')
+    .in('status', ['scheduled', 'completed'])
     .in('coaching_slots.slot_date', weekDates)
 
   if (error) {
@@ -369,10 +369,10 @@ export async function fetchStudentsWithoutCoachingBookingThisWeek(): Promise<
     return []
   }
 
-  const bookedStudentIds = new Set((bookings ?? []).map((row) => String(row.student_id)))
+  const excludedStudentIds = new Set((bookings ?? []).map((row) => String(row.student_id)))
 
   return students
-    .filter((student) => !bookedStudentIds.has(student.id))
+    .filter((student) => !excludedStudentIds.has(student.id))
     .filter((student) => !isKisotsuGradeTag(gradeTagByStudentId.get(student.id)))
     .sort((a, b) => a.full_name.localeCompare(b.full_name, 'ja'))
 }
