@@ -1,26 +1,8 @@
 import Link from 'next/link'
 import { getPersonName } from '@/lib/auth/display-name'
+import { formatChatThreadTime } from '@/lib/chat/format'
 import type { ChatThreadSummary } from '@/lib/chat/thread-list'
 import { cn } from '@/lib/utils'
-
-function formatThreadTime(iso: string | null): string {
-  if (!iso) return ''
-
-  const date = new Date(iso)
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-  const diffDays = Math.floor((today.getTime() - target.getTime()) / 86400000)
-
-  if (diffDays === 0) {
-    return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
-  }
-  if (diffDays === 1) return '昨日'
-  if (diffDays < 7) {
-    return date.toLocaleDateString('ja-JP', { weekday: 'short' })
-  }
-  return date.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })
-}
 
 function ThreadBadge({ count }: { count: number }) {
   if (count <= 0) return null
@@ -79,7 +61,7 @@ export function ChatThreadList({
                   </p>
                   {thread.lastMessageAt && (
                     <span className="shrink-0 text-xs text-muted">
-                      {formatThreadTime(thread.lastMessageAt)}
+                      {formatChatThreadTime(thread.lastMessageAt)}
                     </span>
                   )}
                 </div>

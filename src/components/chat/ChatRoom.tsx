@@ -12,15 +12,7 @@ import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import type { ChatMessage, ChatParticipant } from '@/types/chat'
 
-function formatTime(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleString('ja-JP', {
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
+import { formatChatMessageTime } from '@/lib/chat/format'
 
 interface ChatRoomProps {
   studentId: string
@@ -183,7 +175,7 @@ export function ChatRoom({
                   <p className="mb-1 text-xs opacity-80">{getSenderLabel(message.sender_id)}</p>
                   <p className="whitespace-pre-wrap break-words">{message.body}</p>
                   <p className={cn('mt-1 text-[10px]', isMine ? 'text-white/70' : 'text-muted')}>
-                    {formatTime(message.created_at)}
+                    {formatChatMessageTime(message.created_at)}
                   </p>
                 </div>
               </div>
