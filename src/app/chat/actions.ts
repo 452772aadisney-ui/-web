@@ -5,6 +5,7 @@ import { evaluateAndUnlockAchievements, type UnlockedAchievement } from '@/lib/a
 import { notifyStudentChatMessage } from '@/lib/discord/notifications'
 import { notifyChatMessageReceived } from '@/lib/email/notifications'
 import { createClient } from '@/lib/supabase/server'
+import { fetchStudentsWithoutCoachingBookingThisWeek } from '@/lib/coaching/queries'
 import type { ChatMessage } from '@/types/chat'
 import type { UserRole } from '@/types/database'
 
@@ -13,6 +14,16 @@ export type ChatActionState = {
   message?: ChatMessage
   unlockedAchievements?: UnlockedAchievement[]
 }
+
+export type ChatBulkReminderState = {
+  error?: string
+  success?: boolean
+  sentCount?: number
+  failedCount?: number
+}
+
+const DEFAULT_COACHING_BOOKING_REMINDER =
+  '今週のコーチング予約が入っていません。マイページの「コーチング予約」から，早急に予約してください。今週が難しい場合は，必ず担当者に個別で相談してください。'
 
 export async function sendChatMessage(
   studentId: string,
@@ -97,4 +108,52 @@ export async function sendChatMessage(
     profile.role === 'student' ? await evaluateAndUnlockAchievements(user.id) : []
 
   return { message, unlockedAchievements }
+}
+
+export async function sendCoachingBookingReminders(
+  _prev: ChatBulkReminderState,
+  formData: FormData,
+): Promise<ChatBulkReminderState> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) return { error: 'ログインが必要です' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle<{ role: UserRole }>()
+
+  if (profile?.role !== 'admin') return { error: '管理者権限が必要です' }
+
+  const body = String(formData.get('body') ?? '').trim() || DEFAULT_COACHING_BOOKING_REMINDER
+  if (body.length > 2000) return { error: 'メッセージが長すぎます' }
+
+  const students = await fetchStudentsWithoutCoachingBookingThisWeek()
+  if (students.length === 0) return { error: '今週未予約の生徒がいません' }
+
+  let sentCount = 0
+  let failedCount = 0
+
+  for (const student of students) {
+    const result = await sendChatMessage(student.id, body)
+    if (result.error) failedCount += 1
+    else sentCount += 1
+  }
+
+  revalidatePath('/admin/chat')
+  revalidatePath('/admin/coaching')
+
+  if (sentCount === 0) {
+    return { error: 'メッセージの送信に失敗しました', failedCount }
+  }
+
+  return {
+    success: true,
+    sentCount,
+    failedCount,
+  }
 }
