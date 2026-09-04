@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { toast } from 'sonner'
 import { updateProfile, type ProfileActionState } from '@/app/profile/actions'
 import { useAchievementUnlockDialog } from '@/components/achievements/useAchievementUnlockDialog'
 import { useActionToast } from '@/hooks/useActionToast'
@@ -32,6 +31,7 @@ export function ProfileForm({ profile, backHref }: ProfileFormProps) {
 
   useActionToast(state, {
     successMessage: 'プロフィールを保存しました',
+    pending,
   })
 
   useEffect(() => {

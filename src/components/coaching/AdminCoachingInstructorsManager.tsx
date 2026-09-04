@@ -27,7 +27,10 @@ function CoachForm({
   const action = coach ? updateCoachingCoach : createCoachingCoach
   const [state, formAction, pending] = useActionState(action, initialState)
 
-  useActionToast(state, { successMessage: '保存しました' })
+  useActionToast(state, {
+    successMessage: coach ? '講師プロフィールを更新しました' : '講師プロフィールを追加しました',
+    pending,
+  })
 
   function handleDelete(event: FormEvent<HTMLFormElement>) {
     if (!window.confirm('本当に削除しますか？')) {
@@ -65,6 +68,12 @@ function CoachForm({
         </div>
 
         <CoachProfileFields coach={coach} />
+
+        {state.error && (
+          <p className="text-sm text-error" role="alert">
+            {state.error}
+          </p>
+        )}
 
         <div className="flex flex-wrap gap-2">
           <button

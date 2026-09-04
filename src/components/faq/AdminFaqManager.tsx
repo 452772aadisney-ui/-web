@@ -9,6 +9,7 @@ import {
   updateFaqItem,
   type FaqActionState,
 } from '@/app/faq/actions'
+import { useActionToast } from '@/hooks/useActionToast'
 import type { FaqCategoryWithItems } from '@/types/faq'
 
 const initialState: FaqActionState = {}
@@ -21,6 +22,11 @@ const textareaClass =
 
 function FaqItemEditor({ item }: { item: FaqCategoryWithItems['items'][number] }) {
   const [state, formAction, pending] = useActionState(updateFaqItem, initialState)
+
+  useActionToast(state, {
+    successMessage: 'FAQを保存しました',
+    pending,
+  })
 
   return (
     <article className="rounded-lg border border-border bg-background p-4">
@@ -59,8 +65,11 @@ function FaqItemEditor({ item }: { item: FaqCategoryWithItems['items'][number] }
           公開する
         </label>
 
-        {state.error && <p className="text-sm text-error">{state.error}</p>}
-        {state.success && <p className="text-sm text-green-700">保存しました</p>}
+        {state.error && (
+          <p className="text-sm text-error" role="alert">
+            {state.error}
+          </p>
+        )}
 
         <div className="flex flex-wrap gap-3">
           <button
@@ -93,6 +102,11 @@ function FaqItemEditor({ item }: { item: FaqCategoryWithItems['items'][number] }
 function CreateFaqItemForm({ categoryId }: { categoryId: string }) {
   const [state, formAction, pending] = useActionState(createFaqItem, initialState)
 
+  useActionToast(state, {
+    successMessage: 'FAQを追加しました',
+    pending,
+  })
+
   return (
     <form action={formAction} className="space-y-3 rounded-lg border border-dashed border-border p-4">
       <input type="hidden" name="categoryId" value={categoryId} />
@@ -113,8 +127,11 @@ function CreateFaqItemForm({ categoryId }: { categoryId: string }) {
         公開する
       </label>
 
-      {state.error && <p className="text-sm text-error">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">FAQを追加しました</p>}
+      {state.error && (
+        <p className="text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
 
       <button
         type="submit"
@@ -133,6 +150,11 @@ export function AdminFaqManager({ categories }: { categories: FaqCategoryWithIte
     initialState,
   )
 
+  useActionToast(categoryState, {
+    successMessage: 'カテゴリを追加しました',
+    pending: categoryPending,
+  })
+
   return (
     <div className="space-y-6">
       <form action={categoryAction} className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
@@ -147,8 +169,11 @@ export function AdminFaqManager({ categories }: { categories: FaqCategoryWithIte
             className={fieldClass}
           />
         </label>
-        {categoryState.error && <p className="text-sm text-error">{categoryState.error}</p>}
-        {categoryState.success && <p className="text-sm text-green-700">カテゴリを追加しました</p>}
+        {categoryState.error && (
+          <p className="text-sm text-error" role="alert">
+            {categoryState.error}
+          </p>
+        )}
         <button
           type="submit"
           disabled={categoryPending}

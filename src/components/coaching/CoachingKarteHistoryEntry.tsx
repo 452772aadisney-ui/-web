@@ -9,6 +9,7 @@ import {
 } from '@/app/coaching/actions'
 import type { CoachingCoach, CoachingKarteEntryWithDetails } from '@/types/coaching'
 import { AutoResizeTextarea } from '@/components/ui/AutoResizeTextarea'
+import { useActionToast } from '@/hooks/useActionToast'
 import { getPersonName } from '@/lib/auth/display-name'
 
 const initialState: CoachingActionState = {}
@@ -36,6 +37,15 @@ export function CoachingKarteHistoryEntry({
     deleteCoachingKarteEntry,
     initialState,
   )
+
+  useActionToast(updateState, {
+    successMessage: 'カルテを更新しました',
+    pending: updatePending,
+  })
+  useActionToast(deleteState, {
+    successMessage: 'カルテを削除しました',
+    pending: deletePending,
+  })
 
   useEffect(() => {
     if (updateState.success) {
@@ -109,7 +119,9 @@ export function CoachingKarteHistoryEntry({
           </label>
 
           {updateState.error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error">{updateState.error}</p>
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error" role="alert">
+              {updateState.error}
+            </p>
           )}
 
           <div className="flex flex-wrap gap-2">
@@ -176,7 +188,9 @@ export function CoachingKarteHistoryEntry({
       </div>
 
       {deleteState.error && (
-        <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-error">{deleteState.error}</p>
+        <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-error" role="alert">
+          {deleteState.error}
+        </p>
       )}
 
       <div className="mt-3 space-y-3 text-sm">

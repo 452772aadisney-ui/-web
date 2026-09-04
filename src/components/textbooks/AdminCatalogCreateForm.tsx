@@ -4,11 +4,17 @@ import { useActionState } from 'react'
 import { createTextbookCatalogEntry, type CatalogActionState } from '@/app/admin/bookshelf/actions'
 import { TextbookCatalogMetadataFields } from '@/components/textbooks/TextbookCatalogMetadataFields'
 import { UsageTagFields, inputClass } from '@/components/textbooks/TextbookFormFields'
+import { useActionToast } from '@/hooks/useActionToast'
 
 const initialState: CatalogActionState = {}
 
 export function AdminCatalogCreateForm({ publishers }: { publishers: string[] }) {
   const [state, formAction, pending] = useActionState(createTextbookCatalogEntry, initialState)
+
+  useActionToast(state, {
+    successMessage: '本棚に追加しました',
+    pending,
+  })
 
   return (
     <form action={formAction} className="space-y-4">
@@ -37,8 +43,11 @@ export function AdminCatalogCreateForm({ publishers }: { publishers: string[] })
         </div>
       </fieldset>
 
-      {state.error && <p className="text-sm text-error">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">本棚に追加しました</p>}
+      {state.error && (
+        <p className="text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
 
       <button
         type="submit"

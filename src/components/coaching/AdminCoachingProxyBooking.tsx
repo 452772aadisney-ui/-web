@@ -9,6 +9,7 @@ import {
 import { CoachingWeekGrid } from '@/components/coaching/CoachingWeekGrid'
 import { formatCoachingBookingDateTime } from '@/lib/coaching/format'
 import { getPersonName } from '@/lib/auth/display-name'
+import { useActionToast } from '@/hooks/useActionToast'
 import type { AvailableCoachingSlot, CoachingCoach } from '@/types/coaching'
 
 const initialState: CoachingActionState = {}
@@ -43,6 +44,11 @@ export function AdminCoachingProxyBooking({
   const [selectedCoachId, setSelectedCoachId] = useState(initialSelectedCoachId)
   const [selectedSlot, setSelectedSlot] = useState<AvailableCoachingSlot | null>(null)
   const [state, formAction, pending] = useActionState(adminBookCoachingSlot, initialState)
+
+  useActionToast(state, {
+    successMessage: '予約しました',
+    pending,
+  })
 
   useEffect(() => {
     setSelectedCoachId(initialSelectedCoachId)
@@ -196,8 +202,11 @@ export function AdminCoachingProxyBooking({
                 className={fieldClass}
               />
             </label>
-            {state.error && <p className="text-sm text-error">{state.error}</p>}
-            {state.success && <p className="text-sm text-green-700">予約しました</p>}
+            {state.error && (
+              <p className="text-sm text-error" role="alert">
+                {state.error}
+              </p>
+            )}
             <div className="flex gap-2">
               <button
                 type="submit"

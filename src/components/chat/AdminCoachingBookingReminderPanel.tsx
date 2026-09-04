@@ -2,6 +2,7 @@
 
 import { useActionState, type FormEvent } from 'react'
 import { sendCoachingBookingReminders, type ChatBulkReminderState } from '@/app/chat/actions'
+import { useActionToast } from '@/hooks/useActionToast'
 
 const initialState: ChatBulkReminderState = {}
 const fieldClass =
@@ -19,6 +20,18 @@ export function AdminCoachingBookingReminderPanel({
   defaultMessage,
 }: AdminCoachingBookingReminderPanelProps) {
   const [state, formAction, pending] = useActionState(sendCoachingBookingReminders, initialState)
+
+  const successMessage =
+    typeof state.sentCount === 'number'
+      ? `${state.sentCount} 名に送信しました${
+          state.failedCount ? `（${state.failedCount} 名は失敗）` : ''
+        }`
+      : '送信しました'
+
+  useActionToast(state, {
+    successMessage,
+    pending,
+  })
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -56,12 +69,8 @@ export function AdminCoachingBookingReminderPanel({
         </label>
 
         {state.error && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error">{state.error}</p>
-        )}
-        {state.success && (
-          <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
-            {state.sentCount} 名に送信しました
-            {state.failedCount ? `（${state.failedCount} 名は失敗）` : ''}。
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error" role="alert">
+            {state.error}
           </p>
         )}
 

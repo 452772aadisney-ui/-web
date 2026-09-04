@@ -7,6 +7,7 @@ import {
   type TagActionState,
 } from '@/app/tags/actions'
 import { groupTagsByCategory } from '@/lib/tags/group'
+import { useActionToast } from '@/hooks/useActionToast'
 import type { StudentTag } from '@/types/tag'
 
 const initialState: TagActionState = {}
@@ -16,6 +17,11 @@ const fieldClass =
 export function AdminTagManager({ tags }: { tags: StudentTag[] }) {
   const [state, formAction, pending] = useActionState(createStudentTag, initialState)
   const grouped = groupTagsByCategory(tags)
+
+  useActionToast(state, {
+    successMessage: 'タグを追加しました',
+    pending,
+  })
 
   return (
     <div className="space-y-6">
@@ -35,8 +41,11 @@ export function AdminTagManager({ tags }: { tags: StudentTag[] }) {
             <input name="name" required placeholder="例: 高3、文系" className={fieldClass} />
           </label>
         </div>
-        {state.error && <p className="text-sm text-error">{state.error}</p>}
-        {state.success && <p className="text-sm text-green-700">タグを追加しました</p>}
+        {state.error && (
+          <p className="text-sm text-error" role="alert">
+            {state.error}
+          </p>
+        )}
         <button
           type="submit"
           disabled={pending}

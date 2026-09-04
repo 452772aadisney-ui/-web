@@ -9,6 +9,7 @@ import {
   type QuizActionState,
 } from '@/app/quizzes/actions'
 import { AdminQuizRegisterForm } from '@/components/quizzes/AdminQuizRegisterForm'
+import { useActionToast } from '@/hooks/useActionToast'
 import type { StudentListGroup } from '@/lib/tags/grade-order'
 import type { QuizAssignmentDetail, StudentQuizAssignmentRow } from '@/types/quiz'
 
@@ -32,6 +33,11 @@ function QuizScoreRowForm({
   initialNote: string
 }) {
   const [state, formAction, pending] = useActionState(saveQuizResult, initialState)
+
+  useActionToast(state, {
+    successMessage: '点数を保存しました',
+    pending,
+  })
 
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">
@@ -71,8 +77,11 @@ function QuizScoreRowForm({
       >
         {pending ? '保存中…' : '保存'}
       </button>
-      {state.error && <p className="w-full text-sm text-error">{state.error}</p>}
-      {state.success && <p className="w-full text-sm text-green-700">保存しました</p>}
+      {state.error && (
+        <p className="w-full text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
     </form>
   )
 }
@@ -90,6 +99,11 @@ export function AdminQuizAssignmentScoreTable({
       note: student.result?.note ?? '',
     })),
   )
+
+  useActionToast(state, {
+    successMessage: '一括保存しました',
+    pending,
+  })
 
   return (
     <div className="space-y-6">
@@ -152,8 +166,11 @@ export function AdminQuizAssignmentScoreTable({
             </tbody>
           </table>
         </div>
-        {state.error && <p className="text-sm text-error">{state.error}</p>}
-        {state.success && <p className="text-sm text-green-700">一括保存しました</p>}
+        {state.error && (
+          <p className="text-sm text-error" role="alert">
+            {state.error}
+          </p>
+        )}
         <button
           type="submit"
           disabled={pending}

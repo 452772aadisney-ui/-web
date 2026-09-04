@@ -12,6 +12,7 @@ import {
   AnnouncementTargetFields,
   fieldClass,
 } from '@/components/announcements/AnnouncementTargetFields'
+import { useActionToast } from '@/hooks/useActionToast'
 import {
   formatAnnouncementTargetSummary,
   resolveAnnouncementAudience,
@@ -47,6 +48,11 @@ function AnnouncementForm({
   const action = announcement ? updateAnnouncement : createAnnouncement
   const [state, formAction, pending] = useActionState(action, initialState)
 
+  useActionToast(state, {
+    successMessage: announcement ? 'お知らせを更新しました' : 'お知らせを投稿しました',
+    pending,
+  })
+
   return (
     <form action={formAction} className="space-y-3 rounded-lg border border-border bg-background p-4">
       {announcement && <input type="hidden" name="id" value={announcement.id} />}
@@ -69,8 +75,11 @@ function AnnouncementForm({
         students={students}
         announcement={announcement}
       />
-      {state.error && <p className="text-sm text-error">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">保存しました</p>}
+      {state.error && (
+        <p className="text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
       <div className="flex gap-2">
         <button
           type="submit"

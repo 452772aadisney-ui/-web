@@ -12,6 +12,7 @@ import {
   UsageTagFields,
   inputClass,
 } from '@/components/textbooks/TextbookFormFields'
+import { useActionToast } from '@/hooks/useActionToast'
 import type { StudentListGroup } from '@/lib/tags/grade-order'
 import type { TextbookCatalog } from '@/types/textbook'
 
@@ -35,6 +36,11 @@ export function AdminBulkTextbookRegister({
     () => catalog.find((item) => item.id === catalogId) ?? null,
     [catalog, catalogId],
   )
+
+  useActionToast(state, {
+    successMessage: '選択した生徒に参考書を登録しました',
+    pending,
+  })
 
   function toggleStudent(id: string) {
     setSelectedIds((prev) => {
@@ -137,8 +143,11 @@ export function AdminBulkTextbookRegister({
         />
       </section>
 
-      {state.error && <p className="text-sm text-error">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">選択した生徒に参考書を登録しました</p>}
+      {state.error && (
+        <p className="text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
 
       <button
         type="submit"

@@ -12,6 +12,7 @@ import { AdminStudentCheckboxGroups } from '@/components/textbooks/AdminStudentC
 import { TextbookCatalogMetadataFields } from '@/components/textbooks/TextbookCatalogMetadataFields'
 import { TextbookDetailTagFields } from '@/components/textbooks/TextbookDetailTagFields'
 import { UsageTagFields, inputClass } from '@/components/textbooks/TextbookFormFields'
+import { useActionToast } from '@/hooks/useActionToast'
 import type { StudentListGroup } from '@/lib/tags/grade-order'
 import type {
   AdminBookshelfOverview,
@@ -70,6 +71,11 @@ export function AdminBookshelfEditModal({
 
   const state = isCatalog ? catalogState : studentState
   const pending = isCatalog ? catalogPending : studentPending
+
+  useActionToast(state, {
+    successMessage: '変更を保存しました',
+    pending,
+  })
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     () => new Set(item.users.map((user) => user.student_id)),
@@ -225,7 +231,11 @@ export function AdminBookshelfEditModal({
             />
           </div>
 
-          {state.error && <p className="text-sm text-error">{state.error}</p>}
+          {state.error && (
+            <p className="text-sm text-error" role="alert">
+              {state.error}
+            </p>
+          )}
 
           <div className="flex flex-wrap gap-3">
             <button

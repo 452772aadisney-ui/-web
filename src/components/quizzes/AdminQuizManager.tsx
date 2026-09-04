@@ -8,6 +8,7 @@ import {
   type QuizActionState,
 } from '@/app/quizzes/actions'
 import { AdminQuizRegisterForm } from '@/components/quizzes/AdminQuizRegisterForm'
+import { useActionToast } from '@/hooks/useActionToast'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
 import type { StudentListGroup } from '@/lib/tags/grade-order'
 import type { QuizAssignmentListItem, QuizMaster } from '@/types/quiz'
@@ -29,6 +30,11 @@ function QuizMasterForm({
   onCancel?: () => void
 }) {
   const [state, formAction, pending] = useActionState(updateQuizMaster, initialState)
+
+  useActionToast(state, {
+    successMessage: '小テストマスタを更新しました',
+    pending,
+  })
 
   return (
     <form action={formAction} className="space-y-3 rounded-lg border border-border bg-background p-4">
@@ -70,8 +76,11 @@ function QuizMasterForm({
           有効
         </label>
       </div>
-      {state.error && <p className="text-sm text-error">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">保存しました</p>}
+      {state.error && (
+        <p className="text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
       <div className="flex gap-2">
         <button
           type="submit"

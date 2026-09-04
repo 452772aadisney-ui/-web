@@ -27,7 +27,20 @@ export default function RootLayout({
     <html lang="ja">
       <body className={`${notoSansJp.variable} font-sans antialiased`}>
         {children}
-        <Toaster position="top-center" richColors duration={2000} />
+        <Toaster
+          position="top-right"
+          richColors
+          closeButton
+          duration={3000}
+          offset={{ top: '8rem', right: '1rem' }}
+          mobileOffset={{ top: '8rem', right: '0.75rem', left: '0.75rem' }}
+          containerAriaLabel="通知"
+          toastOptions={{
+            classNames: {
+              toast: 'max-w-[min(24rem,calc(100vw-1.5rem))]',
+            },
+          }}
+        />
       </body>
     </html>
   )

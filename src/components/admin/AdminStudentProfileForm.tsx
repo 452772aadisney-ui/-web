@@ -7,6 +7,7 @@ import {
 } from '@/app/admin/students/actions'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
 import { SubjectCheckboxGrid } from '@/components/subjects/SubjectCheckboxGrid'
+import { useActionToast } from '@/hooks/useActionToast'
 
 const initialState: AdminStudentProfileActionState = {}
 const fieldClass =
@@ -29,6 +30,11 @@ interface AdminStudentProfileFormProps {
 export function AdminStudentProfileForm({ student }: AdminStudentProfileFormProps) {
   const [state, formAction, pending] = useActionState(updateStudentProfileByAdmin, initialState)
   const selectedSubjects = new Set(student.subjects ?? [])
+
+  useActionToast(state, {
+    successMessage: '生徒情報を保存しました',
+    pending,
+  })
 
   return (
     <form action={formAction} className="mt-4 space-y-5">
@@ -97,11 +103,8 @@ export function AdminStudentProfileForm({ student }: AdminStudentProfileFormProp
       </fieldset>
 
       {state.error && (
-        <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-error">{state.error}</p>
-      )}
-      {state.success && (
-        <p className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">
-          生徒情報を保存しました
+        <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-error" role="alert">
+          {state.error}
         </p>
       )}
 

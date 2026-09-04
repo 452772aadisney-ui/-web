@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react'
 import { registerStudentQuizzes, type QuizActionState } from '@/app/quizzes/actions'
+import { useActionToast } from '@/hooks/useActionToast'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
 import { getTodayDateKey } from '@/lib/study/dates'
 
@@ -15,6 +16,11 @@ interface AdminCoachingKarteQuizFormProps {
 
 export function AdminCoachingKarteQuizForm({ studentId }: AdminCoachingKarteQuizFormProps) {
   const [state, formAction, pending] = useActionState(registerStudentQuizzes, initialState)
+
+  useActionToast(state, {
+    successMessage: '小テストを登録しました',
+    pending,
+  })
 
   return (
     <section className="mt-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -79,11 +85,8 @@ export function AdminCoachingKarteQuizForm({ studentId }: AdminCoachingKarteQuiz
         </label>
 
         {state.error && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error">{state.error}</p>
-        )}
-        {state.success && (
-          <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
-            小テストを登録しました
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error" role="alert">
+            {state.error}
           </p>
         )}
 

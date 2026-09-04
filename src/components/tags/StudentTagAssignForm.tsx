@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import { updateProfileTags, type TagActionState } from '@/app/tags/actions'
 import { groupTagsByCategory } from '@/lib/tags/group'
+import { useActionToast } from '@/hooks/useActionToast'
 import type { StudentTag } from '@/types/tag'
 
 const initialState: TagActionState = {}
@@ -21,6 +22,11 @@ export function StudentTagAssignForm({
   const [state, formAction, pending] = useActionState(updateProfileTags, initialState)
   const assigned = new Set(assignedTagIds)
   const grouped = groupTagsByCategory(allTags)
+
+  useActionToast(state, {
+    successMessage: 'タグを保存しました',
+    pending,
+  })
 
   if (allTags.length === 0) {
     return (
@@ -55,8 +61,11 @@ export function StudentTagAssignForm({
           </div>
         </div>
       ))}
-      {state.error && <p className="text-sm text-error">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">タグを更新しました</p>}
+      {state.error && (
+        <p className="text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
       <button
         type="submit"
         disabled={pending}

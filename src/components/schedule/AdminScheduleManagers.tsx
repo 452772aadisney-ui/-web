@@ -18,6 +18,7 @@ import {
   ScheduleStudentPicker,
 } from '@/components/schedule/ScheduleStudentPicker'
 import { HomeworkCompletionOverview } from '@/components/todo/AdminTodoTables'
+import { useActionToast } from '@/hooks/useActionToast'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
 import type {
   ExamScheduleWithTargets,
@@ -47,6 +48,11 @@ function QuizForm({
 }) {
   const action = exam ? updateExamSchedule : createExamSchedule
   const [state, formAction, pending] = useActionState(action, initialState)
+
+  useActionToast(state, {
+    successMessage: exam ? '小テスト予定を更新しました' : '小テスト予定を登録しました',
+    pending,
+  })
 
   return (
     <form action={formAction} className="space-y-3 rounded-lg border border-border bg-background p-4">
@@ -79,8 +85,11 @@ function QuizForm({
         students={students}
         selectedStudentIds={exam?.target_all ? [] : exam?.target_student_ids}
       />
-      {state.error && <p className="text-sm text-error">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">保存しました</p>}
+      {state.error && (
+        <p className="text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
       <div className="flex gap-2">
         <button type="submit" disabled={pending} className="rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-60">
           {pending ? '保存中…' : exam ? '更新' : '登録'}
@@ -102,6 +111,11 @@ function MockExamForm({
 }) {
   const action = exam ? updateExamSchedule : createExamSchedule
   const [state, formAction, pending] = useActionState(action, initialState)
+
+  useActionToast(state, {
+    successMessage: exam ? '模試予定を更新しました' : '模試予定を登録しました',
+    pending,
+  })
 
   return (
     <form action={formAction} className="space-y-3 rounded-lg border border-border bg-background p-4">
@@ -138,8 +152,11 @@ function MockExamForm({
         students={students}
         selectedStudentIds={exam?.target_all ? [] : exam?.target_student_ids}
       />
-      {state.error && <p className="text-sm text-error">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">保存しました</p>}
+      {state.error && (
+        <p className="text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
       <div className="flex gap-2">
         <button type="submit" disabled={pending} className="rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-60">
           {pending ? '保存中…' : exam ? '更新' : '登録'}
@@ -161,6 +178,11 @@ function HomeworkForm({
 }) {
   const action = task ? updateHomeworkTask : createHomeworkTask
   const [state, formAction, pending] = useActionState(action, initialState)
+
+  useActionToast(state, {
+    successMessage: task ? '宿題を更新しました' : '宿題を登録しました',
+    pending,
+  })
 
   return (
     <form action={formAction} className="space-y-3 rounded-lg border border-border bg-background p-4">
@@ -192,8 +214,11 @@ function HomeworkForm({
         students={students}
         selectedStudentIds={task?.target_all ? [] : task?.target_student_ids}
       />
-      {state.error && <p className="text-sm text-error">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">保存しました</p>}
+      {state.error && (
+        <p className="text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
       <div className="flex gap-2">
         <button type="submit" disabled={pending} className="rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-60">
           {pending ? '保存中…' : task ? '更新' : '登録'}
@@ -216,6 +241,11 @@ function ApplicationForm({
   const action = task ? updateApplicationTask : createApplicationTask
   const [state, formAction, pending] = useActionState(action, initialState)
 
+  useActionToast(state, {
+    successMessage: task ? '出願タスクを更新しました' : '出願タスクを登録しました',
+    pending,
+  })
+
   return (
     <form action={formAction} className="space-y-3 rounded-lg border border-border bg-background p-4">
       {task && <input type="hidden" name="id" value={task.id} />}
@@ -237,8 +267,11 @@ function ApplicationForm({
         students={students}
         selectedStudentIds={task?.target_all ? [] : task?.target_student_ids}
       />
-      {state.error && <p className="text-sm text-error">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">保存しました</p>}
+      {state.error && (
+        <p className="text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
       <div className="flex gap-2">
         <button type="submit" disabled={pending} className="rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-60">
           {pending ? '保存中…' : task ? '更新' : '登録'}

@@ -9,12 +9,16 @@ import {
 import { CoachingKarteHistoryEntry } from '@/components/coaching/CoachingKarteHistoryEntry'
 import { AutoResizeTextarea } from '@/components/ui/AutoResizeTextarea'
 import { Pagination } from '@/components/ui/Pagination'
-import { useActionToast } from '@/hooks/useActionToast'
+import {
+  ACTION_TOAST_SUCCESS_DURATION_MS,
+  useActionToast,
+} from '@/hooks/useActionToast'
 import {
   clearKarteDraft,
   loadKarteDraft,
   saveKarteDraft,
 } from '@/lib/coaching/karte-draft'
+import { toast } from 'sonner'
 import type { CoachingCoach, CoachingKarteEntryWithDetails } from '@/types/coaching'
 
 const initialState: CoachingActionState = {}
@@ -54,10 +58,10 @@ export function AdminCoachingKarteForm({
   const [nextCommitments, setNextCommitments] = useState('')
   const [bookingId, setBookingId] = useState(defaultBookingId ?? '')
   const [draftLoaded, setDraftLoaded] = useState(false)
-  const [draftSaved, setDraftSaved] = useState(false)
 
   useActionToast(state, {
     successMessage: 'カルテを保存しました',
+    pending,
   })
 
   useEffect(() => {
@@ -80,7 +84,6 @@ export function AdminCoachingKarteForm({
       setDiscussionContent('')
       setNextCommitments('')
       setBookingId(defaultBookingId ?? '')
-      setDraftSaved(false)
       setDraftLoaded(false)
       router.refresh()
     }
@@ -101,8 +104,11 @@ export function AdminCoachingKarteForm({
       nextCommitments,
       bookingId,
     })
-    setDraftSaved(true)
     setDraftLoaded(false)
+    toast.success(<span role="status">一時保存しました</span>, {
+      id: `karte-draft-${studentId}`,
+      duration: ACTION_TOAST_SUCCESS_DURATION_MS,
+    })
   }
 
   const historyPathname = `/admin/coaching/karte/${studentId}`
@@ -173,13 +179,13 @@ export function AdminCoachingKarteForm({
           </label>
 
           {draftLoaded && (
-            <p className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800">
+            <p className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800" role="status">
               前回の一時保存内容を復元しました
             </p>
           )}
-          {draftSaved && (
-            <p className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800">
-              一時保存しました
+          {state.error && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error" role="alert">
+              {state.error}
             </p>
           )}
 

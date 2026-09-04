@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react'
 import { registerStudentQuizzes, type QuizActionState } from '@/app/quizzes/actions'
 import { AdminStudentCheckboxGroups } from '@/components/textbooks/AdminStudentCheckboxGroups'
+import { useActionToast } from '@/hooks/useActionToast'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
 import type { StudentListGroup } from '@/lib/tags/grade-order'
 
@@ -23,6 +24,11 @@ export function AdminQuizRegisterForm({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(
     () => new Set(defaultSelectedStudentIds),
   )
+
+  useActionToast(state, {
+    successMessage: '小テストを登録しました',
+    pending,
+  })
 
   function toggleStudent(id: string) {
     setSelectedIds((prev) => {
@@ -107,8 +113,11 @@ export function AdminQuizRegisterForm({
         </p>
       </div>
 
-      {state.error && <p className="text-sm text-error">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">小テストを登録しました</p>}
+      {state.error && (
+        <p className="text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
 
       <button
         type="submit"

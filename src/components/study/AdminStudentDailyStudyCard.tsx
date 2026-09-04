@@ -10,6 +10,7 @@ import { formatDuration } from '@/lib/study/chart-data'
 import type { StudyLog } from '@/lib/study/chart-data'
 import { STUDY_FEEDBACK_STAMPS, type StudyDayFeedback } from '@/lib/study/feedback'
 import { getPersonName } from '@/lib/auth/display-name'
+import { useActionToast } from '@/hooks/useActionToast'
 import type { StudentDailyStudySummary } from '@/lib/study/feedback-queries'
 
 const initialState: StudyDailyFeedbackActionState = {}
@@ -58,6 +59,11 @@ function IncompleteStudyCard({
 }) {
   const [state, formAction, pending] = useActionState(upsertStudyDayFeedback, initialState)
   const defaultStamp = feedback?.stamp ?? STUDY_FEEDBACK_STAMPS[0].id
+
+  useActionToast(state, {
+    successMessage: 'フィードバックを保存しました',
+    pending,
+  })
 
   return (
     <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
@@ -116,8 +122,11 @@ function IncompleteStudyCard({
           />
         </label>
 
-        {state.error && <p className="text-sm text-error">{state.error}</p>}
-        {state.success && <p className="text-sm text-green-700">フィードバックを保存しました</p>}
+        {state.error && (
+          <p className="text-sm text-error" role="alert">
+            {state.error}
+          </p>
+        )}
 
         <button
           type="submit"
