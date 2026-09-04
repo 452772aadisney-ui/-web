@@ -3,10 +3,12 @@ import { requireProfile } from '@/app/profile/actions'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { TextbookCatalogSearchResults } from '@/components/textbooks/TextbookCatalogSearchResults'
 import { TextbookSearchMenu } from '@/components/textbooks/TextbookSearchMenu'
+import { Pagination } from '@/components/ui/Pagination'
 import {
   fetchStudentCatalogIds,
-  fetchTextbookCatalogForStudent,
+  searchTextbookCatalogPaginated,
 } from '@/lib/textbooks/catalog-queries'
+import { parseSearchListParam } from '@/lib/textbooks/catalog-filter'
 
 export default async function TextbookSearchResultsPage({
   searchParams,
@@ -17,14 +19,27 @@ export default async function TextbookSearchResultsPage({
     publisher?: string
     university?: string
     purpose?: string
+    catalogPage?: string
   }>
 }) {
   const profile = await requireProfile()
   if (profile.role !== 'student') redirect('/dashboard')
 
   const params = await searchParams
-  const [catalog, registeredCatalogIds] = await Promise.all([
-    fetchTextbookCatalogForStudent(profile.id),
+  const pageNumber = params.catalogPage ? parseInt(params.catalogPage, 10) : 1
+
+  const [searchResult, registeredCatalogIds] = await Promise.all([
+    searchTextbookCatalogPaginated({
+      query: params.q,
+      detailTags: parseSearchListParam(params.tags),
+      publisher: params.publisher,
+      university: params.university,
+      purpose: params.purpose,
+      publicOnly: true,
+      searchableOnly: true,
+      page: Number.isFinite(pageNumber) ? pageNumber : 1,
+      pageSize: 20,
+    }),
     fetchStudentCatalogIds(profile.id),
   ])
 
@@ -50,14 +65,24 @@ export default async function TextbookSearchResultsPage({
           <TextbookSearchMenu initialQuery={params.q ?? ''} compact />
         </section>
         <TextbookCatalogSearchResults
-          catalog={catalog}
+          catalog={searchResult.items}
           registeredCatalogIds={[...registeredCatalogIds]}
           studentId={profile.id}
-          query={params.q}
-          tags={params.tags}
-          publisher={params.publisher}
-          university={params.university}
-          purpose={params.purpose}
+          alreadyFiltered
+        />
+        <Pagination
+          currentPage={searchResult.page}
+          totalCount={searchResult.totalCount}
+          pageSize={searchResult.pageSize}
+          pageParam="catalogPage"
+          pathname="/dashboard/textbooks/search/results"
+          preserveParams={{
+            q: params.q,
+            tags: params.tags,
+            publisher: params.publisher,
+            university: params.university,
+            purpose: params.purpose,
+          }}
         />
       </div>
     </StudentPageShell>

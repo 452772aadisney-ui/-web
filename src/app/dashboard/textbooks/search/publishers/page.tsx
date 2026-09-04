@@ -4,21 +4,16 @@ import { requireProfile } from '@/app/profile/actions'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { TEXTBOOK_PUBLISHERS } from '@/lib/constants/textbook-search'
 import {
-  fetchTextbookCatalogForStudent,
-} from '@/lib/textbooks/catalog-queries'
-import { getUniquePublishersFromCatalog } from '@/lib/textbooks/catalog-filter'
+  fetchTextbookPublisherOptions,
+  mergeTextbookPublisherOptions,
+} from '@/lib/textbooks/publisher-options'
 
 export default async function TextbookSearchPublishersPage() {
   const profile = await requireProfile()
   if (profile.role !== 'student') redirect('/dashboard')
 
-  const catalog = await fetchTextbookCatalogForStudent(profile.id)
-  const publishers = [
-    ...new Set([
-      ...TEXTBOOK_PUBLISHERS,
-      ...getUniquePublishersFromCatalog(catalog, { publicOnly: true, searchableOnly: true }),
-    ]),
-  ].sort((a, b) => a.localeCompare(b, 'ja'))
+  const dbPublishers = await fetchTextbookPublisherOptions()
+  const publishers = mergeTextbookPublisherOptions(TEXTBOOK_PUBLISHERS, dbPublishers)
 
   return (
     <StudentPageShell

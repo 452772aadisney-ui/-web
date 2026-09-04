@@ -10,14 +10,25 @@ import { StudyDayFeedbackCard } from '@/components/study/StudyDayFeedbackCard'
 import { StudyFeedbackReadMarker } from '@/components/study/StudyFeedbackReadMarker'
 import {
   buildDailyChartData,
+  buildSubjectPieDataFromMinutes,
   formatDuration,
 } from '@/lib/study/chart-data'
-import { getJstDateKey, getTodayDateKey, isValidDateKey } from '@/lib/study/dates'
+import {
+  getJstDateKey,
+  getRecentDateKeys,
+  getTodayDateKey,
+  isValidDateKey,
+} from '@/lib/study/dates'
 import {
   fetchStudyDayFeedback,
   fetchUnreadStudyFeedbackDates,
 } from '@/lib/study/feedback-queries'
-import { fetchStudyLogsForStudent, fetchTextbooksForStudent } from '@/lib/study/queries'
+import {
+  fetchStudyLogsForStudentInDateRange,
+  fetchStudyLogsForStudentOnDate,
+  fetchStudySubjectMinutesForStudent,
+  fetchTextbooksForStudent,
+} from '@/lib/study/queries'
 
 export default async function StudentStudyHistoryPage({
   searchParams,
@@ -38,27 +49,38 @@ export default async function StudentStudyHistoryPage({
     redirect(`/dashboard/study/history?date=${todayKey}`)
   }
 
-  const [logs, textbooks, feedback, unreadFeedbackDates] = await Promise.all([
-    fetchStudyLogsForStudent(profile.id),
-    fetchTextbooksForStudent(profile.id),
-    fetchStudyDayFeedback(profile.id, selectedDate),
-    fetchUnreadStudyFeedbackDates(profile.id),
-  ])
+  const recentKeys = getRecentDateKeys(14)
+  const rangeFrom = recentKeys[0]!
+  const rangeTo = recentKeys[recentKeys.length - 1]!
+
+  const [dayLogs, rangeLogs, minutesAll, minutes14, textbooks, feedback, unreadFeedbackDates] =
+    await Promise.all([
+      fetchStudyLogsForStudentOnDate(profile.id, selectedDate),
+      fetchStudyLogsForStudentInDateRange(profile.id, rangeFrom, rangeTo),
+      fetchStudySubjectMinutesForStudent(profile.id),
+      fetchStudySubjectMinutesForStudent(profile.id, {
+        fromDate: rangeFrom,
+        toDate: rangeTo,
+      }),
+      fetchTextbooksForStudent(profile.id),
+      fetchStudyDayFeedback(profile.id, selectedDate),
+      fetchUnreadStudyFeedbackDates(profile.id),
+    ])
 
   const hasUnreadFeedbackOnSelected =
     unreadFeedbackDates.has(selectedDate) && Boolean(feedback?.comment.trim())
 
-  const dayLogs = logs.filter((log) => log.studied_on === selectedDate)
   const dayMinutes = dayLogs.reduce((sum, log) => sum + log.duration_minutes, 0)
-
-  const { rows, subjects } = buildDailyChartData(logs, 14)
-  const piePeriod = params.piePeriod === '14' ? '14' : 'all'
-  const totalMinutes = logs.reduce((sum, log) => sum + log.duration_minutes, 0)
+  const { rows, subjects } = buildDailyChartData(rangeLogs, 14)
+  const pieDataAll = buildSubjectPieDataFromMinutes(minutesAll)
+  const pieData14 = buildSubjectPieDataFromMinutes(minutes14)
+  const totalMinutes = minutesAll.reduce((sum, row) => sum + row.minutes, 0)
   const chartTodayKey = getTodayDateKey()
-  const todayMinutes = logs
+  const todayMinutes = rangeLogs
     .filter((log) => log.studied_on === chartTodayKey)
     .reduce((sum, log) => sum + log.duration_minutes, 0)
   const profileSubjects = profile.subjects ?? []
+  const piePeriod = params.piePeriod === '14' ? '14' : 'all'
 
   return (
     <StudentPageShell title="学習履歴" backHref="/dashboard" backLabel="マイページ">
@@ -116,7 +138,8 @@ export default async function StudentStudyHistoryPage({
 
         <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <SubjectStudyPieSection
-            logs={logs}
+            data14={pieData14}
+            dataAll={pieDataAll}
             initialPeriod={piePeriod}
             basePath="/dashboard/study/history"
             preserveParams={{ date: selectedDate !== todayKey ? selectedDate : undefined }}

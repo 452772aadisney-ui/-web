@@ -1,6 +1,5 @@
 'use client'
 
-import { useMemo } from 'react'
 import { TextbookCatalogListItem } from '@/components/textbooks/TextbookCatalogListItem'
 import {
   filterTextbookCatalog,
@@ -17,6 +16,8 @@ interface TextbookCatalogSearchResultsProps {
   publisher?: string
   university?: string
   purpose?: string
+  /** When true, catalog is already server-filtered/paginated. */
+  alreadyFiltered?: boolean
 }
 
 export function TextbookCatalogSearchResults({
@@ -28,24 +29,23 @@ export function TextbookCatalogSearchResults({
   publisher,
   university,
   purpose,
+  alreadyFiltered = false,
 }: TextbookCatalogSearchResultsProps) {
-  const registered = useMemo(() => new Set(registeredCatalogIds), [registeredCatalogIds])
+  const registered = new Set(registeredCatalogIds)
 
-  const results = useMemo(() => {
-    const filtered = filterTextbookCatalog(
-      catalog,
-      {
-        query,
-        detailTags: parseSearchListParam(tags),
-        publisher,
-        university,
-        studyPurpose: purpose,
-      },
-      { publicOnly: true },
-    )
-
-    return filtered
-  }, [catalog, query, tags, publisher, university, purpose, registered])
+  const results = alreadyFiltered
+    ? catalog
+    : filterTextbookCatalog(
+        catalog,
+        {
+          query,
+          detailTags: parseSearchListParam(tags),
+          publisher,
+          university,
+          studyPurpose: purpose,
+        },
+        { publicOnly: true },
+      )
 
   if (results.length === 0) {
     return (

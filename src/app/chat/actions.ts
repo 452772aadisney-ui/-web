@@ -6,6 +6,7 @@ import { notifyStudentChatMessage } from '@/lib/discord/notifications'
 import { notifyChatMessageReceived } from '@/lib/email/notifications'
 import { createClient } from '@/lib/supabase/server'
 import { fetchStudentsWithoutCoachingBookingThisWeek } from '@/lib/coaching/queries'
+import { fetchChatMessagesPage } from '@/lib/chat/queries'
 import type { ChatMessage } from '@/types/chat'
 import type { UserRole } from '@/types/database'
 
@@ -108,6 +109,36 @@ export async function sendChatMessage(
     profile.role === 'student' ? await evaluateAndUnlockAchievements(user.id) : []
 
   return { message, unlockedAchievements }
+}
+
+export async function loadOlderChatMessages(
+  studentId: string,
+  before: string,
+): Promise<{ messages?: ChatMessage[]; hasMore?: boolean; error?: string }> {
+  if (!studentId || !before) return { error: '不正なリクエストです' }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'ログインが必要です' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .maybeSingle<{ role: UserRole }>()
+
+  if (!profile) return { error: 'プロフィールを取得できません' }
+  if (profile.role === 'student' && studentId !== user.id) {
+    return { error: '閲覧できません' }
+  }
+  if (profile.role !== 'student' && profile.role !== 'admin') {
+    return { error: '閲覧権限がありません' }
+  }
+
+  const result = await fetchChatMessagesPage(studentId, { before })
+  return result
 }
 
 export async function sendCoachingBookingReminders(

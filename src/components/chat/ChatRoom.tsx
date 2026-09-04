@@ -2,16 +2,14 @@
 
 import Link from 'next/link'
 import { getPersonName } from '@/lib/auth/display-name'
-
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { sendChatMessage } from '@/app/chat/actions'
+import { loadOlderChatMessages, sendChatMessage } from '@/app/chat/actions'
 import { useAchievementUnlockDialog } from '@/components/achievements/useAchievementUnlockDialog'
 import type { UnlockedAchievement } from '@/lib/achievements/unlock'
 import { markChatAsRead } from '@/lib/chat/unread'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import type { ChatMessage, ChatParticipant } from '@/types/chat'
-
 import { formatChatMessageTime } from '@/lib/chat/format'
 
 interface ChatRoomProps {
@@ -20,6 +18,7 @@ interface ChatRoomProps {
   currentUserRole: 'student' | 'admin'
   studentParticipant: ChatParticipant
   initialMessages: ChatMessage[]
+  initialHasMore?: boolean
   peerLabel?: string
 }
 
@@ -29,9 +28,12 @@ export function ChatRoom({
   currentUserRole,
   studentParticipant,
   initialMessages,
+  initialHasMore = false,
   peerLabel,
 }: ChatRoomProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
+  const [hasMore, setHasMore] = useState(initialHasMore)
+  const [loadingOlder, setLoadingOlder] = useState(false)
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -40,17 +42,21 @@ export function ChatRoom({
   >(undefined)
   const { dialog: achievementDialog } = useAchievementUnlockDialog(lastUnlockedAchievements)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const shouldStickToBottom = useRef(true)
   const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
     setMessages(initialMessages)
-  }, [initialMessages, studentId])
+    setHasMore(initialHasMore)
+  }, [initialMessages, initialHasMore, studentId])
 
   useEffect(() => {
     void markChatAsRead(studentId)
   }, [studentId])
 
   useEffect(() => {
+    if (!shouldStickToBottom.current) return
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
@@ -67,6 +73,7 @@ export function ChatRoom({
         },
         (payload) => {
           const incoming = payload.new as ChatMessage
+          shouldStickToBottom.current = true
           setMessages((prev) => {
             if (prev.some((m) => m.id === incoming.id)) return prev
             return [...prev, incoming]
@@ -88,6 +95,37 @@ export function ChatRoom({
     return '管理者'
   }
 
+  const handleLoadOlder = async () => {
+    if (!hasMore || loadingOlder || messages.length === 0) return
+
+    const oldest = messages[0]
+    const list = listRef.current
+    const previousHeight = list?.scrollHeight ?? 0
+    const previousTop = list?.scrollTop ?? 0
+
+    setLoadingOlder(true)
+    shouldStickToBottom.current = false
+    const result = await loadOlderChatMessages(studentId, oldest.created_at)
+    setLoadingOlder(false)
+
+    if (result.error || !result.messages) {
+      setError(result.error ?? '過去のメッセージを読み込めませんでした')
+      return
+    }
+
+    setHasMore(Boolean(result.hasMore))
+    setMessages((prev) => {
+      const existingIds = new Set(prev.map((message) => message.id))
+      const older = result.messages!.filter((message) => !existingIds.has(message.id))
+      return [...older, ...prev]
+    })
+
+    requestAnimationFrame(() => {
+      if (!list) return
+      list.scrollTop = list.scrollHeight - previousHeight + previousTop
+    })
+  }
+
   const handleSubmit = async (event?: React.FormEvent) => {
     event?.preventDefault()
     const trimmed = body.trim()
@@ -95,6 +133,7 @@ export function ChatRoom({
 
     setSending(true)
     setError(null)
+    shouldStickToBottom.current = true
 
     const result = await sendChatMessage(studentId, trimmed)
 
@@ -133,82 +172,95 @@ export function ChatRoom({
     <>
       {achievementDialog}
       <div className="flex h-[min(70vh,560px)] flex-col rounded-2xl border border-border bg-card shadow-sm">
-      <div className="border-b border-border px-4 py-3">
-        <p className="text-sm text-muted">
-          {currentUserRole === 'admin' ? 'チャット相手' : '管理者とのチャット'}
-        </p>
-        <p className="font-bold">
-          {currentUserRole === 'admin' ? (
-            <Link
-              href={`/admin/students/${studentId}`}
-              className="hover:text-primary hover:underline"
-            >
-              {peerDisplayName}
-            </Link>
-          ) : (
-            peerDisplayName
-          )}
-        </p>
-      </div>
-
-      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-        {messages.length === 0 ? (
-          <p className="text-center text-sm text-muted">
-            まだメッセージはありません。最初のメッセージを送ってみましょう。
+        <div className="border-b border-border px-4 py-3">
+          <p className="text-sm text-muted">
+            {currentUserRole === 'admin' ? 'チャット相手' : '管理者とのチャット'}
           </p>
-        ) : (
-          messages.map((message) => {
-            const isMine = message.sender_id === currentUserId
-            return (
-              <div
-                key={message.id}
-                className={cn('flex', isMine ? 'justify-end' : 'justify-start')}
+          <p className="font-bold">
+            {currentUserRole === 'admin' ? (
+              <Link
+                href={`/admin/students/${studentId}`}
+                className="hover:text-primary hover:underline"
               >
-                <div
-                  className={cn(
-                    'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm',
-                    isMine
-                      ? 'rounded-br-md bg-primary text-white'
-                      : 'rounded-bl-md border border-border bg-background',
-                  )}
-                >
-                  <p className="mb-1 text-xs opacity-80">{getSenderLabel(message.sender_id)}</p>
-                  <p className="whitespace-pre-wrap break-words">{message.body}</p>
-                  <p className={cn('mt-1 text-[10px]', isMine ? 'text-white/70' : 'text-muted')}>
-                    {formatChatMessageTime(message.created_at)}
-                  </p>
-                </div>
-              </div>
-            )
-          })
-        )}
-        <div ref={bottomRef} />
-      </div>
-
-      <form onSubmit={handleSubmit} className="border-t border-border p-4">
-        <div className="flex gap-2">
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="メッセージを入力…"
-            rows={2}
-            className="flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            maxLength={2000}
-            disabled={sending}
-          />
-          <button
-            type="submit"
-            disabled={sending || !body.trim()}
-            className="shrink-0 self-end rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
-          >
-            {sending ? '送信中…' : '送信'}
-          </button>
+                {peerDisplayName}
+              </Link>
+            ) : (
+              peerDisplayName
+            )}
+          </p>
         </div>
-        <p className="mt-2 text-xs text-muted">Ctrl+Enter で送信（Enter は改行）</p>
-        {error && <p className="mt-2 text-sm text-error">{error}</p>}
-      </form>
-    </div>
+
+        <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+          {hasMore && (
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={() => void handleLoadOlder()}
+                disabled={loadingOlder}
+                className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-card disabled:opacity-60"
+              >
+                {loadingOlder ? '読み込み中…' : '過去のメッセージを読み込む'}
+              </button>
+            </div>
+          )}
+
+          {messages.length === 0 ? (
+            <p className="text-center text-sm text-muted">
+              まだメッセージはありません。最初のメッセージを送ってみましょう。
+            </p>
+          ) : (
+            messages.map((message) => {
+              const isMine = message.sender_id === currentUserId
+              return (
+                <div
+                  key={message.id}
+                  className={cn('flex', isMine ? 'justify-end' : 'justify-start')}
+                >
+                  <div
+                    className={cn(
+                      'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm',
+                      isMine
+                        ? 'rounded-br-md bg-primary text-white'
+                        : 'rounded-bl-md border border-border bg-background',
+                    )}
+                  >
+                    <p className="mb-1 text-xs opacity-80">{getSenderLabel(message.sender_id)}</p>
+                    <p className="whitespace-pre-wrap break-words">{message.body}</p>
+                    <p className={cn('mt-1 text-[10px]', isMine ? 'text-white/70' : 'text-muted')}>
+                      {formatChatMessageTime(message.created_at)}
+                    </p>
+                  </div>
+                </div>
+              )
+            })
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        <form onSubmit={handleSubmit} className="border-t border-border p-4">
+          <div className="flex gap-2">
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="メッセージを入力…"
+              rows={2}
+              className="flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-base outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              maxLength={2000}
+              disabled={sending}
+            />
+            <button
+              type="submit"
+              disabled={sending || !body.trim()}
+              className="shrink-0 self-end rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {sending ? '送信中…' : '送信'}
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-muted">Ctrl+Enter で送信（Enter は改行）</p>
+          {error && <p className="mt-2 text-sm text-error">{error}</p>}
+        </form>
+      </div>
     </>
   )
 }

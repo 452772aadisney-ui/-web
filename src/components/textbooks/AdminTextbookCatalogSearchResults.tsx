@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   AdminBookshelfEditModal,
@@ -9,23 +9,14 @@ import {
 } from '@/components/textbooks/AdminBookshelfEditModal'
 import { TextbookCoverImage } from '@/components/textbooks/TextbookCoverImage'
 import { TextbookPublisherBadge } from '@/components/textbooks/TextbookPublisherBadge'
-import {
-  filterTextbookCatalog,
-  parseSearchListParam,
-} from '@/lib/textbooks/catalog-filter'
 import type { StudentListGroup } from '@/lib/tags/grade-order'
-import type { AdminBookshelfOverview, TextbookCatalog } from '@/types/textbook'
+import type { TextbookCatalog } from '@/types/textbook'
 
 interface AdminTextbookCatalogSearchResultsProps {
   catalog: TextbookCatalog[]
-  overview: AdminBookshelfOverview
+  userCounts: Record<string, number>
   studentGroups: StudentListGroup[]
   publishers: string[]
-  query?: string
-  tags?: string | string[]
-  publisher?: string
-  university?: string
-  purpose?: string
 }
 
 function AdminCatalogGridItem({
@@ -83,48 +74,19 @@ function AdminCatalogGridItem({
 
 export function AdminTextbookCatalogSearchResults({
   catalog,
-  overview,
+  userCounts,
   studentGroups,
   publishers,
-  query,
-  tags,
-  publisher,
-  university,
-  purpose,
 }: AdminTextbookCatalogSearchResultsProps) {
   const router = useRouter()
   const [editingItem, setEditingItem] = useState<AdminEditingCatalog | null>(null)
-
-  const userCountByCatalogId = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const entry of overview.catalog) {
-      counts.set(entry.id, entry.users.length)
-    }
-    return counts
-  }, [overview.catalog])
-
-  const results = useMemo(
-    () =>
-      filterTextbookCatalog(
-        catalog,
-        {
-          query,
-          detailTags: parseSearchListParam(tags),
-          publisher,
-          university,
-          studyPurpose: purpose,
-        },
-        { publicOnly: false },
-      ),
-    [catalog, query, tags, publisher, university, purpose],
-  )
 
   function handleCloseModal() {
     setEditingItem(null)
     router.refresh()
   }
 
-  if (results.length === 0) {
+  if (catalog.length === 0) {
     return (
       <p className="rounded-xl border border-border bg-card p-6 text-sm text-muted">
         条件に合う参考書が見つかりませんでした。キーワードや絞り込みを変えてお試しください。
@@ -135,12 +97,16 @@ export function AdminTextbookCatalogSearchResults({
   return (
     <>
       <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-        {results.map((item) => (
+        {catalog.map((item) => (
           <li key={item.id} className="min-w-0">
             <AdminCatalogGridItem
               item={item}
-              userCount={userCountByCatalogId.get(item.id) ?? 0}
-              onEdit={() => setEditingItem(catalogToEditingItem(item, overview))}
+              userCount={userCounts[item.id] ?? 0}
+              onEdit={() =>
+                setEditingItem(
+                  catalogToEditingItem(item, { catalog: [], studentEntries: [] }),
+                )
+              }
             />
           </li>
         ))}

@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { ChatRoom } from '@/components/chat/ChatRoom'
-import { fetchChatMessages } from '@/lib/chat/queries'
+import { fetchChatMessagesPage } from '@/lib/chat/queries'
 import type { ChatParticipant } from '@/types/chat'
 
 export default async function StudentChatRoomPage() {
@@ -11,7 +11,7 @@ export default async function StudentChatRoomPage() {
   if (!profile) redirect('/login')
   if (profile.role !== 'student') redirect('/admin')
 
-  const messages = await fetchChatMessages(profile.id)
+  const { messages, hasMore } = await fetchChatMessagesPage(profile.id)
 
   const studentParticipant: ChatParticipant = {
     id: profile.id,
@@ -32,6 +32,7 @@ export default async function StudentChatRoomPage() {
         currentUserRole="student"
         studentParticipant={studentParticipant}
         initialMessages={messages}
+        initialHasMore={hasMore}
         peerLabel="管理者"
       />
     </StudentPageShell>

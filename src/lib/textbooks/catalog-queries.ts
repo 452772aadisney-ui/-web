@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { getPersonName } from '@/lib/auth/display-name'
+import { DEFAULT_PAGE_SIZE, getTotalPages, parsePageParam } from '@/lib/pagination'
 import type {
   AdminBookshelfOverview,
   AdminBookshelfStudentEntry,
@@ -250,6 +251,196 @@ export async function fetchTextbookCatalogForStudent(
   }
 
   return ((data ?? []) as Record<string, unknown>[]).map(mapCatalog)
+}
+
+export async function searchTextbookCatalogPaginated(options: {
+  query?: string
+  detailTags?: string[]
+  publisher?: string
+  university?: string
+  purpose?: string
+  publicOnly?: boolean
+  searchableOnly?: boolean
+  page?: number
+  pageSize?: number
+}): Promise<{
+  items: TextbookCatalog[]
+  totalCount: number
+  page: number
+  pageSize: number
+}> {
+  const pageSize = options.pageSize ?? 20
+  const supabase = await createClient()
+  const publicOnly = options.publicOnly ?? true
+  const searchableOnly = options.searchableOnly ?? publicOnly
+  const requestedPage = options.page && options.page > 0 ? options.page : 1
+  const offset = (requestedPage - 1) * pageSize
+
+  const { data, error } = await supabase.rpc('search_textbook_catalog', {
+    p_query: options.query?.trim() || null,
+    p_publisher: options.publisher?.trim() || null,
+    p_university: options.university?.trim() || null,
+    p_purpose: options.purpose?.trim() || null,
+    p_detail_tags:
+      options.detailTags && options.detailTags.length > 0 ? options.detailTags : null,
+    p_public_only: publicOnly,
+    p_searchable_only: searchableOnly,
+    p_limit: pageSize,
+    p_offset: offset,
+  })
+
+  if (error) {
+    console.error('[textbook-catalog] search rpc failed:', error.message)
+    // Fallback: limited client-compatible fetch when migration is not applied yet
+    let query = supabase.from('textbook_catalog').select('*', { count: 'exact' }).order('name')
+    if (publicOnly) query = query.eq('visibility', 'public')
+    if (searchableOnly) query = query.eq('is_searchable', true)
+    if (options.publisher?.trim()) query = query.eq('publisher', options.publisher.trim())
+    if (options.query?.trim()) query = query.ilike('name', `%${options.query.trim()}%`)
+
+    const { data: fallbackData, count, error: fallbackError } = await query.range(
+      offset,
+      offset + pageSize - 1,
+    )
+    if (fallbackError) {
+      return { items: [], totalCount: 0, page: 1, pageSize }
+    }
+
+    const totalCount = count ?? 0
+    const totalPages = getTotalPages(totalCount, pageSize)
+    const page = parsePageParam(String(requestedPage), totalPages)
+    return {
+      items: ((fallbackData ?? []) as Record<string, unknown>[]).map(mapCatalog),
+      totalCount,
+      page,
+      pageSize,
+    }
+  }
+
+  const rows = (data as Array<Record<string, unknown>>) ?? []
+  const totalCount = rows.length > 0 ? Number(rows[0].total_count ?? 0) : 0
+  const totalPages = getTotalPages(totalCount, pageSize)
+  const page = parsePageParam(String(requestedPage), totalPages)
+
+  if (page !== requestedPage && totalPages > 0) {
+    return searchTextbookCatalogPaginated({
+      ...options,
+      page,
+      pageSize,
+    })
+  }
+
+  return {
+    items: rows.map((row) => {
+      const { total_count: _totalCount, ...rest } = row
+      return mapCatalog(rest)
+    }),
+    totalCount,
+    page,
+    pageSize,
+  }
+}
+
+export async function fetchCatalogUserCounts(
+  catalogIds: string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>()
+  if (catalogIds.length === 0) return counts
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('textbooks')
+    .select('catalog_id')
+    .in('catalog_id', catalogIds)
+
+  if (error) {
+    console.error('[textbooks] catalog user counts failed:', error.message)
+    return counts
+  }
+
+  for (const row of data ?? []) {
+    const catalogId = row.catalog_id as string | null
+    if (!catalogId) continue
+    counts.set(catalogId, (counts.get(catalogId) ?? 0) + 1)
+  }
+
+  return counts
+}
+
+export async function fetchStudentRegisteredEntriesPaginated(options?: {
+  page?: number
+  pageSize?: number
+}): Promise<{
+  entries: AdminBookshelfStudentEntry[]
+  totalCount: number
+  page: number
+  pageSize: number
+}> {
+  const pageSize = options?.pageSize ?? 20
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('textbooks')
+    .select('id, name, subjects, detail_tags, usage_tags, catalog_id, student_id')
+    .is('catalog_id', null)
+    .order('name')
+
+  if (error) {
+    console.error('[textbooks] student registered entries failed:', error.message)
+    return { entries: [], totalCount: 0, page: 1, pageSize }
+  }
+
+  const studentOnly = (data ?? []) as TextbookRow[]
+  const studentNameById = await fetchStudentNamesById([
+    ...new Set(studentOnly.map((book) => book.student_id)),
+  ])
+
+  const groups = new Map<string, AdminBookshelfStudentEntry>()
+
+  for (const book of studentOnly) {
+    const key = buildStudentBookKey(book.name, book.subjects ?? [])
+    const user: TextbookUser = {
+      student_id: book.student_id,
+      student_name: studentNameById.get(book.student_id) ?? '不明',
+    }
+    const existing = groups.get(key)
+    if (existing) {
+      existing.users.push(user)
+      existing.textbookIdsByStudent[book.student_id] = book.id
+      continue
+    }
+
+    groups.set(key, {
+      key,
+      name: book.name,
+      subjects: book.subjects ?? [],
+      detail_tags: book.detail_tags ?? [],
+      usage_tags: book.usage_tags ?? [],
+      users: [user],
+      textbookIdsByStudent: { [book.student_id]: book.id },
+    })
+  }
+
+  const entries = [...groups.values()]
+    .map((entry) => ({
+      ...entry,
+      users: dedupeUsers(entry.users).sort((a, b) =>
+        a.student_name.localeCompare(b.student_name, 'ja'),
+      ),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ja'))
+
+  const totalCount = entries.length
+  const totalPages = getTotalPages(totalCount, pageSize)
+  const page = parsePageParam(options?.page ? String(options.page) : undefined, totalPages)
+  const start = (page - 1) * pageSize
+
+  return {
+    entries: entries.slice(start, start + pageSize),
+    totalCount,
+    page,
+    pageSize,
+  }
 }
 
 export async function fetchTextbookCatalogUsage(): Promise<TextbookCatalogUsage[]> {

@@ -64,24 +64,37 @@ export const fetchAdminChatThreads = cache(async (adminUserId: string): Promise<
   const studentIds = students.map((s) => s.id)
   const supabase = await createClient()
 
-  const [{ data: messages }, readMap, { data: adminProfile }] = await Promise.all([
-    supabase
+  const [{ data: messages, error: latestError }, readMap, { data: adminProfile }] =
+    await Promise.all([
+      supabase.rpc('latest_chat_messages_for_students', {
+        p_student_ids: studentIds,
+      }),
+      fetchReadMap(adminUserId),
+      supabase
+        .from('profiles')
+        .select('created_at, admin_since')
+        .eq('id', adminUserId)
+        .maybeSingle<{ created_at: string; admin_since: string | null }>(),
+    ])
+
+  let latestMessages = (messages as ChatMessage[]) ?? []
+
+  if (latestError) {
+    console.error('[chat] latest messages rpc failed:', latestError.message)
+    const { data: fallbackMessages } = await supabase
       .from('chat_messages')
       .select('*')
       .in('student_id', studentIds)
-      .order('created_at', { ascending: false }),
-    fetchReadMap(adminUserId),
-    supabase
-      .from('profiles')
-      .select('created_at, admin_since')
-      .eq('id', adminUserId)
-      .maybeSingle<{ created_at: string; admin_since: string | null }>(),
-  ])
+      .order('created_at', { ascending: false })
+      .limit(Math.max(studentIds.length * 3, 50))
+
+    latestMessages = (fallbackMessages as ChatMessage[]) ?? []
+  }
 
   const adminCutoff = adminProfile
     ? adminUnreadCutoff(adminProfile.admin_since, adminProfile.created_at)
     : undefined
-  const latestByStudent = buildLatestMessageMap((messages as ChatMessage[]) ?? [])
+  const latestByStudent = buildLatestMessageMap(latestMessages)
 
   const threads = await Promise.all(
     students.map(async (student) => {

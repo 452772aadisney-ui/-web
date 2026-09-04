@@ -4,7 +4,7 @@ import { getDashboardPathForRole } from '@/lib/auth/routes'
 import { getPersonName } from '@/lib/auth/display-name'
 import { AdminPageShell } from '@/components/layout/AdminPageShell'
 import { ChatRoom } from '@/components/chat/ChatRoom'
-import { fetchChatMessages } from '@/lib/chat/queries'
+import { fetchChatMessagesPage } from '@/lib/chat/queries'
 import { fetchStudentProfile } from '@/lib/study/queries'
 import type { ChatParticipant } from '@/types/chat'
 
@@ -22,7 +22,7 @@ export default async function AdminChatRoomPage({
   const student = await fetchStudentProfile(studentId)
   if (!student || student.role !== 'student') notFound()
 
-  const messages = await fetchChatMessages(studentId)
+  const { messages, hasMore } = await fetchChatMessagesPage(studentId)
   const personName = getPersonName(student)
 
   const studentParticipant: ChatParticipant = {
@@ -45,6 +45,7 @@ export default async function AdminChatRoomPage({
         currentUserRole="admin"
         studentParticipant={studentParticipant}
         initialMessages={messages}
+        initialHasMore={hasMore}
       />
     </AdminPageShell>
   )

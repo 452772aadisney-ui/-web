@@ -1,15 +1,15 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo } from 'react'
 import { SubjectStudyPieChart } from '@/components/study/SubjectStudyPieChart'
-import { buildSubjectPieData, type StudyLog } from '@/lib/study/chart-data'
+import type { SubjectChartRow } from '@/lib/study/chart-data'
 import { cn } from '@/lib/utils'
 
 export type SubjectPiePeriod = '14' | 'all'
 
 interface SubjectStudyPieSectionProps {
-  logs: StudyLog[]
+  data14: SubjectChartRow[]
+  dataAll: SubjectChartRow[]
   initialPeriod?: SubjectPiePeriod
   compact?: boolean
   basePath?: string
@@ -17,17 +17,15 @@ interface SubjectStudyPieSectionProps {
 }
 
 export function SubjectStudyPieSection({
-  logs,
+  data14,
+  dataAll,
   initialPeriod = 'all',
   compact = false,
   basePath,
   preserveParams,
 }: SubjectStudyPieSectionProps) {
   const period = initialPeriod
-  const pieData = useMemo(
-    () => buildSubjectPieData(logs, { days: period === '14' ? 14 : 'all' }),
-    [logs, period],
-  )
+  const pieData = period === '14' ? data14 : dataAll
 
   function buildPeriodHref(nextPeriod: SubjectPiePeriod) {
     if (!basePath) return '#'

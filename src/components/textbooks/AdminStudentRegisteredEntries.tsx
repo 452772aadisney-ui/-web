@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   AdminBookshelfEditModal,
@@ -8,10 +8,10 @@ import {
 } from '@/components/textbooks/AdminBookshelfEditModal'
 import { TextbookCoverImage } from '@/components/textbooks/TextbookCoverImage'
 import type { StudentListGroup } from '@/lib/tags/grade-order'
-import type { AdminBookshelfOverview, AdminBookshelfStudentEntry } from '@/types/textbook'
+import type { AdminBookshelfStudentEntry } from '@/types/textbook'
 
 interface AdminStudentRegisteredEntriesProps {
-  overview: AdminBookshelfOverview
+  entries: AdminBookshelfStudentEntry[]
   studentGroups: StudentListGroup[]
   publishers: string[]
 }
@@ -51,17 +51,12 @@ function StudentEntryCard({
 }
 
 export function AdminStudentRegisteredEntries({
-  overview,
+  entries,
   studentGroups,
   publishers,
 }: AdminStudentRegisteredEntriesProps) {
   const router = useRouter()
   const [editingItem, setEditingItem] = useState<AdminEditingStudent | null>(null)
-
-  const entries = useMemo(
-    () => [...overview.studentEntries].sort((a, b) => a.name.localeCompare(b.name, 'ja')),
-    [overview.studentEntries],
-  )
 
   function handleCloseModal() {
     setEditingItem(null)

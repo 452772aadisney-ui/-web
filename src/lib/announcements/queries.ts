@@ -1,6 +1,7 @@
 import { cache } from 'react'
 import { isUnreadEligibleContent } from '@/lib/account/content-cutoff'
 import { createClient } from '@/lib/supabase/server'
+import { DEFAULT_PAGE_SIZE, getTotalPages, parsePageParam } from '@/lib/pagination'
 import type { Announcement, AnnouncementRead, AnnouncementWithTargets } from '@/types/announcement'
 
 function normalizeAnnouncement(row: Announcement): Announcement {
@@ -82,6 +83,70 @@ export async function fetchAnnouncementsForStudent(
   _studentId: string,
 ): Promise<Announcement[]> {
   return fetchAnnouncementsForCurrentUser()
+}
+
+export async function fetchAnnouncementsPaginated(options?: {
+  page?: number
+  pageSize?: number
+}): Promise<{
+  announcements: Announcement[]
+  totalCount: number
+  page: number
+  pageSize: number
+}> {
+  const pageSize = options?.pageSize ?? DEFAULT_PAGE_SIZE
+  const supabase = await createClient()
+
+  const { count, error: countError } = await supabase
+    .from('announcements')
+    .select('id', { count: 'exact', head: true })
+
+  if (countError) {
+    console.error('[announcements] paginated count failed:', countError.message)
+  }
+
+  const totalCount = count ?? 0
+  const totalPages = getTotalPages(totalCount, pageSize)
+  const page = parsePageParam(options?.page ? String(options.page) : undefined, totalPages)
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
+
+  const { data, error } = await supabase
+    .from('announcements')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .range(from, to)
+
+  if (error) {
+    console.error('[announcements] paginated fetch failed:', error.message)
+    return { announcements: [], totalCount, page, pageSize }
+  }
+
+  return {
+    announcements: ((data as Announcement[]) ?? []).map(normalizeAnnouncement),
+    totalCount,
+    page,
+    pageSize,
+  }
+}
+
+export async function fetchAnnouncementsWithTargetsPaginated(options?: {
+  page?: number
+  pageSize?: number
+}): Promise<{
+  announcements: AnnouncementWithTargets[]
+  totalCount: number
+  page: number
+  pageSize: number
+}> {
+  const result = await fetchAnnouncementsPaginated(options)
+  const withTargets = await attachTargets(result.announcements)
+  return {
+    announcements: withTargets,
+    totalCount: result.totalCount,
+    page: result.page,
+    pageSize: result.pageSize,
+  }
 }
 
 export async function fetchAnnouncementById(id: string): Promise<Announcement | null> {

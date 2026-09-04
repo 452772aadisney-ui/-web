@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { redirect, notFound } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { getDashboardPathForRole } from '@/lib/auth/routes'
@@ -8,16 +9,20 @@ import { AdminCoachingKarteForm } from '@/components/coaching/AdminCoachingKarte
 import { AdminCoachingKarteQuizForm } from '@/components/coaching/AdminCoachingKarteQuizForm'
 import { CoachingKarteMigrationNotice } from '@/components/coaching/CoachingKarteMigrationNotice'
 import { DailyStudyBarChart } from '@/components/study/DailyStudyBarChart'
+import { SubjectStudyPieSection } from '@/components/study/SubjectStudyPieSection'
 import { fetchCoachingCoaches } from '@/lib/coaching/queries'
 import { fetchCoachingKarteEntriesForStudent } from '@/lib/coaching/karte-queries'
 import {
   fetchStudentProfile,
-  fetchStudyLogsForStudent,
-  fetchTextbooksForStudent,
+  fetchStudyLogsForStudentInDateRange,
+  fetchStudySubjectMinutesForStudent,
+  fetchTextbooksForStudentPreview,
 } from '@/lib/study/queries'
-import { buildDailyChartData } from '@/lib/study/chart-data'
-import { getTodayDateKey } from '@/lib/study/dates'
-import { SubjectStudyPieSection } from '@/components/study/SubjectStudyPieSection'
+import {
+  buildDailyChartData,
+  buildSubjectPieDataFromMinutes,
+} from '@/lib/study/chart-data'
+import { getRecentDateKeys, getTodayDateKey } from '@/lib/study/dates'
 
 export default async function AdminCoachingKarteStudentPage({
   params,
@@ -35,22 +40,31 @@ export default async function AdminCoachingKarteStudentPage({
   const query = await searchParams
 
   const historyPage = query.historyPage ? parseInt(query.historyPage, 10) : 1
+  const recentKeys = getRecentDateKeys(14)
+  const rangeFrom = recentKeys[0]!
+  const rangeTo = recentKeys[recentKeys.length - 1]!
 
-  const [student, logs, textbooks, karteResult, coaches] = await Promise.all([
-    fetchStudentProfile(studentId),
-    fetchStudyLogsForStudent(studentId),
-    fetchTextbooksForStudent(studentId),
-    fetchCoachingKarteEntriesForStudent(studentId, {
-      page: Number.isFinite(historyPage) ? historyPage : 1,
-    }),
-    fetchCoachingCoaches(true),
-  ])
+  const [student, rangeLogs, minutesAll, minutes14, textbooksPreview, karteResult, coaches] =
+    await Promise.all([
+      fetchStudentProfile(studentId),
+      fetchStudyLogsForStudentInDateRange(studentId, rangeFrom, rangeTo),
+      fetchStudySubjectMinutesForStudent(studentId),
+      fetchStudySubjectMinutesForStudent(studentId, {
+        fromDate: rangeFrom,
+        toDate: rangeTo,
+      }),
+      fetchTextbooksForStudentPreview(studentId, 10),
+      fetchCoachingKarteEntriesForStudent(studentId, {
+        page: Number.isFinite(historyPage) ? historyPage : 1,
+      }),
+      fetchCoachingCoaches(true),
+    ])
 
   if (!student || student.role !== 'student') {
     notFound()
   }
 
-  const { rows, subjects } = buildDailyChartData(logs, 14)
+  const { rows, subjects } = buildDailyChartData(rangeLogs, 14)
   const piePeriod = query.piePeriod === '14' ? '14' : 'all'
   const personName = getPersonName(student)
   const targetSchools = student.target_schools ?? []
@@ -106,7 +120,8 @@ export default async function AdminCoachingKarteStudentPage({
 
           <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <SubjectStudyPieSection
-              logs={logs}
+              data14={buildSubjectPieDataFromMinutes(minutes14)}
+              dataAll={buildSubjectPieDataFromMinutes(minutesAll)}
               initialPeriod={piePeriod}
               compact
               basePath={`/admin/coaching/karte/${studentId}`}
@@ -119,25 +134,42 @@ export default async function AdminCoachingKarteStudentPage({
           </section>
 
           <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-            <h2 className="text-base font-bold">現在登録中の教材</h2>
-            {textbooks.length === 0 ? (
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-base font-bold">現在登録中の教材</h2>
+              {textbooksPreview.totalCount > 0 && (
+                <p className="text-xs text-muted">全 {textbooksPreview.totalCount} 件</p>
+              )}
+            </div>
+            {textbooksPreview.totalCount === 0 ? (
               <p className="mt-3 text-sm text-muted">登録されている教材はありません。</p>
             ) : (
-              <ul className="mt-3 divide-y divide-border rounded-lg border border-border">
-                {textbooks.map((book) => {
-                  const tags =
-                    book.detail_tags && book.detail_tags.length > 0
-                      ? book.detail_tags.join('・')
-                      : book.subjects.join('・')
+              <>
+                <ul className="mt-3 max-h-72 divide-y divide-border overflow-y-auto rounded-lg border border-border">
+                  {textbooksPreview.textbooks.map((book) => {
+                    const tags =
+                      book.detail_tags && book.detail_tags.length > 0
+                        ? book.detail_tags.join('・')
+                        : book.subjects.join('・')
 
-                  return (
-                    <li key={book.id} className="px-3 py-2.5 text-sm">
-                      <p className="font-medium">{book.name}</p>
-                      <p className="mt-0.5 text-xs text-muted">{tags}</p>
-                    </li>
-                  )
-                })}
-              </ul>
+                    return (
+                      <li key={book.id} className="px-3 py-2.5 text-sm">
+                        <p className="font-medium">{book.name}</p>
+                        <p className="mt-0.5 text-xs text-muted">{tags}</p>
+                      </li>
+                    )
+                  })}
+                </ul>
+                {textbooksPreview.totalCount > textbooksPreview.textbooks.length && (
+                  <p className="mt-3 text-sm">
+                    <Link
+                      href={`/admin/students/${studentId}`}
+                      className="text-primary hover:underline"
+                    >
+                      すべて見る（生徒詳細）→
+                    </Link>
+                  </p>
+                )}
+              </>
             )}
           </section>
         </div>

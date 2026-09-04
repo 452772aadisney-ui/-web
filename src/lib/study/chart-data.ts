@@ -140,3 +140,22 @@ export function buildSubjectPieData(
     }))
     .filter((row) => row.value > 0)
 }
+
+export function buildSubjectPieDataFromMinutes(
+  rows: Array<{ subject: string; minutes: number }>,
+): SubjectChartRow[] {
+  const totals = new Map<string, number>()
+
+  for (const row of rows) {
+    const chartSubject = getChartSubjectLabel(row.subject)
+    totals.set(chartSubject, (totals.get(chartSubject) ?? 0) + row.minutes)
+  }
+
+  return getOrderedChartSubjectLabels(Array.from(totals.keys()))
+    .map((name) => ({
+      name,
+      value: totals.get(name) ?? 0,
+      minutes: totals.get(name) ?? 0,
+    }))
+    .filter((row) => row.value > 0)
+}
