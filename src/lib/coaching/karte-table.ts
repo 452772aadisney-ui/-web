@@ -12,4 +12,7 @@ export function isCoachingKarteTableMissingError(message: string): boolean {
 export type CoachingKarteFetchResult = {
   entries: CoachingKarteEntryWithDetails[]
   tableAvailable: boolean
+  totalCount?: number
+  page?: number
+  pageSize?: number
 }

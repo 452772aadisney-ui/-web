@@ -2,7 +2,9 @@ import { redirect } from 'next/navigation'
 import { getCurrentProfileWithError } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { StudentInfoCard } from '@/components/student/StudentInfoCard'
-import { fetchTagsForProfile } from '@/lib/tags/queries'
+import { StudentQrCode } from '@/components/student/StudentQrCode'
+import { fetchGradeTagNameForProfile, fetchTagsForProfile } from '@/lib/tags/queries'
+import { isKisotsuGradeTag } from '@/lib/tags/grade-order'
 
 export default async function StudentInfoPage() {
   const { profile, error } = await getCurrentProfileWithError()
@@ -27,10 +29,20 @@ export default async function StudentInfoPage() {
   }
 
   const studentTags = await fetchTagsForProfile(profile.id)
+  const gradeTagName = await fetchGradeTagNameForProfile(profile.id)
+  const isKisotsuStudent = isKisotsuGradeTag(gradeTagName)
 
   return (
     <StudentPageShell title="生徒情報" backHref="/dashboard" backLabel="マイページ">
-      <StudentInfoCard profile={profile} tags={studentTags} />
+      <div className="space-y-6">
+        {profile.student_code && !isKisotsuStudent && (
+          <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <h2 className="mb-4 text-lg font-bold">生徒ID（QRコード）</h2>
+            <StudentQrCode studentCode={profile.student_code} />
+          </section>
+        )}
+        <StudentInfoCard profile={profile} tags={studentTags} />
+      </div>
     </StudentPageShell>
   )
 }

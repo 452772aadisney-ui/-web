@@ -20,6 +20,10 @@ import {
   type CoachingGridSlot,
 } from '@/lib/coaching/queries'
 import { isCoachingSlotTime, slotDateTimeKey } from '@/lib/coaching/slot-times'
+import {
+  parseCoachCheckboxList,
+  parseCoachStringList,
+} from '@/lib/coaching/coach-profile'
 import { getDayWindow } from '@/lib/coaching/week'
 import type { AvailableCoachingSlot } from '@/types/coaching'
 
@@ -86,10 +90,21 @@ export async function createCoachingCoach(
 
   if (!name) return { error: '講師名を入力してください' }
 
+  const streamRaw = String(formData.get('stream') ?? '').trim()
+  const stream =
+    streamRaw === 'humanities' || streamRaw === 'sciences' ? streamRaw : null
+
   const supabase = await createClient()
   const { error } = await supabase.from('coaching_coaches').insert({
     name,
     sort_order: Number.isFinite(sortOrder) ? sortOrder : 0,
+    stream,
+    school_types: parseCoachCheckboxList(formData, 'schoolTypes'),
+    exam_types: parseCoachCheckboxList(formData, 'examTypes'),
+    has_internal_recommendation_experience: formData.get('hasInternalRecommendation') === 'on',
+    strong_subjects: parseCoachStringList(formData.get('strongSubjects')),
+    feature_tags: parseCoachStringList(formData.get('featureTags')),
+    bio: String(formData.get('bio') ?? '').trim(),
   })
 
   if (error) return { error: '講師の登録に失敗しました' }
@@ -112,6 +127,10 @@ export async function updateCoachingCoach(
 
   if (!id || !name) return { error: '必須項目を入力してください' }
 
+  const streamRaw = String(formData.get('stream') ?? '').trim()
+  const stream =
+    streamRaw === 'humanities' || streamRaw === 'sciences' ? streamRaw : null
+
   const supabase = await createClient()
   const { error } = await supabase
     .from('coaching_coaches')
@@ -119,6 +138,14 @@ export async function updateCoachingCoach(
       name,
       is_active: isActive,
       sort_order: Number.isFinite(sortOrder) ? sortOrder : 0,
+      stream,
+      school_types: parseCoachCheckboxList(formData, 'schoolTypes'),
+      exam_types: parseCoachCheckboxList(formData, 'examTypes'),
+      has_internal_recommendation_experience:
+        formData.get('hasInternalRecommendation') === 'on',
+      strong_subjects: parseCoachStringList(formData.get('strongSubjects')),
+      feature_tags: parseCoachStringList(formData.get('featureTags')),
+      bio: String(formData.get('bio') ?? '').trim(),
     })
     .eq('id', id)
 

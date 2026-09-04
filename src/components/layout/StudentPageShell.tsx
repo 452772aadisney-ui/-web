@@ -10,6 +10,7 @@ import { fetchUnseenTextbookCount } from '@/lib/textbooks/catalog-queries'
 import { fetchIncompleteTodoCount } from '@/lib/todo/queries'
 import { isKisotsuGradeTag } from '@/lib/tags/grade-order'
 import { fetchGradeTagNameForProfile } from '@/lib/tags/queries'
+import { BackButton } from '@/components/layout/BackButton'
 import { HamburgerMenu } from '@/components/layout/HamburgerMenu'
 import { RecordStudentPageVisit } from '@/components/achievements/RecordStudentPageVisit'
 import {
@@ -99,15 +100,12 @@ export async function StudentPageShell({
   return (
     <div className="min-h-dvh">
       <RecordStudentPageVisit />
-      <header className="border-b border-border bg-card px-4 py-4">
+      <header className="sticky top-0 z-40 border-b border-border bg-card/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-card/90">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
           <div className="min-w-0 flex-1">
-            {backHref && (
-              <Link href={backHref} className="text-sm text-primary hover:underline">
-                ← {backLabel ?? '戻る'}
-              </Link>
-            )}
-            <p className="text-sm text-muted">受験生web</p>
+            <Link href="/dashboard" className="text-sm text-muted transition hover:text-foreground">
+              受験生web
+            </Link>
             <h1 className="text-xl font-bold">{title}</h1>
           </div>
           <div className="flex shrink-0 items-center gap-3">
@@ -123,7 +121,14 @@ export async function StudentPageShell({
         </div>
       </header>
 
-      <main className={cn('mx-auto max-w-3xl px-4 py-8', mainClassName)}>{children}</main>
+      <main className={cn('mx-auto max-w-3xl px-4 py-8', mainClassName)}>
+        {backHref && (
+          <div className="mb-6">
+            <BackButton href={backHref} label={backLabel} />
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   )
 }

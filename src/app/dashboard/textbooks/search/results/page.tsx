@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { requireProfile } from '@/app/profile/actions'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { TextbookCatalogSearchResults } from '@/components/textbooks/TextbookCatalogSearchResults'
+import { TextbookSearchMenu } from '@/components/textbooks/TextbookSearchMenu'
 import {
   fetchStudentCatalogIds,
   fetchTextbookCatalogForStudent,
@@ -44,16 +45,21 @@ export default async function TextbookSearchResultsPage({
       backLabel="検索メニュー"
       mainClassName="max-w-4xl"
     >
-      <TextbookCatalogSearchResults
-        catalog={catalog}
-        registeredCatalogIds={[...registeredCatalogIds]}
-        studentId={profile.id}
-        query={params.q}
-        tags={params.tags}
-        publisher={params.publisher}
-        university={params.university}
-        purpose={params.purpose}
-      />
+      <div className="space-y-6">
+        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <TextbookSearchMenu initialQuery={params.q ?? ''} compact />
+        </section>
+        <TextbookCatalogSearchResults
+          catalog={catalog}
+          registeredCatalogIds={[...registeredCatalogIds]}
+          studentId={profile.id}
+          query={params.q}
+          tags={params.tags}
+          publisher={params.publisher}
+          university={params.university}
+          purpose={params.purpose}
+        />
+      </div>
     </StudentPageShell>
   )
 }

@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { TEXTBOOK_STUDY_PURPOSES } from '@/lib/constants/textbook-search'
 
 export const TEXTBOOK_SEARCH_ICONS = {
@@ -38,14 +38,22 @@ export function TextbookSearchMenu({
   createHref = '/dashboard/textbooks/register?mode=create',
   createLinkLabel = '自分で登録',
   includeStudentRegistered = false,
+  initialQuery = '',
+  compact = false,
 }: {
   basePath?: string
   createHref?: string
   createLinkLabel?: string
   includeStudentRegistered?: boolean
+  initialQuery?: string
+  compact?: boolean
 } = {}) {
   const router = useRouter()
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(initialQuery)
+
+  useEffect(() => {
+    setQuery(initialQuery)
+  }, [initialQuery])
 
   const categoryTiles = useMemo(() => {
     const tiles: Array<{ href: string; label: string; iconSrc: string }> = [
@@ -114,6 +122,8 @@ export function TextbookSearchMenu({
         </button>
       </form>
 
+      {compact ? null : (
+        <>
       <section className="space-y-2">
         <p className="text-xs font-medium text-muted">参考書から探す</p>
         <Link href={`${basePath}/results`} className={listLinkClass}>
@@ -164,6 +174,8 @@ export function TextbookSearchMenu({
         </Link>
         から追加できます。
       </p>
+        </>
+      )}
     </div>
   )
 }

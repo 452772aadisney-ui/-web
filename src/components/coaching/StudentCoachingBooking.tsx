@@ -10,6 +10,7 @@ import {
 } from '@/app/coaching/actions'
 import { useAchievementUnlockDialog } from '@/components/achievements/useAchievementUnlockDialog'
 import { CoachingWeekGrid } from '@/components/coaching/CoachingWeekGrid'
+import { CoachProfileDisplay } from '@/components/coaching/CoachProfileDisplay'
 import { formatCoachingBookingDateTime } from '@/lib/coaching/format'
 import type {
   AvailableCoachingSlot,
@@ -280,6 +281,7 @@ export function StudentCoachingBooking({
   }
 
   const isRescheduling = rescheduleBookingId !== null
+  const selectedCoach = coaches.find((coach) => coach.id === selectedCoachId) ?? null
 
   return (
     <div className="space-y-8">
@@ -419,6 +421,7 @@ export function StudentCoachingBooking({
                 ))}
               </div>
             )}
+            {selectedCoach && <CoachProfileDisplay coach={selectedCoach} />}
           </section>
 
           {selectedCoachId && (

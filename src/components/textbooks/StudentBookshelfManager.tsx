@@ -25,6 +25,7 @@ import {
   getStudySubjectCategoriesForProfile,
   type TextbookSubjectCategoryLabel,
 } from '@/lib/constants/textbook-subject-categories'
+import { Pagination } from '@/components/ui/Pagination'
 import { cn } from '@/lib/utils'
 import { formatTextbookPeriod } from '@/lib/textbooks/format'
 import { canStudentEditTextbookSubjectTags } from '@/lib/textbooks/subject-tags'
@@ -45,6 +46,10 @@ interface StudentBookshelfManagerProps {
   editHref?: string
   initialSubject: TextbookSubjectCategoryLabel
   variant: 'list' | 'register' | 'register-create-only'
+  totalTextbookCount?: number
+  totalAllTextbookCount?: number
+  currentPage?: number
+  pageSize?: number
 }
 
 function SubjectCategorySelect({
@@ -299,16 +304,18 @@ function StudentTextbookList({
   textbooks,
   selectedSubject,
   totalTextbookCount,
+  categoryTextbookCount,
 }: {
   studentId: string
   profileSubjects: string[]
   textbooks: Textbook[]
   selectedSubject: TextbookSubjectCategoryLabel
   totalTextbookCount: number
+  categoryTextbookCount?: number
 }) {
   const [editingId, setEditingId] = useState<string | null>(null)
 
-  if (textbooks.length === 0) {
+  if ((categoryTextbookCount ?? textbooks.length) === 0) {
     const registerHref = '/dashboard/textbooks/search'
 
     return (
@@ -380,12 +387,20 @@ function StudentTextbookListWithCategories({
   textbooks,
   initialSubject,
   editHref,
+  totalTextbookCount,
+  totalAllTextbookCount,
+  currentPage = 1,
+  pageSize = 10,
 }: {
   studentId: string
   profileSubjects: string[]
   textbooks: Textbook[]
   initialSubject: TextbookSubjectCategoryLabel
   editHref?: string
+  totalTextbookCount?: number
+  totalAllTextbookCount?: number
+  currentPage?: number
+  pageSize?: number
 }) {
   const router = useRouter()
   const availableCategories = getStudySubjectCategoriesForProfile(profileSubjects)
@@ -393,10 +408,14 @@ function StudentTextbookListWithCategories({
     availableCategories.includes(initialSubject) ? initialSubject : availableCategories[0]!,
   )
 
-  const filteredTextbooks = useMemo(
-    () => filterTextbooksByStudyCategory(textbooks, selectedSubject),
-    [textbooks, selectedSubject],
-  )
+  useEffect(() => {
+    if (availableCategories.includes(initialSubject)) {
+      setSelectedSubject(initialSubject)
+    }
+  }, [initialSubject, availableCategories])
+
+  const categoryTotal = totalTextbookCount ?? textbooks.length
+  const allTotal = totalAllTextbookCount ?? categoryTotal
 
   function switchSubject(subject: TextbookSubjectCategoryLabel) {
     setSelectedSubject(subject)
@@ -434,9 +453,17 @@ function StudentTextbookListWithCategories({
         <StudentTextbookList
           studentId={studentId}
           profileSubjects={profileSubjects}
-          textbooks={filteredTextbooks}
+          textbooks={textbooks}
           selectedSubject={selectedSubject}
-          totalTextbookCount={textbooks.length}
+          totalTextbookCount={allTotal}
+          categoryTextbookCount={categoryTotal}
+        />
+        <Pagination
+          currentPage={currentPage}
+          totalCount={categoryTotal}
+          pageSize={pageSize}
+          pathname="/dashboard/bookshelf"
+          preserveParams={{ subject: selectedSubject }}
         />
       </section>
     </div>
@@ -527,6 +554,10 @@ export function StudentBookshelfManager({
   editHref,
   initialSubject,
   variant,
+  totalTextbookCount,
+  totalAllTextbookCount,
+  currentPage,
+  pageSize,
 }: StudentBookshelfManagerProps) {
   if (variant === 'register-create-only') {
     return <CreateRegisterForm studentId={studentId} profileSubjects={profileSubjects} />
@@ -540,6 +571,10 @@ export function StudentBookshelfManager({
         textbooks={textbooks}
         initialSubject={initialSubject}
         editHref={editHref}
+        totalTextbookCount={totalTextbookCount}
+        totalAllTextbookCount={totalAllTextbookCount}
+        currentPage={currentPage}
+        pageSize={pageSize}
       />
     )
   }

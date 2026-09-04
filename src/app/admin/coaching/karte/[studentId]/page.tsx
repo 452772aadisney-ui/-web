@@ -8,7 +8,6 @@ import { AdminCoachingKarteForm } from '@/components/coaching/AdminCoachingKarte
 import { AdminCoachingKarteQuizForm } from '@/components/coaching/AdminCoachingKarteQuizForm'
 import { CoachingKarteMigrationNotice } from '@/components/coaching/CoachingKarteMigrationNotice'
 import { DailyStudyBarChart } from '@/components/study/DailyStudyBarChart'
-import { SubjectStudyPieChart } from '@/components/study/SubjectStudyPieChart'
 import { fetchCoachingCoaches } from '@/lib/coaching/queries'
 import { fetchCoachingKarteEntriesForStudent } from '@/lib/coaching/karte-queries'
 import {
@@ -16,15 +15,16 @@ import {
   fetchStudyLogsForStudent,
   fetchTextbooksForStudent,
 } from '@/lib/study/queries'
-import { buildDailyChartData, buildSubjectPieData } from '@/lib/study/chart-data'
+import { buildDailyChartData } from '@/lib/study/chart-data'
 import { getTodayDateKey } from '@/lib/study/dates'
+import { SubjectStudyPieSection } from '@/components/study/SubjectStudyPieSection'
 
 export default async function AdminCoachingKarteStudentPage({
   params,
   searchParams,
 }: {
   params: Promise<{ studentId: string }>
-  searchParams: Promise<{ booking?: string; coach?: string }>
+  searchParams: Promise<{ booking?: string; coach?: string; historyPage?: string; piePeriod?: string }>
 }) {
   const profile = await getCurrentProfile()
 
@@ -34,11 +34,15 @@ export default async function AdminCoachingKarteStudentPage({
   const { studentId } = await params
   const query = await searchParams
 
+  const historyPage = query.historyPage ? parseInt(query.historyPage, 10) : 1
+
   const [student, logs, textbooks, karteResult, coaches] = await Promise.all([
     fetchStudentProfile(studentId),
     fetchStudyLogsForStudent(studentId),
     fetchTextbooksForStudent(studentId),
-    fetchCoachingKarteEntriesForStudent(studentId),
+    fetchCoachingKarteEntriesForStudent(studentId, {
+      page: Number.isFinite(historyPage) ? historyPage : 1,
+    }),
     fetchCoachingCoaches(true),
   ])
 
@@ -47,7 +51,7 @@ export default async function AdminCoachingKarteStudentPage({
   }
 
   const { rows, subjects } = buildDailyChartData(logs, 14)
-  const pieData = buildSubjectPieData(logs)
+  const piePeriod = query.piePeriod === '14' ? '14' : 'all'
   const personName = getPersonName(student)
   const targetSchools = student.target_schools ?? []
   const profileSubjects = student.subjects ?? []
@@ -101,8 +105,17 @@ export default async function AdminCoachingKarteStudentPage({
           </section>
 
           <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-            <h2 className="mb-4 text-base font-bold">科目別の学習割合</h2>
-            <SubjectStudyPieChart data={pieData} />
+            <SubjectStudyPieSection
+              logs={logs}
+              initialPeriod={piePeriod}
+              compact
+              basePath={`/admin/coaching/karte/${studentId}`}
+              preserveParams={{
+                booking: query.booking,
+                coach: query.coach,
+                historyPage: query.historyPage,
+              }}
+            />
           </section>
 
           <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -137,6 +150,9 @@ export default async function AdminCoachingKarteStudentPage({
             defaultBookingId={query.booking ?? null}
             coaches={coaches}
             history={karteResult.entries}
+            historyTotalCount={karteResult.totalCount ?? 0}
+            historyPage={karteResult.page ?? 1}
+            historyPageSize={karteResult.pageSize ?? 10}
             tableAvailable={karteResult.tableAvailable}
           />
         </div>

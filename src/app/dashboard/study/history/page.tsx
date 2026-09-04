@@ -3,14 +3,13 @@ import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { DailyStudyBarChart } from '@/components/study/DailyStudyBarChart'
-import { SubjectStudyPieChart } from '@/components/study/SubjectStudyPieChart'
+import { SubjectStudyPieSection } from '@/components/study/SubjectStudyPieSection'
 import { StudyLogDayNav } from '@/components/study/StudyLogDayNav'
 import { StudyLogTable } from '@/components/study/StudyLogTable'
 import { StudyDayFeedbackCard } from '@/components/study/StudyDayFeedbackCard'
 import { StudyFeedbackReadMarker } from '@/components/study/StudyFeedbackReadMarker'
 import {
   buildDailyChartData,
-  buildSubjectPieData,
   formatDuration,
 } from '@/lib/study/chart-data'
 import { getJstDateKey, getTodayDateKey, isValidDateKey } from '@/lib/study/dates'
@@ -23,7 +22,7 @@ import { fetchStudyLogsForStudent, fetchTextbooksForStudent } from '@/lib/study/
 export default async function StudentStudyHistoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string }>
+  searchParams: Promise<{ date?: string; piePeriod?: string }>
 }) {
   const profile = await getCurrentProfile()
 
@@ -53,7 +52,7 @@ export default async function StudentStudyHistoryPage({
   const dayMinutes = dayLogs.reduce((sum, log) => sum + log.duration_minutes, 0)
 
   const { rows, subjects } = buildDailyChartData(logs, 14)
-  const pieData = buildSubjectPieData(logs)
+  const piePeriod = params.piePeriod === '14' ? '14' : 'all'
   const totalMinutes = logs.reduce((sum, log) => sum + log.duration_minutes, 0)
   const chartTodayKey = getTodayDateKey()
   const todayMinutes = logs
@@ -116,8 +115,12 @@ export default async function StudentStudyHistoryPage({
         </section>
 
         <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-bold">科目別の学習割合</h2>
-          <SubjectStudyPieChart data={pieData} />
+          <SubjectStudyPieSection
+            logs={logs}
+            initialPeriod={piePeriod}
+            basePath="/dashboard/study/history"
+            preserveParams={{ date: selectedDate !== todayKey ? selectedDate : undefined }}
+          />
         </section>
 
         <p className="text-sm text-muted">
@@ -126,7 +129,7 @@ export default async function StudentStudyHistoryPage({
             学習を記録する
           </Link>
           から追加できます。教材の追加は{' '}
-          <Link href="/dashboard/textbooks/register" className="text-primary hover:underline">
+          <Link href="/dashboard/textbooks/register?mode=create" className="text-primary hover:underline">
             教材登録
           </Link>
           から行えます。

@@ -12,6 +12,13 @@ export interface CoachingCoach {
   name: string
   is_active: boolean
   sort_order: number
+  stream: 'humanities' | 'sciences' | null
+  school_types: string[]
+  exam_types: string[]
+  has_internal_recommendation_experience: boolean
+  strong_subjects: string[]
+  feature_tags: string[]
+  bio: string
   created_at: string
   updated_at: string
 }

@@ -7,6 +7,8 @@ import {
   updateCoachingCoach,
   type CoachingActionState,
 } from '@/app/coaching/actions'
+import { CoachProfileFields } from '@/components/coaching/CoachProfileFields'
+import { useActionToast } from '@/hooks/useActionToast'
 import type { CoachingCoach } from '@/types/coaching'
 
 const initialState: CoachingActionState = {}
@@ -24,6 +26,8 @@ function CoachForm({
 }) {
   const action = coach ? updateCoachingCoach : createCoachingCoach
   const [state, formAction, pending] = useActionState(action, initialState)
+
+  useActionToast(state, { successMessage: '保存しました' })
 
   function handleDelete(event: FormEvent<HTMLFormElement>) {
     if (!window.confirm('本当に削除しますか？')) {
@@ -59,8 +63,9 @@ function CoachForm({
             </label>
           )}
         </div>
-        {state.error && <p className="text-sm text-error">{state.error}</p>}
-        {state.success && <p className="text-sm text-green-700">保存しました</p>}
+
+        <CoachProfileFields coach={coach} />
+
         <div className="flex flex-wrap gap-2">
           <button
             type="submit"

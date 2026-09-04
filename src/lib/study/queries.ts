@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import type { StudyLog } from '@/lib/study/chart-data'
 import { computeCurrentStudyStreak } from '@/lib/study/streak'
+import { filterTextbooksByStudyCategory } from '@/lib/constants/textbook-subject-categories'
+import { DEFAULT_PAGE_SIZE, getTotalPages, parsePageParam } from '@/lib/pagination'
 import type { Textbook } from '@/types/textbook'
 
 export async function fetchTextbooksForStudent(studentId: string): Promise<Textbook[]> {
@@ -24,6 +26,38 @@ export async function fetchTextbooksForStudent(studentId: string): Promise<Textb
     publisher: (book as Textbook).publisher ?? null,
     is_seen_by_student: (book as Textbook).is_seen_by_student ?? true,
   }))
+}
+
+export async function fetchTextbooksForStudentPaginated(
+  studentId: string,
+  options: {
+    page?: number
+    pageSize?: number
+    subjectCategory: string
+  },
+): Promise<{
+  textbooks: Textbook[]
+  totalCount: number
+  totalAllCount: number
+  page: number
+  pageSize: number
+}> {
+  const pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE
+  const all = await fetchTextbooksForStudent(studentId)
+  const filtered = filterTextbooksByStudyCategory(all, options.subjectCategory)
+  const totalCount = filtered.length
+  const totalPages = getTotalPages(totalCount, pageSize)
+  const page = parsePageParam(options.page ? String(options.page) : undefined, totalPages)
+  const start = (page - 1) * pageSize
+  const textbooks = filtered.slice(start, start + pageSize)
+
+  return {
+    textbooks,
+    totalCount,
+    totalAllCount: all.length,
+    page,
+    pageSize,
+  }
 }
 
 export async function fetchStudyLogsForStudent(studentId: string): Promise<StudyLog[]> {

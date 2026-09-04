@@ -116,10 +116,18 @@ export function buildDailyChartData(logs: StudyLog[], days = 14): {
   return { rows, subjects }
 }
 
-export function buildSubjectPieData(logs: StudyLog[]): SubjectChartRow[] {
+export function buildSubjectPieData(
+  logs: StudyLog[],
+  options?: { days?: number | 'all' },
+): SubjectChartRow[] {
+  const periodDays = options?.days ?? 'all'
+  const dateKeys =
+    periodDays === 'all' ? null : getRecentDateKeys(typeof periodDays === 'number' ? periodDays : 14)
+
   const totals = new Map<string, number>()
 
   for (const log of logs) {
+    if (dateKeys && !dateKeys.includes(log.studied_on)) continue
     const chartSubject = getChartSubjectLabel(log.subject)
     totals.set(chartSubject, (totals.get(chartSubject) ?? 0) + log.duration_minutes)
   }

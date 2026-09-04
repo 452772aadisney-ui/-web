@@ -22,11 +22,13 @@ const NAV_ITEMS = [
 interface AdminMainNavProps {
   unreadChatCount: number
   incompleteStudyFeedbackCount: number
+  containerClass?: string
 }
 
 export function AdminMainNav({
   unreadChatCount,
   incompleteStudyFeedbackCount,
+  containerClass = 'max-w-3xl',
 }: AdminMainNavProps) {
   const pathname = usePathname()
 
@@ -36,8 +38,8 @@ export function AdminMainNav({
   }
 
   return (
-    <nav className="border-b border-border bg-card px-4 py-3">
-      <div className="mx-auto flex max-w-3xl flex-wrap gap-2">
+    <nav className="px-4 py-3">
+      <div className={`mx-auto flex ${containerClass} flex-wrap gap-2`}>
         {NAV_ITEMS.map((item) => {
           const isActive =
             pathname === item.href ||

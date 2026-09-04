@@ -232,14 +232,18 @@ function AdminWeekGrid({
 
   return (
     <>
-      <div
-        ref={gridRef}
-        onPointerMove={handlePointerMove}
-        onPointerUp={finishDrag}
-        onPointerCancel={finishDrag}
-        className={cn('grid w-full min-w-0 select-none gap-1.5 touch-none', isBusy && 'opacity-60')}
-        style={{ gridTemplateColumns: `52px repeat(${weekdays.length}, minmax(0, 1fr))` }}
-      >
+      <div className="overflow-x-auto">
+        <div
+          ref={gridRef}
+          onPointerMove={handlePointerMove}
+          onPointerUp={finishDrag}
+          onPointerCancel={finishDrag}
+          className={cn(
+            'grid min-w-[640px] select-none gap-1.5 touch-none',
+            isBusy && 'opacity-60',
+          )}
+          style={{ gridTemplateColumns: `52px repeat(${weekdays.length}, minmax(72px, 1fr))` }}
+        >
         <div />
         {weekdays.map((day) => (
           <div key={day.date} className="truncate text-center text-xs font-semibold text-muted sm:text-sm">
@@ -286,6 +290,7 @@ function AdminWeekGrid({
             })}
           </div>
         ))}
+        </div>
       </div>
 
       <p className="mt-4 text-xs text-muted">

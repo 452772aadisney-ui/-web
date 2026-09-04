@@ -4,6 +4,7 @@ import {
   type CoachingKarteFetchResult,
 } from '@/lib/coaching/karte-table'
 import type { CoachingKarteEntryWithDetails } from '@/types/coaching'
+import { DEFAULT_PAGE_SIZE, getTotalPages, parsePageParam } from '@/lib/pagination'
 
 type KarteRow = {
   id: string
@@ -39,8 +40,29 @@ function mapKarteEntry(row: KarteRow): CoachingKarteEntryWithDetails {
 
 export async function fetchCoachingKarteEntriesForStudent(
   studentId: string,
+  options?: { page?: number; pageSize?: number },
 ): Promise<CoachingKarteFetchResult> {
+  const pageSize = options?.pageSize ?? DEFAULT_PAGE_SIZE
   const supabase = await createClient()
+
+  const { count, error: countError } = await supabase
+    .from('coaching_karte_entries')
+    .select('id', { count: 'exact', head: true })
+    .eq('student_id', studentId)
+
+  if (countError) {
+    if (isCoachingKarteTableMissingError(countError.message)) {
+      return { entries: [], tableAvailable: false, totalCount: 0, page: 1, pageSize }
+    }
+    return { entries: [], tableAvailable: true, totalCount: 0, page: 1, pageSize }
+  }
+
+  const totalCount = count ?? 0
+  const totalPages = getTotalPages(totalCount, pageSize)
+  const page = parsePageParam(options?.page ? String(options.page) : undefined, totalPages)
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
+
   const { data, error } = await supabase
     .from('coaching_karte_entries')
     .select(
@@ -49,16 +71,20 @@ export async function fetchCoachingKarteEntriesForStudent(
     .eq('student_id', studentId)
     .order('session_date', { ascending: false })
     .order('created_at', { ascending: false })
+    .range(from, to)
 
   if (error) {
     if (isCoachingKarteTableMissingError(error.message)) {
-      return { entries: [], tableAvailable: false }
+      return { entries: [], tableAvailable: false, totalCount: 0, page: 1, pageSize }
     }
-    return { entries: [], tableAvailable: true }
+    return { entries: [], tableAvailable: true, totalCount, page, pageSize }
   }
 
   return {
     entries: ((data as KarteRow[]) ?? []).map(mapKarteEntry),
     tableAvailable: true,
+    totalCount,
+    page,
+    pageSize,
   }
 }

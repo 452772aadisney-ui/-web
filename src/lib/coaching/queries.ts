@@ -86,6 +86,28 @@ function mapBooking(row: BookingRow): CoachingBookingWithDetails {
   }
 }
 
+function normalizeCoachingCoach(row: Record<string, unknown>): CoachingCoach {
+  const stream = row.stream
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    is_active: Boolean(row.is_active ?? true),
+    sort_order: Number(row.sort_order ?? 0),
+    stream:
+      stream === 'humanities' || stream === 'sciences' ? stream : null,
+    school_types: Array.isArray(row.school_types) ? (row.school_types as string[]) : [],
+    exam_types: Array.isArray(row.exam_types) ? (row.exam_types as string[]) : [],
+    has_internal_recommendation_experience: Boolean(
+      row.has_internal_recommendation_experience ?? false,
+    ),
+    strong_subjects: Array.isArray(row.strong_subjects) ? (row.strong_subjects as string[]) : [],
+    feature_tags: Array.isArray(row.feature_tags) ? (row.feature_tags as string[]) : [],
+    bio: String(row.bio ?? ''),
+    created_at: String(row.created_at),
+    updated_at: String(row.updated_at),
+  }
+}
+
 export async function fetchCoachingCoaches(activeOnly = false): Promise<CoachingCoach[]> {
   const supabase = await createClient()
   let query = supabase.from('coaching_coaches').select('*').order('sort_order').order('name')
@@ -100,7 +122,7 @@ export async function fetchCoachingCoaches(activeOnly = false): Promise<Coaching
     return []
   }
 
-  return (data as CoachingCoach[]) ?? []
+  return ((data as Record<string, unknown>[]) ?? []).map(normalizeCoachingCoach)
 }
 
 /** 予約済み（scheduled）の slot_id を取得（RLSを迂回して占有状況のみ判定） */

@@ -8,6 +8,8 @@ import {
 } from '@/app/coaching/actions'
 import { CoachingKarteHistoryEntry } from '@/components/coaching/CoachingKarteHistoryEntry'
 import { AutoResizeTextarea } from '@/components/ui/AutoResizeTextarea'
+import { Pagination } from '@/components/ui/Pagination'
+import { useActionToast } from '@/hooks/useActionToast'
 import {
   clearKarteDraft,
   loadKarteDraft,
@@ -26,6 +28,9 @@ interface AdminCoachingKarteFormProps {
   defaultBookingId?: string | null
   coaches: CoachingCoach[]
   history: CoachingKarteEntryWithDetails[]
+  historyTotalCount: number
+  historyPage: number
+  historyPageSize: number
   tableAvailable?: boolean
 }
 
@@ -36,6 +41,9 @@ export function AdminCoachingKarteForm({
   defaultBookingId,
   coaches,
   history,
+  historyTotalCount,
+  historyPage,
+  historyPageSize,
   tableAvailable = true,
 }: AdminCoachingKarteFormProps) {
   const router = useRouter()
@@ -47,6 +55,10 @@ export function AdminCoachingKarteForm({
   const [bookingId, setBookingId] = useState(defaultBookingId ?? '')
   const [draftLoaded, setDraftLoaded] = useState(false)
   const [draftSaved, setDraftSaved] = useState(false)
+
+  useActionToast(state, {
+    successMessage: 'カルテを保存しました',
+  })
 
   useEffect(() => {
     const draft = loadKarteDraft(studentId)
@@ -92,6 +104,8 @@ export function AdminCoachingKarteForm({
     setDraftSaved(true)
     setDraftLoaded(false)
   }
+
+  const historyPathname = `/admin/coaching/karte/${studentId}`
 
   return (
     <div className="space-y-6">
@@ -168,14 +182,6 @@ export function AdminCoachingKarteForm({
               一時保存しました
             </p>
           )}
-          {state.error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error">{state.error}</p>
-          )}
-          {state.success && (
-            <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
-              カルテを保存しました
-            </p>
-          )}
 
           <div className="flex flex-wrap gap-2">
             <button
@@ -198,19 +204,32 @@ export function AdminCoachingKarteForm({
 
       <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
         <h2 className="text-lg font-bold">前回までの記録</h2>
-        {history.length === 0 ? (
+        {historyTotalCount === 0 ? (
           <p className="mt-4 text-sm text-muted">まだカルテの記録がありません。</p>
         ) : (
-          <ul className="mt-4 space-y-4">
-            {history.map((entry) => (
-              <CoachingKarteHistoryEntry
-                key={entry.id}
-                entry={entry}
-                coaches={coaches}
-                tableAvailable={tableAvailable}
-              />
-            ))}
-          </ul>
+          <>
+            <ul className="mt-4 space-y-4">
+              {history.map((entry) => (
+                <CoachingKarteHistoryEntry
+                  key={entry.id}
+                  entry={entry}
+                  coaches={coaches}
+                  tableAvailable={tableAvailable}
+                />
+              ))}
+            </ul>
+            <Pagination
+              currentPage={historyPage}
+              totalCount={historyTotalCount}
+              pageSize={historyPageSize}
+              pageParam="historyPage"
+              pathname={historyPathname}
+              preserveParams={{
+                booking: defaultBookingId ?? undefined,
+                coach: defaultCoachId ?? undefined,
+              }}
+            />
+          </>
         )}
       </section>
     </div>

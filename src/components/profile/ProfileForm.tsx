@@ -3,8 +3,10 @@
 import Link from 'next/link'
 import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 import { updateProfile, type ProfileActionState } from '@/app/profile/actions'
 import { useAchievementUnlockDialog } from '@/components/achievements/useAchievementUnlockDialog'
+import { useActionToast } from '@/hooks/useActionToast'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
 import { SubjectCheckboxGrid } from '@/components/subjects/SubjectCheckboxGrid'
 import type { Profile } from '@/types/database'
@@ -26,6 +28,10 @@ export function ProfileForm({ profile, backHref }: ProfileFormProps) {
       setPendingRedirect(false)
       router.push(backHref)
     },
+  })
+
+  useActionToast(state, {
+    successMessage: 'プロフィールを保存しました',
   })
 
   useEffect(() => {
@@ -88,12 +94,6 @@ export function ProfileForm({ profile, backHref }: ProfileFormProps) {
         <legend className="mb-3 text-sm font-medium">使用科目</legend>
         <SubjectCheckboxGrid subjects={EXAM_SUBJECTS} selectedSubjects={selectedSubjects} />
       </fieldset>
-
-      {state.error && (
-        <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-error" role="alert">
-          {state.error}
-        </p>
-      )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <button
