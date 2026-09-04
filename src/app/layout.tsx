@@ -11,11 +11,21 @@ const notoSansJp = Noto_Sans_JP({
 export const metadata: Metadata = {
   title: '受験生web',
   description: '大学受験生向け学習管理アプリ',
+  applicationName: '受験生web',
+  appleWebApp: {
+    capable: true,
+    title: '受験生web',
+    statusBarStyle: 'default',
+  },
+  icons: {
+    apple: [{ url: '/icons/pwa/apple-touch-icon.png', sizes: '180x180' }],
+  },
 }
 
 export const viewport = {
   width: 'device-width',
   initialScale: 1,
+  themeColor: '#2563eb',
 }
 
 export default function RootLayout({
