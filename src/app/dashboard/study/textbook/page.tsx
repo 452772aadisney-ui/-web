@@ -3,11 +3,9 @@ import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { StudyLogTextbookForm } from '@/components/study/StudyLogTextbookForm'
-import {
-  StudyTextbookPicker,
-  toStudyTextbookPickerItems,
-} from '@/components/study/StudyTextbookPicker'
+import { StudyTextbookPicker } from '@/components/study/StudyTextbookPicker'
 import { deriveStudyCategoryFromTextbook } from '@/lib/constants/textbook-subject-categories'
+import { toStudyTextbookPickerItems } from '@/lib/study/textbook-picker'
 import {
   fetchTextbookForStudent,
   fetchTextbooksForStudent,
@@ -36,14 +34,18 @@ export default async function StudentStudyTextbookPage({
     }
 
     const subject = deriveStudyCategoryFromTextbook(
-      textbook.subjects,
+      textbook.subjects ?? [],
       profileSubjects,
-      textbook.detail_tags,
+      textbook.detail_tags ?? [],
     )
 
     if (!subject) {
       return (
-        <StudentPageShell title="参考書で登録" backHref="/dashboard/study/textbook" backLabel="参考書を選ぶ">
+        <StudentPageShell
+          title="参考書で登録"
+          backHref="/dashboard/study/textbook"
+          backLabel="参考書を選ぶ"
+        >
           <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
             <p className="font-medium">この参考書の科目を判定できませんでした。</p>
             <p className="mt-2">
@@ -61,7 +63,11 @@ export default async function StudentStudyTextbookPage({
     }
 
     return (
-      <StudentPageShell title="参考書で登録" backHref="/dashboard/study/textbook" backLabel="参考書を選ぶ">
+      <StudentPageShell
+        title="参考書で登録"
+        backHref="/dashboard/study/textbook"
+        backLabel="参考書を選ぶ"
+      >
         <div className="space-y-6">
           <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm">
             <h2 className="text-lg font-bold">学習を記録</h2>
@@ -85,7 +91,10 @@ export default async function StudentStudyTextbookPage({
 
   const [textbooks, usage] = await Promise.all([
     fetchTextbooksForStudent(profile.id),
-    fetchTextbookStudyUsageForStudent(profile.id, 4),
+    fetchTextbookStudyUsageForStudent(profile.id, 4).catch(() => ({
+      lastStudiedOnByTextbookId: {},
+      recentTextbookIds: [] as string[],
+    })),
   ])
 
   const pickerItems = toStudyTextbookPickerItems(

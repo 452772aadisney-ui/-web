@@ -3,17 +3,11 @@
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import {
-  deriveStudyCategoryFromTextbook,
   getStudySubjectCategoriesForProfile,
   type TextbookSubjectCategoryLabel,
 } from '@/lib/constants/textbook-subject-categories'
+import type { StudyTextbookPickerItem } from '@/lib/study/textbook-picker'
 import { cn } from '@/lib/utils'
-import type { Textbook } from '@/types/textbook'
-
-export type StudyTextbookPickerItem = Textbook & {
-  lastStudiedOn: string | null
-  subjectLabel: string | null
-}
 
 function formatLastStudiedOn(dateKey: string | null): string | null {
   if (!dateKey) return null
@@ -29,10 +23,10 @@ function TextbookPickCard({
   book: StudyTextbookPickerItem
   href: string
 }) {
-  const tags = [
-    ...(book.detail_tags.length > 0 ? book.detail_tags : book.subjects),
-    ...book.usage_tags,
-  ]
+  const detailTags = book.detail_tags ?? []
+  const usageTags = book.usage_tags ?? []
+  const subjects = book.subjects ?? []
+  const tags = [...(detailTags.length > 0 ? detailTags : subjects), ...usageTags]
     .filter(Boolean)
     .slice(0, 4)
 
@@ -111,7 +105,7 @@ export function StudyTextbookPicker({
               <TextbookPickCard
                 key={`recent-${book.id}`}
                 book={book}
-                href={`/dashboard/study/textbook?textbookId=${book.id}`}
+                href={`/dashboard/study/textbook?textbookId=${encodeURIComponent(book.id)}`}
               />
             ))}
           </div>
@@ -185,7 +179,7 @@ export function StudyTextbookPicker({
               <TextbookPickCard
                 key={book.id}
                 book={book}
-                href={`/dashboard/study/textbook?textbookId=${book.id}`}
+                href={`/dashboard/study/textbook?textbookId=${encodeURIComponent(book.id)}`}
               />
             ))}
           </div>
@@ -193,20 +187,4 @@ export function StudyTextbookPicker({
       </section>
     </div>
   )
-}
-
-export function toStudyTextbookPickerItems(
-  textbooks: Textbook[],
-  profileSubjects: string[],
-  lastStudiedOnByTextbookId: Record<string, string>,
-): StudyTextbookPickerItem[] {
-  return textbooks.map((book) => ({
-    ...book,
-    lastStudiedOn: lastStudiedOnByTextbookId[book.id] ?? null,
-    subjectLabel: deriveStudyCategoryFromTextbook(
-      book.subjects,
-      profileSubjects,
-      book.detail_tags,
-    ),
-  }))
 }

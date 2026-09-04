@@ -222,27 +222,33 @@ export async function fetchTextbookStudyUsageForStudent(
   studentId: string,
   limit = 4,
 ): Promise<TextbookStudyUsage> {
-  const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('study_logs')
-    .select('textbook_id, studied_on')
-    .eq('student_id', studentId)
-    .not('textbook_id', 'is', null)
-    .order('studied_on', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(300)
+  try {
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from('study_logs')
+      .select('textbook_id, studied_on, created_at')
+      .eq('student_id', studentId)
+      .not('textbook_id', 'is', null)
+      .order('studied_on', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(300)
 
-  if (error || !data) {
+    if (error || !data) {
+      console.error('[study] textbook usage fetch failed:', error?.message)
+      return { lastStudiedOnByTextbookId: {}, recentTextbookIds: [] }
+    }
+
+    return buildTextbookStudyUsage(
+      data.map((row) => ({
+        textbook_id: row.textbook_id ? String(row.textbook_id) : null,
+        studied_on: String(row.studied_on),
+      })),
+      limit,
+    )
+  } catch (error) {
+    console.error('[study] textbook usage fetch threw:', error)
     return { lastStudiedOnByTextbookId: {}, recentTextbookIds: [] }
   }
-
-  return buildTextbookStudyUsage(
-    data.map((row) => ({
-      textbook_id: row.textbook_id ? String(row.textbook_id) : null,
-      studied_on: String(row.studied_on),
-    })),
-    limit,
-  )
 }
 
 export type StudentDashboardStudySummary = {
