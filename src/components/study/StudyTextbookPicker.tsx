@@ -7,6 +7,8 @@ import {
   type TextbookSubjectCategoryLabel,
 } from '@/lib/constants/textbook-subject-categories'
 import type { StudyTextbookPickerItem } from '@/lib/study/textbook-picker'
+import { TextbookCoverImage } from '@/components/textbooks/TextbookCoverImage'
+import { TextbookPublisherBadge } from '@/components/textbooks/TextbookPublisherBadge'
 import { cn } from '@/lib/utils'
 
 function formatLastStudiedOn(dateKey: string | null): string | null {
@@ -31,23 +33,31 @@ function TextbookPickCard({
     .slice(0, 4)
 
   return (
-    <article className="flex flex-col rounded-xl border border-border bg-background p-4 shadow-sm">
-      <div className="min-w-0 flex-1">
-        <h3 className="text-sm font-bold leading-snug">{book.name}</h3>
-        <p className="mt-1 text-xs text-muted">
+    <article className="flex h-full flex-col rounded-xl border border-border bg-card p-3 shadow-sm">
+      <TextbookCoverImage
+        name={book.name}
+        coverUrl={book.cover_url}
+        className="mx-auto h-28 w-20"
+      />
+      <div className="mt-3 flex min-h-0 flex-1 flex-col">
+        <TextbookPublisherBadge publisher={book.publisher} />
+        <h3 className="mt-1 line-clamp-3 text-xs font-bold leading-snug">{book.name}</h3>
+        <p className="mt-1 line-clamp-2 text-[10px] text-muted">
           {book.subjectLabel ?? '科目未設定'}
           {tags.length > 0 ? ` / ${tags.join('・')}` : ''}
         </p>
         {book.lastStudiedOn && (
-          <p className="mt-1 text-xs text-muted">{formatLastStudiedOn(book.lastStudiedOn)}</p>
+          <p className="mt-1 text-[10px] text-muted">{formatLastStudiedOn(book.lastStudiedOn)}</p>
         )}
+        <div className="mt-auto pt-3">
+          <Link
+            href={href}
+            className="inline-flex w-full items-center justify-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white transition hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            勉強を記録
+          </Link>
+        </div>
       </div>
-      <Link
-        href={href}
-        className="mt-3 inline-flex items-center justify-center rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white transition hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-      >
-        勉強を記録
-      </Link>
     </article>
   )
 }
@@ -100,7 +110,7 @@ export function StudyTextbookPicker({
       {recentTextbooks.length > 0 && (
         <section>
           <h3 className="text-sm font-bold text-muted">最近使った参考書</h3>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <div className="mt-3 grid grid-cols-2 gap-3">
             {recentTextbooks.map((book) => (
               <TextbookPickCard
                 key={`recent-${book.id}`}
@@ -174,7 +184,7 @@ export function StudyTextbookPicker({
             </Link>
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-2 gap-3">
             {filtered.map((book) => (
               <TextbookPickCard
                 key={book.id}
