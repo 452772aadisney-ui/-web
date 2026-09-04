@@ -27,7 +27,7 @@ export default function RootLayout({
     <html lang="ja">
       <body className={`${notoSansJp.variable} font-sans antialiased`}>
         {children}
-        <Toaster position="top-center" richColors closeButton />
+        <Toaster position="top-center" richColors duration={2000} />
       </body>
     </html>
   )
