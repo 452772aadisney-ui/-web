@@ -1,9 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { signOut } from '@/app/auth/actions'
 import type { HamburgerMenuItem } from '@/components/layout/menu-items'
+import { cleanupPushSubscriptionBeforeLogout } from '@/lib/push/client'
 
 export type { HamburgerMenuItem } from '@/components/layout/menu-items'
 
@@ -13,6 +14,7 @@ interface HamburgerMenuProps {
 
 export function HamburgerMenu({ items }: HamburgerMenuProps) {
   const [open, setOpen] = useState(false)
+  const [isPending, startTransition] = useTransition()
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -27,6 +29,14 @@ export function HamburgerMenu({ items }: HamburgerMenuProps) {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [open])
+
+  const handleSignOut = () => {
+    startTransition(async () => {
+      // Best-effort: disable this browser's push before ending the session.
+      await cleanupPushSubscriptionBeforeLogout()
+      await signOut()
+    })
+  }
 
   return (
     <div className="relative" ref={menuRef}>
@@ -59,14 +69,14 @@ export function HamburgerMenu({ items }: HamburgerMenuProps) {
               )}
             </Link>
           ))}
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="block w-full px-4 py-2.5 text-left text-sm hover:bg-background"
-            >
-              ログアウト
-            </button>
-          </form>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            disabled={isPending}
+            className="block w-full px-4 py-2.5 text-left text-sm hover:bg-background disabled:opacity-60"
+          >
+            ログアウト
+          </button>
         </div>
       )}
     </div>

@@ -143,13 +143,29 @@ rollback は上記テーブル4つと enum 3つのみ削除する（既存シス
 
 ---
 
+## 購読 API（1-5）
+
+- Route Handler: `GET|POST|DELETE /api/push/subscription`
+- 採用理由: Origin / Content-Type / HTTP ステータス（401/403/409）を明示しやすい。既存の主要 mutation は Server Action だが、Push は CSRF・ステータス要件が強い
+- 流れ: `getUser()` → 生徒ロール確認 → Origin/JSON 検証 → 入力検証 → Admin Client
+- `expirationTime` は DB 未保存（列なし・現時点で運用価値が低い）
+- 共有端末: endpoint+p256dh+auth 完全一致時のみ移管。鍵不一致は 409（他ユーザー無効化なし）
+- 解除順: **サーバー無効化 → ブラウザ unsubscribe**
+- 起動時再同期: permission=granted かつ既存購読がある場合のみ（許可ダイアログなし）
+- ログアウト: `HamburgerMenu` で Push クリーンアップ後に `signOut`（失敗してもログアウト続行）
+- 環境変数: `.env.local.example` 参照。`PUSH_SENDING_ENABLED` は厳密に `true` のときのみ送信可（送信自体は未実装）
+- `web-push` パッケージは未追加（鍵生成は `npx web-push generate-vapid-keys`、送信工程で追加予定）
+
+---
+
 ## フェーズ
 
 | 工程 | 内容 |
 |------|------|
-| 1-3 | DB・RLS・型（migration `050`、本番未適用） |
+| 1-3 | DB・RLS・型（migration `050`、本番適用済み） |
 | 1-4 | Manifest・Service Worker |
-| 1-5 以降 | 購読 API・設定画面・送信・既存メール接続 |
+| 1-5 | 購読 API・クライアント基盤 |
+| 1-6 以降 | 通知設定画面・送信・既存メール接続 |
 
 ---
 
