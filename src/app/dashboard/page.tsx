@@ -11,7 +11,6 @@ import { fetchCurrentStudyStreakForStudent } from '@/lib/study/queries'
 import { fetchUnreadStudyFeedbackCount } from '@/lib/study/feedback-queries'
 import { fetchUnseenTextbookCount } from '@/lib/textbooks/catalog-queries'
 import { fetchIncompleteTodoCount, fetchOverdueTodoCount } from '@/lib/todo/queries'
-import { fetchPendingStudentQuizCount } from '@/lib/quizzes/queries'
 import { getCoachingAlertState, getNextCoachingBooking } from '@/lib/coaching/alert'
 import { fetchCoachingBookingsForStudent } from '@/lib/coaching/queries'
 import { getDaysUntilCommonTest } from '@/lib/exam/common-test-countdown'
@@ -69,7 +68,7 @@ export default async function StudentDashboardPage() {
       ? getNextCoachingBooking(coachingBookings)
       : null
 
-  const [unreadAnnouncementCount, unreadChatCount, unreadStudyFeedbackCount, unseenTextbookCount, incompleteTodoCount, overdueTodoCount, pendingQuizCount, studyStreakDays, starRanking] =
+  const [unreadAnnouncementCount, unreadChatCount, unreadStudyFeedbackCount, unseenTextbookCount, incompleteTodoCount, overdueTodoCount, studyStreakDays, starRanking] =
     profile.role === 'student'
       ? await Promise.all([
           fetchUnreadAnnouncementCount(profile.id).catch(() => 0),
@@ -78,11 +77,10 @@ export default async function StudentDashboardPage() {
           fetchUnseenTextbookCount(profile.id).catch(() => 0),
           fetchIncompleteTodoCount(profile.id).catch(() => 0),
           fetchOverdueTodoCount(profile.id).catch(() => 0),
-          fetchPendingStudentQuizCount(profile.id).catch(() => 0),
           fetchCurrentStudyStreakForStudent(profile.id).catch(() => 0),
           fetchStudentStarRanking(profile.id).catch(() => null),
         ])
-      : [0, 0, 0, 0, 0, 0, 0, 0, null]
+      : [0, 0, 0, 0, 0, 0, 0, null]
 
   const showFaqIntro =
     profile.role === 'student' && profile.faq_intro_seen_at == null
@@ -107,7 +105,6 @@ export default async function StudentDashboardPage() {
           unseenTextbookCount={unseenTextbookCount}
           incompleteTodoCount={incompleteTodoCount}
           overdueTodoCount={overdueTodoCount}
-          pendingQuizCount={pendingQuizCount}
           hideClassSchedule={isKisotsuStudent}
           hideCoaching={isKisotsuStudent}
           showFaqIntro={showFaqIntro}

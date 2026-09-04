@@ -68,16 +68,14 @@ function AchievementSection({
 export function AchievementList({
   lockedItems,
   unlockedItems,
-  unlockedCount,
-  totalCount,
 }: {
   lockedItems: AchievementListItem[]
   unlockedItems: AchievementListItem[]
-  unlockedCount: number
-  totalCount: number
 }) {
   const [filter, setFilter] = useState<AchievementFilter>('all')
+  const unlockedCount = unlockedItems.length
   const lockedCount = lockedItems.length
+  const totalCount = unlockedCount + lockedCount
 
   const tabs: Array<{ id: AchievementFilter; label: string; count: number }> = [
     { id: 'all', label: 'すべて', count: totalCount },
@@ -98,10 +96,8 @@ export function AchievementList({
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-border bg-background px-4 py-3 text-sm">
-        達成数:{' '}
-        <span className="font-bold text-primary">
-          {unlockedCount} / {totalCount}
-        </span>
+        達成した実績：
+        <span className="font-bold text-primary">{unlockedCount}件</span>
       </div>
 
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="実績の表示切替">

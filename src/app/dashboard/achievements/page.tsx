@@ -11,8 +11,7 @@ export default async function StudentAchievementsPage() {
   if (!profile) redirect('/login')
   if (profile.role !== 'student') redirect(getDashboardPathForRole(profile.role))
 
-  const { publicItems, secretItems, unlockedCount, totalCount } =
-    await fetchStudentAchievements(profile.id)
+  const { publicItems, secretItems } = await fetchStudentAchievements(profile.id)
   const { lockedItems, unlockedItems } = splitVisibleAchievements(publicItems, secretItems)
 
   return (
@@ -22,12 +21,7 @@ export default async function StudentAchievementsPage() {
         <p className="mb-6 text-sm text-muted">
           学習や登録の積み重ねで実績を解除できます。未達成はグレー表示です。
         </p>
-        <AchievementList
-          lockedItems={lockedItems}
-          unlockedItems={unlockedItems}
-          unlockedCount={unlockedCount}
-          totalCount={totalCount}
-        />
+        <AchievementList lockedItems={lockedItems} unlockedItems={unlockedItems} />
       </section>
     </StudentPageShell>
   )

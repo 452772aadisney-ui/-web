@@ -100,3 +100,21 @@ export function splitVisibleAchievements(
     ],
   }
 }
+
+/** 画面に表示するカード数（タブ件数と一致させる） */
+export function countVisibleAchievementCards(
+  lockedItems: AchievementListItem[],
+  unlockedItems: AchievementListItem[],
+): {
+  lockedCount: number
+  unlockedCount: number
+  totalCount: number
+} {
+  const lockedCount = lockedItems.length
+  const unlockedCount = unlockedItems.length
+  return {
+    lockedCount,
+    unlockedCount,
+    totalCount: lockedCount + unlockedCount,
+  }
+}

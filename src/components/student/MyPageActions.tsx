@@ -18,7 +18,7 @@ import { CommonTestCountdownBanner } from '@/components/student/CommonTestCountd
 import type { StudentStarRanking } from '@/lib/achievements/ranking'
 import { formatStudyStreakLabel } from '@/lib/study/streak'
 
-type MenuBadgeKey = 'studyHistory' | 'announcements' | 'chat' | 'bookshelf' | 'faqIntro' | 'todo' | 'quiz'
+type MenuBadgeKey = 'studyHistory' | 'announcements' | 'chat' | 'bookshelf' | 'faqIntro' | 'todo'
 
 const iconMenuActions: Array<{
   href?: string
@@ -51,13 +51,6 @@ const iconMenuActions: Array<{
     href: '/dashboard/calendar',
     label: 'カレンダー',
     iconSrc: MYPAGE_MENU_ICONS.calendar,
-  },
-  {
-    href: '/dashboard/quizzes',
-    label: '小テスト',
-    iconSrc: MYPAGE_MENU_ICONS.quiz,
-    badgeKey: 'quiz',
-    subtitle: '予定はカレンダーにも表示されます',
   },
   {
     href: '/dashboard/todo',
@@ -108,7 +101,6 @@ interface MyPageActionsProps {
   unseenTextbookCount?: number
   incompleteTodoCount?: number
   overdueTodoCount?: number
-  pendingQuizCount?: number
   hideClassSchedule?: boolean
   hideCoaching?: boolean
   showFaqIntro?: boolean
@@ -126,7 +118,6 @@ export function MyPageActions({
   unseenTextbookCount = 0,
   incompleteTodoCount = 0,
   overdueTodoCount = 0,
-  pendingQuizCount = 0,
   hideClassSchedule = false,
   hideCoaching = false,
   showFaqIntro = false,
@@ -140,7 +131,6 @@ export function MyPageActions({
     bookshelf: unseenTextbookCount,
     faqIntro: showFaqIntro ? 1 : 0,
     todo: incompleteTodoCount,
-    quiz: pendingQuizCount,
   }
 
   const visibleMenuActions = hideClassSchedule
