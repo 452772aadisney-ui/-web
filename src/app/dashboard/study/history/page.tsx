@@ -141,8 +141,6 @@ export default async function StudentStudyHistoryPage({
             data14={pieData14}
             dataAll={pieDataAll}
             initialPeriod={piePeriod}
-            basePath="/dashboard/study/history"
-            preserveParams={{ date: selectedDate !== todayKey ? selectedDate : undefined }}
           />
         </section>
 

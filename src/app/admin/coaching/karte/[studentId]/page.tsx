@@ -124,12 +124,6 @@ export default async function AdminCoachingKarteStudentPage({
               dataAll={buildSubjectPieDataFromMinutes(minutesAll)}
               initialPeriod={piePeriod}
               compact
-              basePath={`/admin/coaching/karte/${studentId}`}
-              preserveParams={{
-                booking: query.booking,
-                coach: query.coach,
-                historyPage: query.historyPage,
-              }}
             />
           </section>
 

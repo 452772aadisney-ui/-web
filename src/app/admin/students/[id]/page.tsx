@@ -249,7 +249,6 @@ export default async function AdminStudentStudyPage({
               pathname={`/admin/students/${id}`}
               preserveParams={{
                 logsPage: query.logsPage,
-                piePeriod: query.piePeriod,
               }}
             />
           </section>
@@ -264,11 +263,6 @@ export default async function AdminStudentStudyPage({
               data14={buildSubjectPieDataFromMinutes(minutes14)}
               dataAll={buildSubjectPieDataFromMinutes(minutesAll)}
               initialPeriod={piePeriod}
-              basePath={`/admin/students/${id}`}
-              preserveParams={{
-                booksPage: query.booksPage,
-                logsPage: query.logsPage,
-              }}
             />
           </section>
 
@@ -287,7 +281,6 @@ export default async function AdminStudentStudyPage({
               pathname={`/admin/students/${id}`}
               preserveParams={{
                 booksPage: query.booksPage,
-                piePeriod: query.piePeriod,
               }}
             />
           </section>
