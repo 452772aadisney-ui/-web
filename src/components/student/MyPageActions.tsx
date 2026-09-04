@@ -18,13 +18,14 @@ import { CommonTestCountdownBanner } from '@/components/student/CommonTestCountd
 import type { StudentStarRanking } from '@/lib/achievements/ranking'
 import { formatStudyStreakLabel } from '@/lib/study/streak'
 
-type MenuBadgeKey = 'studyHistory' | 'announcements' | 'chat' | 'bookshelf' | 'faqIntro' | 'todo'
+type MenuBadgeKey = 'studyHistory' | 'announcements' | 'chat' | 'bookshelf' | 'faqIntro' | 'todo' | 'quiz'
 
 const iconMenuActions: Array<{
   href?: string
   label: string
   iconSrc: string
   badgeKey?: MenuBadgeKey
+  subtitle?: string
   openInNewTab?: boolean
   externalConfirmMessage?: string
   opensTextbookRegisterDialog?: boolean
@@ -50,6 +51,13 @@ const iconMenuActions: Array<{
     href: '/dashboard/calendar',
     label: 'カレンダー',
     iconSrc: MYPAGE_MENU_ICONS.calendar,
+  },
+  {
+    href: '/dashboard/quizzes',
+    label: '小テスト',
+    iconSrc: MYPAGE_MENU_ICONS.quiz,
+    badgeKey: 'quiz',
+    subtitle: '予定はカレンダーにも表示されます',
   },
   {
     href: '/dashboard/todo',
@@ -99,6 +107,8 @@ interface MyPageActionsProps {
   unreadChatCount?: number
   unseenTextbookCount?: number
   incompleteTodoCount?: number
+  overdueTodoCount?: number
+  pendingQuizCount?: number
   hideClassSchedule?: boolean
   hideCoaching?: boolean
   showFaqIntro?: boolean
@@ -115,6 +125,8 @@ export function MyPageActions({
   unreadChatCount = 0,
   unseenTextbookCount = 0,
   incompleteTodoCount = 0,
+  overdueTodoCount = 0,
+  pendingQuizCount = 0,
   hideClassSchedule = false,
   hideCoaching = false,
   showFaqIntro = false,
@@ -128,6 +140,7 @@ export function MyPageActions({
     bookshelf: unseenTextbookCount,
     faqIntro: showFaqIntro ? 1 : 0,
     todo: incompleteTodoCount,
+    quiz: pendingQuizCount,
   }
 
   const visibleMenuActions = hideClassSchedule
@@ -212,22 +225,32 @@ export function MyPageActions({
       />
 
       <div className="grid grid-cols-3 gap-3">
-        {visibleMenuActions.map((action) => (
-          <MyPageIconMenuButton
-            key={action.label}
-            href={action.href}
-            label={action.label}
-            iconSrc={action.iconSrc}
-            badgeCount={action.badgeKey ? badgeCounts[action.badgeKey] : undefined}
-            openInNewTab={action.openInNewTab}
-            externalConfirmMessage={action.externalConfirmMessage}
-            onClick={
-              action.opensTextbookRegisterDialog
-                ? () => setTextbookRegisterDialogOpen(true)
-                : undefined
-            }
-          />
-        ))}
+        {visibleMenuActions.map((action) => {
+          const count = action.badgeKey ? badgeCounts[action.badgeKey] : undefined
+          const todoBadgeLabel =
+            action.badgeKey === 'todo' && overdueTodoCount > 0
+              ? `期限超過 ${overdueTodoCount}件`
+              : undefined
+
+          return (
+            <MyPageIconMenuButton
+              key={action.label}
+              href={action.href}
+              label={action.label}
+              iconSrc={action.iconSrc}
+              subtitle={action.subtitle}
+              badgeCount={todoBadgeLabel ? undefined : count}
+              badgeLabel={todoBadgeLabel}
+              openInNewTab={action.openInNewTab}
+              externalConfirmMessage={action.externalConfirmMessage}
+              onClick={
+                action.opensTextbookRegisterDialog
+                  ? () => setTextbookRegisterDialogOpen(true)
+                  : undefined
+              }
+            />
+          )
+        })}
       </div>
     </div>
   )

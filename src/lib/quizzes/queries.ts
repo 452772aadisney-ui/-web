@@ -195,6 +195,12 @@ export async function fetchStudentQuizAssignments(
     .sort((a, b) => b.assignment.scheduled_on.localeCompare(a.assignment.scheduled_on))
 }
 
+/** Assignments assigned to the student that still have no score recorded. */
+export async function fetchPendingStudentQuizCount(studentId: string): Promise<number> {
+  const rows = await fetchStudentQuizAssignments(studentId)
+  return rows.filter((row) => row.result == null).length
+}
+
 export async function fetchStudentQuizResults(
   studentId: string,
 ): Promise<StudentQuizResultRow[]> {

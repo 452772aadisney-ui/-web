@@ -1,5 +1,11 @@
+'use client'
+
+import { useMemo, useState } from 'react'
 import { formatAchievementStars } from '@/lib/achievements/definitions'
 import type { AchievementListItem } from '@/lib/achievements/queries'
+import { cn } from '@/lib/utils'
+
+type AchievementFilter = 'all' | 'unlocked' | 'locked'
 
 function AchievementCard({ item }: { item: AchievementListItem }) {
   const stars = formatAchievementStars(item.stars)
@@ -23,6 +29,9 @@ function AchievementCard({ item }: { item: AchievementListItem }) {
               達成日:{' '}
               {new Date(item.unlockedAt).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}
             </p>
+          )}
+          {!item.unlocked && (
+            <p className="mt-2 text-xs font-medium text-muted">未達成</p>
           )}
         </div>
         {stars && (
@@ -67,8 +76,27 @@ export function AchievementList({
   unlockedCount: number
   totalCount: number
 }) {
+  const [filter, setFilter] = useState<AchievementFilter>('all')
+  const lockedCount = lockedItems.length
+
+  const tabs: Array<{ id: AchievementFilter; label: string; count: number }> = [
+    { id: 'all', label: 'すべて', count: totalCount },
+    { id: 'unlocked', label: '達成済み', count: unlockedCount },
+    { id: 'locked', label: '未達成', count: lockedCount },
+  ]
+
+  const visible = useMemo(() => {
+    if (filter === 'unlocked') {
+      return { lockedItems: [] as AchievementListItem[], unlockedItems }
+    }
+    if (filter === 'locked') {
+      return { lockedItems, unlockedItems: [] as AchievementListItem[] }
+    }
+    return { lockedItems, unlockedItems }
+  }, [filter, lockedItems, unlockedItems])
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="rounded-xl border border-border bg-background px-4 py-3 text-sm">
         達成数:{' '}
         <span className="font-bold text-primary">
@@ -76,8 +104,48 @@ export function AchievementList({
         </span>
       </div>
 
-      <AchievementSection title="未達成" items={lockedItems} />
-      <AchievementSection title="達成済み" items={unlockedItems} />
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="実績の表示切替">
+        {tabs.map((tab) => {
+          const active = filter === tab.id
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setFilter(tab.id)}
+              className={cn(
+                'rounded-lg px-3 py-1.5 text-sm font-medium transition',
+                active
+                  ? 'bg-primary text-white'
+                  : 'border border-border bg-background text-foreground hover:bg-card',
+              )}
+            >
+              {tab.label}（{tab.count}）
+            </button>
+          )
+        })}
+      </div>
+
+      {filter === 'all' && (
+        <div className="space-y-8">
+          <AchievementSection title="未達成" items={visible.lockedItems} />
+          <AchievementSection title="達成済み" items={visible.unlockedItems} />
+        </div>
+      )}
+      {filter === 'unlocked' && (
+        <AchievementSection title="達成済み" items={visible.unlockedItems} />
+      )}
+      {filter === 'locked' && (
+        <AchievementSection title="未達成" items={visible.lockedItems} />
+      )}
+
+      {filter === 'unlocked' && visible.unlockedItems.length === 0 && (
+        <p className="text-sm text-muted">達成済みの実績はまだありません。</p>
+      )}
+      {filter === 'locked' && visible.lockedItems.length === 0 && (
+        <p className="text-sm text-muted">未達成の実績はありません。</p>
+      )}
     </div>
   )
 }

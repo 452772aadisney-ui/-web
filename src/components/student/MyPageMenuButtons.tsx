@@ -16,6 +16,7 @@ export const MYPAGE_MENU_ICONS = {
   announcements: '/icons/mypage/announcements.png',
   faq: '/icons/mypage/faq.png',
   achievements: '/icons/mypage/achievements.png',
+  quiz: '/icons/mypage/quiz.png',
 } as const
 
 interface MyPagePrimaryActionButtonProps {
@@ -75,6 +76,9 @@ interface MyPageIconMenuButtonProps {
   label: string
   iconSrc: string
   badgeCount?: number
+  /** When set, shown instead of a numeric-only badge (e.g. 期限超過 2件). */
+  badgeLabel?: string
+  subtitle?: string
   className?: string
   openInNewTab?: boolean
   externalConfirmMessage?: string
@@ -86,6 +90,8 @@ export function MyPageIconMenuButton({
   label,
   iconSrc,
   badgeCount,
+  badgeLabel,
+  subtitle,
   className,
   openInNewTab,
   externalConfirmMessage,
@@ -96,13 +102,25 @@ export function MyPageIconMenuButton({
     className,
   )
 
+  const showBadge = Boolean(badgeLabel) || (badgeCount != null && badgeCount > 0)
+
   const content = (
     <>
       <Image src={iconSrc} alt="" width={40} height={40} className="h-10 w-10" aria-hidden />
       <span className="text-sm font-medium leading-tight">{label}</span>
-      {badgeCount != null && badgeCount > 0 && (
-        <span className="absolute right-2 top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
-          {badgeCount > 99 ? '99+' : badgeCount}
+      {subtitle && <span className="text-[10px] leading-tight text-muted">{subtitle}</span>}
+      {showBadge && (
+        <span
+          className={cn(
+            'absolute right-1.5 top-1.5 flex min-h-5 max-w-[calc(100%-0.75rem)] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold leading-none text-white',
+            badgeLabel ? 'py-1 text-left' : 'min-w-5',
+          )}
+        >
+          {badgeLabel
+            ? badgeLabel
+            : badgeCount != null && badgeCount > 99
+              ? '99+'
+              : badgeCount}
         </span>
       )}
     </>

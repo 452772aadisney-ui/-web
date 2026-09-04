@@ -1,6 +1,8 @@
 import { cache } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { buildTodoItems } from '@/lib/todo/build-items'
+import { countOverdueTodos } from '@/lib/todo/urgency'
+import { getTodayDateKey } from '@/lib/study/dates'
 import {
   fetchHomeworkTasksForStudent,
   fetchQuizSchedulesForStudent,
@@ -90,6 +92,20 @@ export const fetchIncompleteTodoCount = cache(async (studentId: string): Promise
   return buildTodoItems(homework, quizzes, applications, completions).filter(
     (item) => !item.completed,
   ).length
+})
+
+export const fetchOverdueTodoCount = cache(async (studentId: string): Promise<number> => {
+  const [homework, quizzes, applications, completions] = await Promise.all([
+    fetchHomeworkTasksForStudent(studentId),
+    fetchQuizSchedulesForStudent(studentId),
+    fetchApplicationTasksForStudent(studentId),
+    fetchTodoCompletionsForStudent(studentId),
+  ])
+
+  return countOverdueTodos(
+    buildTodoItems(homework, quizzes, applications, completions),
+    getTodayDateKey(),
+  )
 })
 
 export async function fetchApplicationTasksWithTargets(): Promise<ApplicationTaskWithTargets[]> {
