@@ -118,12 +118,28 @@ rollback は上記テーブル4つと enum 3つのみ削除する（既存シス
 
 ## Manifest / Service Worker（1-4）
 
-- Manifest: `src/app/manifest.ts`（`name` / `short_name` = **受験生web**、`start_url` = `/dashboard`）
+- Manifest: `src/app/manifest.ts`
+  - `name` / `short_name` = **受験生web**
+  - `start_url` = `/dashboard`
+  - `scope` = `/dashboard`（`start_url` を含む。`/dashboard/` だと `/dashboard` が範囲外になりホーム画面起動が壊れるため使わない）
 - 色: `theme_color` = `#2563eb`（`--primary`）、`background_color` = `#f4f6fb`（`--background`）
-- SW: `public/sw.js`（scope `/`）。`fetch` なし・キャッシュなし
+- SW: `public/sw.js`
+  - 登録 scope = **`/dashboard/`**
+  - `Service-Worker-Allowed` = **`/dashboard/`**（ルート scope `/` での再登録を防ぐ）
+  - `fetch` なし・キャッシュなし
+  - Push / notificationclick は、開いているタブが scope 外でも動作する（`clients.matchAll({ includeUncontrolled: true })`）
 - 登録: 生徒の `/dashboard` レイアウトでのみ静かに登録。通知許可は要求しない
+- 旧 scope `/` の SW がある場合: 登録ヘルパーが `unregister` してから `/dashboard/` で再登録する
 - Push payload: `{ title, body, targetPath, tag? }`（個人情報・秘密情報なし）
 - クリック遷移: 同一オリジンの `/dashboard` タブを優先。`/admin` は上書きしない
+
+### scope 設計メモ
+
+| 対象 | 値 | 理由 |
+|------|-----|------|
+| SW scope | `/dashboard/` | `/admin`・ログイン等を control しない。`/dashboard-evil` も除外 |
+| Manifest scope | `/dashboard` | `start_url: /dashboard` を範囲内に含める |
+| ページ `/dashboard`（末尾スラッシュなし） | SW の control 対象外 | Push 受信・通知クリックは問題なし。control は `/dashboard/...` が主 |
 
 ---
 
@@ -142,3 +158,4 @@ rollback は上記テーブル4つと enum 3つのみ削除する（既存シス
 - endpoint / `p256dh` / `auth` をログ・エラー文・クライアントレスポンスに出さない
 - service role は認証・検証後の server-only 処理からのみ
 - SW / Manifest は middleware から除外し、更新しやすい Cache-Control を付与
+- SW の最大 scope は `Service-Worker-Allowed: /dashboard/` で制限する

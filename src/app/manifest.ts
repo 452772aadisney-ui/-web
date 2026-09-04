@@ -7,7 +7,9 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: '受験生web',
     description: '大学受験生向け学習管理アプリ',
     start_url: '/dashboard',
-    scope: '/',
+    // Include exact `/dashboard` (start_url). `/dashboard/` would exclude it and break
+    // home-screen launch. Nested student routes remain in scope; /admin・/login は含まない。
+    scope: '/dashboard',
     display: 'standalone',
     lang: 'ja',
     dir: 'ltr',

@@ -1,5 +1,7 @@
 /* 受験生web Web Push Service Worker
+ * - Registered with scope `/dashboard/` (see register-service-worker.ts)
  * - No fetch handler / no offline cache
+ * - Push + notificationclick work even when the open tab is outside scope
  * - Payload validation mirrors src/lib/push/notification-payload.ts
  * - Never log endpoints, keys, or tokens
  */

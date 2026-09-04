@@ -28,7 +28,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Service-Worker-Allowed',
-            value: '/',
+            value: '/dashboard/',
           },
         ],
       },
