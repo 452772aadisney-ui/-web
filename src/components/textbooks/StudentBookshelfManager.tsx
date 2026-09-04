@@ -382,22 +382,30 @@ function StudentTextbookList({
               isNew={!book.is_seen_by_student}
               layout="grid"
               actions={
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setEditingId(book.id)}
-                    className="text-xs text-primary hover:underline"
+                <div className="flex w-full flex-col gap-2">
+                  <Link
+                    href={`/dashboard/study/textbook?textbookId=${book.id}`}
+                    className="inline-flex items-center justify-center rounded-lg bg-primary px-2 py-1.5 text-xs font-medium text-white transition hover:bg-primary-hover"
                   >
-                    編集
-                  </button>
-                  <form action={deleteTextbook}>
-                    <input type="hidden" name="textbookId" value={book.id} />
-                    <input type="hidden" name="studentId" value={studentId} />
-                    <button type="submit" className="text-xs text-error hover:underline">
-                      削除
+                    勉強を記録
+                  </Link>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(book.id)}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      編集
                     </button>
-                  </form>
-                </>
+                    <form action={deleteTextbook}>
+                      <input type="hidden" name="textbookId" value={book.id} />
+                      <input type="hidden" name="studentId" value={studentId} />
+                      <button type="submit" className="text-xs text-error hover:underline">
+                        削除
+                      </button>
+                    </form>
+                  </div>
+                </div>
               }
             />
           )}

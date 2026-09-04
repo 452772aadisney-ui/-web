@@ -68,7 +68,7 @@ export function ProfileForm({ profile, backHref }: ProfileFormProps) {
         </label>
       </div>
 
-      <label className="block">
+      <label id="birthday" className="block scroll-mt-28">
         <span className="mb-1.5 block text-sm font-medium">誕生日</span>
         <input
           type="date"
@@ -78,7 +78,7 @@ export function ProfileForm({ profile, backHref }: ProfileFormProps) {
         />
       </label>
 
-      <label className="block">
+      <label id="target-schools" className="block scroll-mt-28">
         <span className="mb-1.5 block text-sm font-medium">志望校</span>
         <textarea
           name="targetSchools"
@@ -90,7 +90,7 @@ export function ProfileForm({ profile, backHref }: ProfileFormProps) {
         <span className="mt-1 block text-xs text-muted">1行に1校ずつ入力してください</span>
       </label>
 
-      <fieldset>
+      <fieldset id="subjects" className="scroll-mt-28">
         <legend className="mb-3 text-sm font-medium">使用科目</legend>
         <SubjectCheckboxGrid subjects={EXAM_SUBJECTS} selectedSubjects={selectedSubjects} />
       </fieldset>

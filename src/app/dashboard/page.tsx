@@ -7,7 +7,9 @@ import { StudentQrCode } from '@/components/student/StudentQrCode'
 import { fetchStudentStarRanking } from '@/lib/achievements/ranking'
 import { fetchUnreadAnnouncementCount } from '@/lib/announcements/queries'
 import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
-import { fetchCurrentStudyStreakForStudent } from '@/lib/study/queries'
+import {
+  fetchStudentDashboardStudySummary,
+} from '@/lib/study/queries'
 import { fetchUnreadStudyFeedbackCount } from '@/lib/study/feedback-queries'
 import { fetchUnseenTextbookCount } from '@/lib/textbooks/catalog-queries'
 import { fetchIncompleteTodoCount, fetchOverdueTodoCount } from '@/lib/todo/queries'
@@ -15,6 +17,7 @@ import { getCoachingAlertState, getNextCoachingBooking } from '@/lib/coaching/al
 import { fetchCoachingBookingsForStudent } from '@/lib/coaching/queries'
 import { getDaysUntilCommonTest } from '@/lib/exam/common-test-countdown'
 import { getJstDateKey } from '@/lib/study/dates'
+import { buildOnboardingChecklist } from '@/lib/student/onboarding-checklist'
 import { isKisotsuGradeTag, showsCommonTestCountdown } from '@/lib/tags/grade-order'
 import { fetchGradeTagNameForProfile } from '@/lib/tags/queries'
 
@@ -53,6 +56,7 @@ export default async function StudentDashboardPage() {
   const gradeTagName =
     profile.role === 'student' ? await fetchGradeTagNameForProfile(profile.id) : null
   const isKisotsuStudent = isKisotsuGradeTag(gradeTagName)
+  const todayKey = getJstDateKey()
 
   const coachingBookings =
     profile.role === 'student' && !isKisotsuStudent
@@ -68,7 +72,16 @@ export default async function StudentDashboardPage() {
       ? getNextCoachingBooking(coachingBookings)
       : null
 
-  const [unreadAnnouncementCount, unreadChatCount, unreadStudyFeedbackCount, unseenTextbookCount, incompleteTodoCount, overdueTodoCount, studyStreakDays, starRanking] =
+  const [
+    unreadAnnouncementCount,
+    unreadChatCount,
+    unreadStudyFeedbackCount,
+    unseenTextbookCount,
+    incompleteTodoCount,
+    overdueTodoCount,
+    starRanking,
+    studySummary,
+  ] =
     profile.role === 'student'
       ? await Promise.all([
           fetchUnreadAnnouncementCount(profile.id).catch(() => 0),
@@ -77,10 +90,34 @@ export default async function StudentDashboardPage() {
           fetchUnseenTextbookCount(profile.id).catch(() => 0),
           fetchIncompleteTodoCount(profile.id).catch(() => 0),
           fetchOverdueTodoCount(profile.id).catch(() => 0),
-          fetchCurrentStudyStreakForStudent(profile.id).catch(() => 0),
           fetchStudentStarRanking(profile.id).catch(() => null),
+          fetchStudentDashboardStudySummary(profile.id, todayKey).catch(() => ({
+            todayMinutes: 0,
+            hasPositiveStudyLog: false,
+            textbookCount: 0,
+          })),
         ])
-      : [0, 0, 0, 0, 0, 0, 0, null]
+      : [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          null,
+          { todayMinutes: 0, hasPositiveStudyLog: false, textbookCount: 0 },
+        ]
+
+  const onboardingItems =
+    profile.role === 'student'
+      ? buildOnboardingChecklist({
+          subjects: profile.subjects ?? [],
+          birthday: profile.birthday,
+          targetSchools: profile.target_schools ?? [],
+          textbookCount: studySummary.textbookCount,
+          hasPositiveStudyLog: studySummary.hasPositiveStudyLog,
+        })
+      : []
 
   const showFaqIntro =
     profile.role === 'student' && profile.faq_intro_seen_at == null
@@ -98,7 +135,8 @@ export default async function StudentDashboardPage() {
             coachingAlert?.showAlert ? coachingAlert.message : null
           }
           commonTestDaysRemaining={commonTestDaysRemaining}
-          studyStreakDays={studyStreakDays}
+          todayStudyMinutes={studySummary.todayMinutes}
+          onboardingItems={onboardingItems}
           unreadStudyFeedbackCount={unreadStudyFeedbackCount}
           unreadAnnouncementCount={unreadAnnouncementCount}
           unreadChatCount={unreadChatCount}

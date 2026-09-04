@@ -206,10 +206,12 @@ export async function createStudyLog(
     return { error: '学習記録の保存に失敗しました' }
   }
 
+  revalidatePath('/dashboard')
   revalidatePath('/dashboard/study')
   revalidatePath('/dashboard/study/subject')
   revalidatePath('/dashboard/study/textbook')
   revalidatePath('/dashboard/study/history')
+  revalidatePath('/dashboard/bookshelf')
   revalidatePath('/admin/students')
   revalidatePath('/admin/study-daily')
   revalidatePath('/dashboard/achievements')
@@ -265,6 +267,7 @@ export async function updateStudyLog(
     return { error: '学習記録の更新に失敗しました' }
   }
 
+  revalidatePath('/dashboard')
   revalidatePath('/dashboard/study')
   revalidatePath('/dashboard/study/subject')
   revalidatePath('/dashboard/study/textbook')
@@ -289,6 +292,7 @@ export async function deleteStudyLog(formData: FormData): Promise<void> {
 
   await supabase.from('study_logs').delete().eq('id', logId).eq('student_id', user.id)
 
+  revalidatePath('/dashboard')
   revalidatePath('/dashboard/study')
   revalidatePath('/dashboard/study/subject')
   revalidatePath('/dashboard/study/textbook')

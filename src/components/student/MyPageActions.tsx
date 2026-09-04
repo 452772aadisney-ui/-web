@@ -8,6 +8,7 @@ import { FaqIntroDialog } from '@/components/faq/FaqIntroDialog'
 import { StudyLogModeDialog } from '@/components/study/StudyLogModeDialog'
 import { TextbookRegisterModeDialog } from '@/components/textbooks/TextbookRegisterModeDialog'
 import { CoachingAlertBanner } from '@/components/coaching/CoachingAlertBanner'
+import { OnboardingChecklist } from '@/components/student/OnboardingChecklist'
 import {
   MYPAGE_MENU_ICONS,
   MyPageIconMenuButton,
@@ -16,10 +17,12 @@ import {
 import { StarRankingBanner } from '@/components/student/StarRankingBanner'
 import { CommonTestCountdownBanner } from '@/components/student/CommonTestCountdownBanner'
 import type { StudentStarRanking } from '@/lib/achievements/ranking'
-import { formatStudyStreakLabel } from '@/lib/study/streak'
+import type { OnboardingChecklistItem } from '@/lib/student/onboarding-checklist'
+import { formatTodayStudyButtonSubtitle } from '@/lib/study/today-status'
 
 type MenuBadgeKey = 'studyHistory' | 'announcements' | 'chat' | 'bookshelf' | 'faqIntro' | 'todo'
 
+/** Daily-use menu cards first, then secondary helpers. */
 const iconMenuActions: Array<{
   href?: string
   label: string
@@ -43,11 +46,6 @@ const iconMenuActions: Array<{
     badgeKey: 'bookshelf',
   },
   {
-    label: '教材登録',
-    iconSrc: MYPAGE_MENU_ICONS.textbookRegister,
-    opensTextbookRegisterDialog: true,
-  },
-  {
     href: '/dashboard/calendar',
     label: 'カレンダー',
     iconSrc: MYPAGE_MENU_ICONS.calendar,
@@ -57,6 +55,11 @@ const iconMenuActions: Array<{
     label: 'ToDo',
     iconSrc: MYPAGE_MENU_ICONS.todo,
     badgeKey: 'todo',
+  },
+  {
+    label: '教材登録',
+    iconSrc: MYPAGE_MENU_ICONS.textbookRegister,
+    opensTextbookRegisterDialog: true,
   },
   {
     href: '/dashboard/announcements',
@@ -94,7 +97,8 @@ interface MyPageActionsProps {
   nextCoaching?: CoachingBookingWithDetails | null
   coachingAlertMessage?: string | null
   commonTestDaysRemaining?: number | null
-  studyStreakDays?: number
+  todayStudyMinutes?: number
+  onboardingItems?: OnboardingChecklistItem[]
   unreadStudyFeedbackCount?: number
   unreadAnnouncementCount?: number
   unreadChatCount?: number
@@ -111,7 +115,8 @@ export function MyPageActions({
   nextCoaching,
   coachingAlertMessage = null,
   commonTestDaysRemaining = null,
-  studyStreakDays = 0,
+  todayStudyMinutes = 0,
+  onboardingItems = [],
   unreadStudyFeedbackCount = 0,
   unreadAnnouncementCount = 0,
   unreadChatCount = 0,
@@ -137,9 +142,10 @@ export function MyPageActions({
     ? iconMenuActions.filter((action) => action.label !== '授業予定')
     : iconMenuActions
 
-  const studyStreakLabel = formatStudyStreakLabel(studyStreakDays)
+  const todayStudyStatus = formatTodayStudyButtonSubtitle(todayStudyMinutes)
   const showCommonTestCountdown = commonTestDaysRemaining !== null
   const showNextCoachingBanner = !hideCoaching && !coachingAlertMessage
+  const showOnboarding = onboardingItems.some((item) => !item.completed)
 
   return (
     <div className="space-y-3">
@@ -167,49 +173,52 @@ export function MyPageActions({
 
         {showNextCoachingBanner &&
           (nextCoaching ? (
-        <section className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="text-xs font-semibold text-muted">次回コーチング</h2>
-              <p className="mt-0.5 truncate text-sm font-bold">
-                {formatCoachingBookingDateTime(
-                  nextCoaching.slot.slot_date,
-                  nextCoaching.slot.start_time,
-                  nextCoaching.slot.starts_at,
-                  nextCoaching.slot.ends_at,
-                )}
-              </p>
-              <p className="truncate text-xs text-muted">{nextCoaching.coach.name}</p>
-            </div>
-            <Link
-              href="/dashboard/coaching"
-              className="shrink-0 text-xs font-medium text-primary hover:underline"
-            >
-              変更 →
-            </Link>
-          </div>
-        </section>
-      ) : (
-        <section className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-xs font-semibold text-muted">次回コーチング</h2>
-              <p className="mt-0.5 text-sm font-medium">予約がありません</p>
-            </div>
-            <Link
-              href="/dashboard/coaching"
-              className="shrink-0 text-xs font-medium text-primary hover:underline"
-            >
-              予約 →
-            </Link>
-          </div>
-        </section>
-      ))}
+            <section className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="text-xs font-semibold text-muted">次回コーチング</h2>
+                  <p className="mt-0.5 truncate text-sm font-bold">
+                    {formatCoachingBookingDateTime(
+                      nextCoaching.slot.slot_date,
+                      nextCoaching.slot.start_time,
+                      nextCoaching.slot.starts_at,
+                      nextCoaching.slot.ends_at,
+                    )}
+                  </p>
+                  <p className="truncate text-xs text-muted">{nextCoaching.coach.name}</p>
+                </div>
+                <Link
+                  href="/dashboard/coaching"
+                  className="shrink-0 text-xs font-medium text-primary hover:underline"
+                >
+                  変更 →
+                </Link>
+              </div>
+            </section>
+          ) : (
+            <section className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xs font-semibold text-muted">次回コーチング</h2>
+                  <p className="mt-0.5 text-sm font-medium">予約がありません</p>
+                </div>
+                <Link
+                  href="/dashboard/coaching"
+                  className="shrink-0 text-xs font-medium text-primary hover:underline"
+                >
+                  予約 →
+                </Link>
+              </div>
+            </section>
+          ))}
       </div>
+
+      {showOnboarding && <OnboardingChecklist items={onboardingItems} />}
 
       <MyPagePrimaryActionButton
         label="学習を記録する"
-        subtitle={studyStreakLabel}
+        subtitle={todayStudyStatus.text}
+        subtitleTone={todayStudyStatus.tone}
         iconSrc={MYPAGE_MENU_ICONS.recordStudy}
         onClick={() => setStudyDialogOpen(true)}
       />

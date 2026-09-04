@@ -24,6 +24,7 @@ interface MyPagePrimaryActionButtonProps {
   label: string
   iconSrc: string
   subtitle?: string | null
+  subtitleTone?: 'default' | 'empty' | 'recorded'
   onClick?: () => void
 }
 
@@ -32,10 +33,18 @@ export function MyPagePrimaryActionButton({
   label,
   iconSrc,
   subtitle,
+  subtitleTone = 'default',
   onClick,
 }: MyPagePrimaryActionButtonProps) {
   const className =
-    'flex min-h-[5.5rem] w-full items-center justify-center gap-3 rounded-2xl bg-[#1a1f36] px-6 py-6 text-lg font-bold text-white shadow-sm transition hover:bg-[#252b45] active:scale-[0.95] active:bg-[#12162a]'
+    'flex min-h-[5.5rem] w-full items-center justify-center gap-3 rounded-2xl bg-[#1a1f36] px-4 py-6 text-lg font-bold text-white shadow-sm transition hover:bg-[#252b45] active:scale-[0.95] active:bg-[#12162a] sm:px-6'
+
+  const subtitleClassName =
+    subtitleTone === 'empty'
+      ? 'text-sm font-semibold leading-snug text-amber-300'
+      : subtitleTone === 'recorded'
+        ? 'text-sm font-semibold leading-snug text-emerald-300'
+        : 'text-sm font-semibold leading-snug text-amber-300'
 
   const content = (
     <>
@@ -47,10 +56,12 @@ export function MyPagePrimaryActionButton({
         className="h-8 w-8 shrink-0 brightness-0 invert"
         aria-hidden
       />
-      <span className="flex flex-col items-center gap-1">
+      <span className="flex min-w-0 flex-col items-center gap-1 text-center">
         <span>{label}</span>
         {subtitle && (
-          <span className="text-sm font-semibold text-amber-300">{subtitle}</span>
+          <span className={subtitleClassName}>
+            {subtitleTone === 'recorded' ? `✓ ${subtitle}` : subtitle}
+          </span>
         )}
       </span>
     </>

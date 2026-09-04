@@ -172,6 +172,139 @@ export async function fetchStudyLogsForStudentOnDate(
   return data as StudyLog[]
 }
 
+/** Sum of duration_minutes for a single JST date. Zero minutes are ignored in the total sense of "has recorded". */
+export async function fetchTodayStudyMinutesForStudent(
+  studentId: string,
+  dateKey: string,
+): Promise<number> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('study_logs')
+    .select('duration_minutes')
+    .eq('student_id', studentId)
+    .eq('studied_on', dateKey)
+
+  if (error || !data) return 0
+
+  return data.reduce((sum, row) => sum + Number(row.duration_minutes ?? 0), 0)
+}
+
+export type TextbookStudyUsage = {
+  lastStudiedOnByTextbookId: Record<string, string>
+  recentTextbookIds: string[]
+}
+
+/** Build last-used dates and up to `limit` recently used textbook IDs (newest first, unique). */
+export function buildTextbookStudyUsage(
+  rows: Array<{ textbook_id: string | null; studied_on: string }>,
+  limit = 4,
+): TextbookStudyUsage {
+  const lastStudiedOnByTextbookId: Record<string, string> = {}
+  const recentTextbookIds: string[] = []
+
+  for (const row of rows) {
+    const textbookId = row.textbook_id ? String(row.textbook_id) : ''
+    if (!textbookId) continue
+
+    const studiedOn = String(row.studied_on)
+    if (!lastStudiedOnByTextbookId[textbookId]) {
+      lastStudiedOnByTextbookId[textbookId] = studiedOn
+      if (recentTextbookIds.length < limit) {
+        recentTextbookIds.push(textbookId)
+      }
+    }
+  }
+
+  return { lastStudiedOnByTextbookId, recentTextbookIds }
+}
+
+export async function fetchTextbookStudyUsageForStudent(
+  studentId: string,
+  limit = 4,
+): Promise<TextbookStudyUsage> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('study_logs')
+    .select('textbook_id, studied_on')
+    .eq('student_id', studentId)
+    .not('textbook_id', 'is', null)
+    .order('studied_on', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(300)
+
+  if (error || !data) {
+    return { lastStudiedOnByTextbookId: {}, recentTextbookIds: [] }
+  }
+
+  return buildTextbookStudyUsage(
+    data.map((row) => ({
+      textbook_id: row.textbook_id ? String(row.textbook_id) : null,
+      studied_on: String(row.studied_on),
+    })),
+    limit,
+  )
+}
+
+export type StudentDashboardStudySummary = {
+  todayMinutes: number
+  hasPositiveStudyLog: boolean
+  textbookCount: number
+}
+
+/** Compact dashboard fetches: today total, any positive log, textbook count. */
+export async function fetchStudentDashboardStudySummary(
+  studentId: string,
+  todayKey: string,
+): Promise<StudentDashboardStudySummary> {
+  const supabase = await createClient()
+
+  const [todayResult, positiveLogResult, textbookCountResult] = await Promise.all([
+    supabase
+      .from('study_logs')
+      .select('duration_minutes')
+      .eq('student_id', studentId)
+      .eq('studied_on', todayKey),
+    supabase
+      .from('study_logs')
+      .select('id')
+      .eq('student_id', studentId)
+      .gt('duration_minutes', 0)
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('textbooks')
+      .select('id', { count: 'exact', head: true })
+      .eq('student_id', studentId),
+  ])
+
+  const todayMinutes = (todayResult.data ?? []).reduce(
+    (sum, row) => sum + Number(row.duration_minutes ?? 0),
+    0,
+  )
+
+  return {
+    todayMinutes,
+    hasPositiveStudyLog: Boolean(positiveLogResult.data),
+    textbookCount: textbookCountResult.count ?? 0,
+  }
+}
+
+export async function fetchTextbookForStudent(
+  studentId: string,
+  textbookId: string,
+): Promise<Textbook | null> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('textbooks')
+    .select('*')
+    .eq('id', textbookId)
+    .eq('student_id', studentId)
+    .maybeSingle()
+
+  if (error || !data) return null
+  return mapTextbook(data as Textbook)
+}
+
 export async function fetchStudyLogsForStudentInDateRange(
   studentId: string,
   fromDate: string,
