@@ -22,7 +22,7 @@ export default async function AdminCoachingKartePage() {
   const studentGroups = groupStudentsByGrade(students, gradeTagByStudentId)
 
   return (
-    <AdminPageShell title="カルテ" backHref="/admin/coaching" backLabel="コーチング" wide>
+    <AdminPageShell title="カルテ" backHref="/admin/coaching" backLabel="コーチング">
       <AdminCoachingNav />
       <p className="mb-6 text-sm text-muted">
         生徒を選んでコーチングカルテを入力・閲覧します。学年ごとに表示しています。

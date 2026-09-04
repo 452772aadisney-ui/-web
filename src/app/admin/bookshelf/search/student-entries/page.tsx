@@ -40,7 +40,6 @@ export default async function AdminBookshelfStudentEntriesPage({
       title="生徒登録教材"
       backHref="/admin/bookshelf/search"
       backLabel="検索メニュー"
-      wide
     >
       <AdminStudentRegisteredEntries
         entries={pageResult.entries}

@@ -16,7 +16,6 @@ export default async function AdminBookshelfSearchUniversitiesPage() {
       title="大学別に探す"
       backHref="/admin/bookshelf/search"
       backLabel="検索メニュー"
-      wide
     >
       <ul className="grid gap-2 sm:grid-cols-2">
         {TEXTBOOK_TARGET_UNIVERSITIES.map((university) => (

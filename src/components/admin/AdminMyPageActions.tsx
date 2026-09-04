@@ -10,6 +10,7 @@ export const ADMIN_MYPAGE_MENU_ICONS = {
   announcements: '/icons/admin-mypage/announcements.png',
   message: '/icons/admin-mypage/message.png',
   achievements: '/icons/mypage/achievements.png',
+  other: '/icons/mypage/faq.png',
 } as const
 
 type AdminMenuBadgeKey = 'studyDaily' | 'chat'
@@ -17,55 +18,71 @@ type AdminMenuBadgeKey = 'studyDaily' | 'chat'
 const menuActions: Array<{
   href: string
   label: string
+  description: string
   iconSrc: string
   badgeKey?: AdminMenuBadgeKey
 }> = [
   {
     href: '/admin/students',
     label: '生徒一覧',
+    description: '生徒の検索・詳細',
     iconSrc: ADMIN_MYPAGE_MENU_ICONS.students,
   },
   {
     href: '/admin/study-daily',
     label: '毎日管理',
+    description: '学習記録の確認',
     iconSrc: ADMIN_MYPAGE_MENU_ICONS.dailyManagement,
     badgeKey: 'studyDaily',
   },
   {
+    href: '/admin/coaching',
+    label: 'コーチング',
+    description: '枠・予約・カルテ',
+    iconSrc: ADMIN_MYPAGE_MENU_ICONS.coaching,
+  },
+  {
     href: '/admin/schedule',
-    label: 'スケジュール登録',
+    label: 'スケジュール',
+    description: '予定・課題の登録',
     iconSrc: ADMIN_MYPAGE_MENU_ICONS.schedule,
   },
   {
     href: '/admin/quizzes',
     label: '小テスト',
+    description: '作成・点数入力',
     iconSrc: ADMIN_MYPAGE_MENU_ICONS.quiz,
-  },
-  {
-    href: '/admin/coaching',
-    label: 'コーチング',
-    iconSrc: ADMIN_MYPAGE_MENU_ICONS.coaching,
-  },
-  {
-    href: '/admin/achievements',
-    label: '実績・順位',
-    iconSrc: ADMIN_MYPAGE_MENU_ICONS.achievements,
   },
   {
     href: '/admin/bookshelf',
     label: '本棚',
+    description: '参考書マスタ管理',
     iconSrc: ADMIN_MYPAGE_MENU_ICONS.bookshelf,
-  },
-  {
-    href: '/admin/announcements',
-    label: 'お知らせ登録',
-    iconSrc: ADMIN_MYPAGE_MENU_ICONS.announcements,
   },
   {
     href: '/admin/chat',
     label: 'メッセージ',
+    description: '生徒とのやりとり',
     iconSrc: ADMIN_MYPAGE_MENU_ICONS.message,
     badgeKey: 'chat',
+  },
+  {
+    href: '/admin/announcements',
+    label: 'お知らせ',
+    description: '配信・既読確認',
+    iconSrc: ADMIN_MYPAGE_MENU_ICONS.announcements,
+  },
+  {
+    href: '/admin/achievements',
+    label: '実績・順位',
+    description: 'ランキング確認',
+    iconSrc: ADMIN_MYPAGE_MENU_ICONS.achievements,
+  },
+  {
+    href: '/admin/faq',
+    label: 'その他',
+    description: 'FAQ・タグ管理',
+    iconSrc: ADMIN_MYPAGE_MENU_ICONS.other,
   },
 ]
 
@@ -84,13 +101,16 @@ export function AdminMyPageActions({
   }
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-3 gap-3 md:grid-cols-4 md:gap-4">
       {menuActions.map((action) => (
         <MyPageIconMenuButton
           key={action.href}
           href={action.href}
           label={action.label}
           iconSrc={action.iconSrc}
+          subtitle={action.description}
+          subtitleClassName="hidden line-clamp-2 sm:block"
+          className="min-h-[6.25rem] gap-1.5 px-2 sm:min-h-[7.25rem] sm:px-3"
           badgeCount={action.badgeKey ? badgeCounts[action.badgeKey] : undefined}
         />
       ))}

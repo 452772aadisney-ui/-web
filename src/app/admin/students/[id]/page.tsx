@@ -158,7 +158,6 @@ export default async function AdminStudentStudyPage({
       title={`${personName} の学習記録`}
       backHref="/admin/students"
       backLabel="生徒一覧"
-      wide
     >
       <div className="grid gap-6 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)] lg:items-start">
         <div className="space-y-6 lg:sticky lg:top-8">

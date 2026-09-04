@@ -71,7 +71,6 @@ export default async function AdminBookshelfSearchResultsPage({
       title={title}
       backHref="/admin/bookshelf/search"
       backLabel="検索メニュー"
-      wide
     >
       <div className="space-y-6">
         <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">

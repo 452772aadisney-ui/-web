@@ -15,7 +15,6 @@ export default async function AdminBookshelfSearchSubjectsPage() {
       title="教科から探す"
       backHref="/admin/bookshelf/search"
       backLabel="検索メニュー"
-      wide
     >
       <TextbookSubjectTagFilter basePath="/admin/bookshelf/search" />
     </AdminPageShell>

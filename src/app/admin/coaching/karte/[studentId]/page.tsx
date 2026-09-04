@@ -75,7 +75,6 @@ export default async function AdminCoachingKarteStudentPage({
       title={`${personName} のカルテ`}
       backHref="/admin/coaching/karte"
       backLabel="生徒を選ぶ"
-      extraWide
     >
       <AdminCoachingNav />
 

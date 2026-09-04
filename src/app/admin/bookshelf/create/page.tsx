@@ -27,7 +27,7 @@ export default async function AdminBookshelfCreatePage() {
   const studentGroups = groupStudentsByGrade(students, gradeTagByStudentId)
 
   return (
-    <AdminPageShell title="新規参考書を登録" backHref="/admin/bookshelf/search" backLabel="参考書を検索" wide>
+    <AdminPageShell title="新規参考書を登録" backHref="/admin/bookshelf/search" backLabel="参考書を検索">
       <div className="space-y-6">
         <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <AdminBookshelfNav active="create" />

@@ -8,6 +8,7 @@ import {
   ADMIN_HAMBURGER_ITEMS,
   type HamburgerMenuItem,
 } from '@/components/layout/menu-items'
+import { ADMIN_SHELL_MAX_WIDTH_CLASS } from '@/components/layout/admin-layout'
 import { BackButton } from '@/components/layout/BackButton'
 import { HamburgerMenu } from '@/components/layout/HamburgerMenu'
 import { AdminMainNav } from '@/components/layout/AdminMainNav'
@@ -17,8 +18,6 @@ interface AdminPageShellProps {
   backHref?: string
   backLabel?: string
   showMainNav?: boolean
-  wide?: boolean
-  extraWide?: boolean
   children: ReactNode
 }
 
@@ -27,8 +26,6 @@ export async function AdminPageShell({
   backHref,
   backLabel,
   showMainNav = true,
-  wide = false,
-  extraWide = false,
   children,
 }: AdminPageShellProps) {
   const profile = await getCurrentProfile()
@@ -38,16 +35,12 @@ export async function AdminPageShell({
     : 0
 
   const menuItems: HamburgerMenuItem[] = ADMIN_HAMBURGER_ITEMS.map((item) => ({ ...item }))
-  const containerClass = extraWide
-    ? 'max-w-[1440px]'
-    : wide
-      ? 'max-w-6xl'
-      : 'max-w-3xl'
+  const shellWidthClass = `mx-auto w-full ${ADMIN_SHELL_MAX_WIDTH_CLASS}`
 
   return (
     <div className="min-h-dvh">
       <header className="sticky top-0 z-40 border-b border-border bg-card/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-card/90">
-        <div className={`mx-auto flex ${containerClass} items-center justify-between gap-4`}>
+        <div className={`${shellWidthClass} flex items-center justify-between gap-4`}>
           <div className="min-w-0">
             <Link href="/admin" className="text-sm text-muted transition hover:text-foreground">
               受験生web
@@ -63,12 +56,11 @@ export async function AdminPageShell({
           <AdminMainNav
             unreadChatCount={unreadChatCount}
             incompleteStudyFeedbackCount={incompleteStudyFeedbackCount}
-            containerClass={containerClass}
           />
         </div>
       )}
 
-      <main className={`mx-auto ${containerClass} px-4 py-8`}>
+      <main className={`${shellWidthClass} px-4 py-8`}>
         {backHref && (
           <div className="mb-6">
             <BackButton href={backHref} label={backLabel} />

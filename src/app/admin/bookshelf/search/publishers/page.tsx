@@ -18,7 +18,6 @@ export default async function AdminBookshelfSearchPublishersPage() {
       title="出版社から探す"
       backHref="/admin/bookshelf/search"
       backLabel="検索メニュー"
-      wide
     >
       <ul className="grid gap-2 sm:grid-cols-2">
         {publishers.map((publisher) => (

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { ADMIN_SHELL_MAX_WIDTH_CLASS } from '@/components/layout/admin-layout'
 
 const NAV_ITEMS = [
   { href: '/admin/students', label: '生徒一覧' },
@@ -22,13 +23,11 @@ const NAV_ITEMS = [
 interface AdminMainNavProps {
   unreadChatCount: number
   incompleteStudyFeedbackCount: number
-  containerClass?: string
 }
 
 export function AdminMainNav({
   unreadChatCount,
   incompleteStudyFeedbackCount,
-  containerClass = 'max-w-3xl',
 }: AdminMainNavProps) {
   const pathname = usePathname()
 
@@ -39,7 +38,7 @@ export function AdminMainNav({
 
   return (
     <nav className="px-4 py-3">
-      <div className={`mx-auto flex ${containerClass} flex-wrap gap-2`}>
+      <div className={`mx-auto flex w-full ${ADMIN_SHELL_MAX_WIDTH_CLASS} flex-wrap gap-2`}>
         {NAV_ITEMS.map((item) => {
           const isActive =
             pathname === item.href ||

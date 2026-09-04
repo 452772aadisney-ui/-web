@@ -15,7 +15,7 @@ export default async function AdminCoachingInstructorsPage() {
   const coaches = await fetchCoachingCoaches()
 
   return (
-    <AdminPageShell title="講師追加" backHref="/admin/coaching" backLabel="コーチング" wide>
+    <AdminPageShell title="講師追加" backHref="/admin/coaching" backLabel="コーチング">
       <AdminCoachingNav />
       <p className="mb-6 text-sm text-muted">
         コーチング担当講師の追加・編集を行います。登録した講師は枠設定や予約画面で選べます。

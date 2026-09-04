@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { getDashboardPathForRole } from '@/lib/auth/routes'
 import { AdminPageShell } from '@/components/layout/AdminPageShell'
+import { AdminNarrowContent } from '@/components/layout/AdminNarrowContent'
 import { AdminAnnouncementManager } from '@/components/announcements/AdminAnnouncementManager'
 import { Pagination } from '@/components/ui/Pagination'
 import {
@@ -37,23 +38,25 @@ export default async function AdminAnnouncementsPage({
 
   return (
     <AdminPageShell title="お知らせ管理" backHref="/admin" backLabel="管理画面">
-      <p className="mb-6 text-sm text-muted">
-        お知らせを投稿し、タグまたは個別生徒で配信先を指定できます。既読・未読状況は配信対象者のみ集計されます。
-      </p>
-      <AdminAnnouncementManager
-        announcements={pageResult.announcements}
-        students={students}
-        reads={reads}
-        allTags={allTags}
-        profileTagAssignments={profileTagAssignments}
-      />
-      <Pagination
-        currentPage={pageResult.page}
-        totalCount={pageResult.totalCount}
-        pageSize={pageResult.pageSize}
-        pageParam="announcementsPage"
-        pathname="/admin/announcements"
-      />
+      <AdminNarrowContent>
+        <p className="mb-6 text-sm text-muted">
+          お知らせを投稿し、タグまたは個別生徒で配信先を指定できます。既読・未読状況は配信対象者のみ集計されます。
+        </p>
+        <AdminAnnouncementManager
+          announcements={pageResult.announcements}
+          students={students}
+          reads={reads}
+          allTags={allTags}
+          profileTagAssignments={profileTagAssignments}
+        />
+        <Pagination
+          currentPage={pageResult.page}
+          totalCount={pageResult.totalCount}
+          pageSize={pageResult.pageSize}
+          pageParam="announcementsPage"
+          pathname="/admin/announcements"
+        />
+      </AdminNarrowContent>
     </AdminPageShell>
   )
 }

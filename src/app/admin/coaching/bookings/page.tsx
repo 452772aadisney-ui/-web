@@ -56,7 +56,7 @@ export default async function AdminCoachingBookingsPage({
       : ''
 
   return (
-    <AdminPageShell title="予約確認" backHref="/admin/coaching" backLabel="コーチング" wide>
+    <AdminPageShell title="予約確認" backHref="/admin/coaching" backLabel="コーチング">
       <AdminCoachingNav />
       <p className="mb-6 text-sm text-muted">
         生徒の代理予約、予約の確認・完了・キャンセルができます。

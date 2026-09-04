@@ -79,6 +79,7 @@ interface MyPageIconMenuButtonProps {
   /** When set, shown instead of a numeric-only badge (e.g. 期限超過 2件). */
   badgeLabel?: string
   subtitle?: string
+  subtitleClassName?: string
   className?: string
   openInNewTab?: boolean
   externalConfirmMessage?: string
@@ -92,13 +93,14 @@ export function MyPageIconMenuButton({
   badgeCount,
   badgeLabel,
   subtitle,
+  subtitleClassName,
   className,
   openInNewTab,
   externalConfirmMessage,
   onClick,
 }: MyPageIconMenuButtonProps) {
   const buttonClassName = cn(
-    'relative flex min-h-[5.75rem] flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card px-3 py-4 text-center shadow-sm transition hover:bg-background active:scale-[0.92] active:border-primary/30 active:bg-primary/10',
+    'relative flex h-full min-h-[5.75rem] flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card px-3 py-4 pt-5 text-center shadow-sm transition hover:bg-background focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:scale-[0.92] active:border-primary/30 active:bg-primary/10',
     className,
   )
 
@@ -106,13 +108,19 @@ export function MyPageIconMenuButton({
 
   const content = (
     <>
-      <Image src={iconSrc} alt="" width={40} height={40} className="h-10 w-10" aria-hidden />
+      <Image src={iconSrc} alt="" width={40} height={40} className="h-10 w-10 shrink-0" aria-hidden />
       <span className="text-sm font-medium leading-tight">{label}</span>
-      {subtitle && <span className="text-[10px] leading-tight text-muted">{subtitle}</span>}
+      {subtitle && (
+        <span
+          className={cn('text-[10px] leading-tight text-muted', subtitleClassName)}
+        >
+          {subtitle}
+        </span>
+      )}
       {showBadge && (
         <span
           className={cn(
-            'absolute right-1.5 top-1.5 flex min-h-5 max-w-[calc(100%-0.75rem)] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold leading-none text-white',
+            'absolute right-1.5 top-1.5 z-10 flex min-h-5 max-w-[calc(100%-0.75rem)] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold leading-none text-white',
             badgeLabel ? 'py-1 text-left' : 'min-w-5',
           )}
         >

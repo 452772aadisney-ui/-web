@@ -12,7 +12,7 @@ export default async function AdminBookshelfSearchPage() {
   if (profile.role !== 'admin') redirect(getDashboardPathForRole('student'))
 
   return (
-    <AdminPageShell title="参考書を検索" backHref="/admin" backLabel="管理画面" wide>
+    <AdminPageShell title="参考書を検索" backHref="/admin" backLabel="管理画面">
       <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <AdminBookshelfNav active="search" />
         <TextbookSearchMenu
