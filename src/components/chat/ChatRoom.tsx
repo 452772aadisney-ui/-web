@@ -7,10 +7,14 @@ import { loadOlderChatMessages, sendChatMessage } from '@/app/chat/actions'
 import { useAchievementUnlockDialog } from '@/components/achievements/useAchievementUnlockDialog'
 import type { UnlockedAchievement } from '@/lib/achievements/unlock'
 import { markChatAsRead } from '@/lib/chat/unread'
+import { formatChatMessageTime } from '@/lib/chat/format'
 import { createClient } from '@/lib/supabase/client'
+import {
+  APP_TOAST_SAFE_ERROR_MESSAGE,
+  createToastSession,
+} from '@/lib/toast/app-toast'
 import { cn } from '@/lib/utils'
 import type { ChatMessage, ChatParticipant } from '@/types/chat'
-import { formatChatMessageTime } from '@/lib/chat/format'
 
 interface ChatRoomProps {
   studentId: string
@@ -131,6 +135,7 @@ export function ChatRoom({
     const trimmed = body.trim()
     if (!trimmed || sending) return
 
+    const toastSession = createToastSession()
     setSending(true)
     setError(null)
     shouldStickToBottom.current = true
@@ -141,6 +146,7 @@ export function ChatRoom({
 
     if (result.error || !result.message) {
       setError(result.error ?? '送信に失敗しました')
+      toastSession.error(APP_TOAST_SAFE_ERROR_MESSAGE, 'chat-send-error')
       return
     }
 
@@ -149,6 +155,8 @@ export function ChatRoom({
       if (prev.some((m) => m.id === result.message!.id)) return prev
       return [...prev, result.message!]
     })
+
+    toastSession.success('メッセージを送信しました', 'chat-send-success')
 
     if (result.unlockedAchievements?.length) {
       setLastUnlockedAchievements(result.unlockedAchievements)
@@ -258,7 +266,11 @@ export function ChatRoom({
             </button>
           </div>
           <p className="mt-2 text-xs text-muted">Ctrl+Enter で送信（Enter は改行）</p>
-          {error && <p className="mt-2 text-sm text-error">{error}</p>}
+          {error && (
+            <p className="mt-2 text-sm text-error" role="alert">
+              {error}
+            </p>
+          )}
         </form>
       </div>
     </>

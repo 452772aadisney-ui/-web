@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useId, useRef } from 'react'
-import { toast } from 'sonner'
-
-export const ACTION_TOAST_SUCCESS_DURATION_MS = 3000
-export const ACTION_TOAST_ERROR_DURATION_MS = 8000
+import {
+  APP_TOAST_SAFE_ERROR_MESSAGE,
+  createToastSession,
+  type AppToastSession,
+} from '@/lib/toast/app-toast'
 
 interface ActionToastState {
   success?: boolean
@@ -13,68 +14,51 @@ interface ActionToastState {
 
 interface UseActionToastOptions {
   successMessage?: string
+  /** Safe user-facing error for the toast only (details stay on the form). */
   errorMessage?: string
   /** Pass useActionState pending so each submit can re-show toasts */
   pending?: boolean
-  successDuration?: number
-  errorDuration?: number
   /** Stable id prefix to prevent duplicate stacked toasts */
   toastId?: string
 }
 
 /**
  * Shows success/error toasts from Server Action state after each submission.
- * Toast lives in the root Toaster, so it survives revalidate/refresh.
- *
- * Accessibility: success uses role="status"; errors use role="alert".
- * Sonner's toaster also exposes an aria-live region.
+ * Uses the shared toast session so route changes cancel late notifications.
  */
 export function useActionToast(
   state: ActionToastState,
   {
     successMessage = '保存しました',
-    errorMessage,
+    errorMessage = APP_TOAST_SAFE_ERROR_MESSAGE,
     pending = false,
-    successDuration = ACTION_TOAST_SUCCESS_DURATION_MS,
-    errorDuration = ACTION_TOAST_ERROR_DURATION_MS,
     toastId,
   }: UseActionToastOptions = {},
 ) {
   const reactId = useId()
   const idPrefix = toastId ?? reactId
   const submissionStarted = useRef(false)
+  const sessionRef = useRef<AppToastSession>(createToastSession())
 
   useEffect(() => {
     if (pending) {
       submissionStarted.current = true
+      sessionRef.current = createToastSession()
       return
     }
 
     if (!submissionStarted.current) return
     submissionStarted.current = false
 
+    const session = sessionRef.current
+
     if (state.success) {
-      toast.success(<span role="status">{successMessage}</span>, {
-        id: `${idPrefix}-success`,
-        duration: successDuration,
-      })
+      session.success(successMessage, `${idPrefix}-success`)
       return
     }
 
     if (state.error) {
-      toast.error(<span role="alert">{errorMessage ?? state.error}</span>, {
-        id: `${idPrefix}-error`,
-        duration: errorDuration,
-      })
+      session.error(errorMessage, `${idPrefix}-error`)
     }
-  }, [
-    pending,
-    state.success,
-    state.error,
-    successMessage,
-    errorMessage,
-    successDuration,
-    errorDuration,
-    idPrefix,
-  ])
+  }, [pending, state.success, state.error, successMessage, errorMessage, idPrefix])
 }

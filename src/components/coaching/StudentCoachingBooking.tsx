@@ -11,6 +11,7 @@ import {
 import { useAchievementUnlockDialog } from '@/components/achievements/useAchievementUnlockDialog'
 import { CoachingWeekGrid } from '@/components/coaching/CoachingWeekGrid'
 import { CoachProfileDisplay } from '@/components/coaching/CoachProfileDisplay'
+import { useActionToast } from '@/hooks/useActionToast'
 import { formatCoachingBookingDateTime } from '@/lib/coaching/format'
 import type {
   AvailableCoachingSlot,
@@ -67,6 +68,11 @@ function BookingForm({
   const { dialog: achievementDialog } = useAchievementUnlockDialog(state.unlockedAchievements)
   const confirmLabel = formatBookingConfirmLabel(slot)
 
+  useActionToast(state, {
+    successMessage: 'コーチングを予約しました',
+    pending,
+  })
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!window.confirm(`${confirmLabel} で予約をします。よろしいですか？`)) {
@@ -101,8 +107,11 @@ function BookingForm({
           className={fieldClass}
         />
       </label>
-      {state.error && <p className="text-sm text-error">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">予約しました</p>}
+      {state.error && (
+        <p className="text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
       <div className="flex gap-2">
         <button
           type="submit"
@@ -133,6 +142,11 @@ function RescheduleBookingForm({
   const [state, formAction, pending] = useActionState(rescheduleCoachingBooking, initialState)
   const newLabel = formatBookingConfirmLabel(slot)
   const currentLabel = formatBookingConfirmLabel(bookingSlotMeta(booking))
+
+  useActionToast(state, {
+    successMessage: '予約を変更しました',
+    pending,
+  })
 
   useEffect(() => {
     if (state.success) {
@@ -179,8 +193,11 @@ function RescheduleBookingForm({
           className={fieldClass}
         />
       </label>
-      {state.error && <p className="text-sm text-error">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">予約を変更しました</p>}
+      {state.error && (
+        <p className="text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
       <div className="flex gap-2">
         <button
           type="submit"

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useActionState, useState } from 'react'
 import { createStudyLog, type StudyLogActionState } from '@/app/study/actions'
 import { useAchievementUnlockDialog } from '@/components/achievements/useAchievementUnlockDialog'
+import { useActionToast } from '@/hooks/useActionToast'
 import {
   filterTextbooksByStudyCategory,
   getStudySubjectCategoriesForProfile,
@@ -33,6 +34,11 @@ export function StudyLogTextbookForm({ profileSubjects, textbooks }: StudyLogTex
 
   const studySubjectCategories = getStudySubjectCategoriesForProfile(profileSubjects)
   const filteredTextbooks = filterTextbooksByStudyCategory(textbooks, selectedSubject)
+
+  useActionToast(state, {
+    successMessage: '学習記録を追加しました',
+    pending,
+  })
 
   if (studySubjectCategories.length === 0) {
     return (
@@ -137,12 +143,6 @@ export function StudyLogTextbookForm({ profileSubjects, textbooks }: StudyLogTex
       {state.error && (
         <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-error" role="alert">
           {state.error}
-        </p>
-      )}
-
-      {state.success && (
-        <p className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700" role="status">
-          学習記録を保存しました
         </p>
       )}
 

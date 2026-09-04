@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { deleteStudyLog, updateStudyLog, type StudyLogActionState } from '@/app/study/actions'
+import { useActionToast } from '@/hooks/useActionToast'
 import {
   filterTextbooksByStudyCategory,
   getStudySubjectCategoriesForProfile,
@@ -68,6 +69,11 @@ function StudyLogSubjectEditPanel({
     return studySubjectCategories[0] ?? ''
   })()
   const todayKey = getJstDateKey()
+
+  useActionToast(state, {
+    successMessage: '学習記録を更新しました',
+    pending,
+  })
 
   useEffect(() => {
     if (state.success) {
@@ -177,6 +183,11 @@ function StudyLogTextbookEditPanel({
       ? log.textbook_id
       : filteredTextbooks[0]?.id ?? ''
   const todayKey = getJstDateKey()
+
+  useActionToast(state, {
+    successMessage: '学習記録を更新しました',
+    pending,
+  })
 
   useEffect(() => {
     if (state.success) {

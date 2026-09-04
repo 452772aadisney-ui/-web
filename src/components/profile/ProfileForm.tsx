@@ -30,7 +30,7 @@ export function ProfileForm({ profile, backHref }: ProfileFormProps) {
   })
 
   useActionToast(state, {
-    successMessage: 'プロフィールを保存しました',
+    successMessage: 'プロフィールを更新しました',
     pending,
   })
 

@@ -46,7 +46,7 @@ export function AdminCoachingProxyBooking({
   const [state, formAction, pending] = useActionState(adminBookCoachingSlot, initialState)
 
   useActionToast(state, {
-    successMessage: '予約しました',
+    successMessage: 'コーチングを予約しました',
     pending,
   })
 

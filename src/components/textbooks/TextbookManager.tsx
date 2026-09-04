@@ -9,6 +9,7 @@ import {
   updateTextbook,
   type TextbookActionState,
 } from '@/app/textbooks/actions'
+import { useActionToast } from '@/hooks/useActionToast'
 import {
   inputClass,
   SubjectTagFields,
@@ -45,6 +46,11 @@ function TextbookEditForm({
     initialState,
   )
 
+  useActionToast(state, {
+    successMessage: '教材を更新しました',
+    pending,
+  })
+
   useEffect(() => {
     if (state.success) {
       onCancel()
@@ -74,7 +80,9 @@ function TextbookEditForm({
       <TextbookDateFields startDate={book.start_date} plannedEndDate={book.planned_end_date} />
 
       {state.error && (
-        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error">{state.error}</p>
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error" role="alert">
+          {state.error}
+        </p>
       )}
 
       <div className="flex gap-3">
@@ -108,6 +116,11 @@ export function TextbookManager({
     initialState,
   )
   const [editingId, setEditingId] = useState<string | null>(null)
+
+  useActionToast(state, {
+    successMessage: '教材を登録しました',
+    pending,
+  })
 
   if (profileSubjects.length === 0) {
     return (
@@ -148,10 +161,9 @@ export function TextbookManager({
         <TextbookDateFields />
 
         {state.error && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error">{state.error}</p>
-        )}
-        {state.success && (
-          <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">教材を登録しました</p>
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error" role="alert">
+            {state.error}
+          </p>
         )}
 
         <button

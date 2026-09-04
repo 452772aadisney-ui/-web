@@ -9,16 +9,13 @@ import {
 import { CoachingKarteHistoryEntry } from '@/components/coaching/CoachingKarteHistoryEntry'
 import { AutoResizeTextarea } from '@/components/ui/AutoResizeTextarea'
 import { Pagination } from '@/components/ui/Pagination'
-import {
-  ACTION_TOAST_SUCCESS_DURATION_MS,
-  useActionToast,
-} from '@/hooks/useActionToast'
+import { useActionToast } from '@/hooks/useActionToast'
 import {
   clearKarteDraft,
   loadKarteDraft,
   saveKarteDraft,
 } from '@/lib/coaching/karte-draft'
-import { toast } from 'sonner'
+import { notifySuccess } from '@/lib/toast/app-toast'
 import type { CoachingCoach, CoachingKarteEntryWithDetails } from '@/types/coaching'
 
 const initialState: CoachingActionState = {}
@@ -105,10 +102,7 @@ export function AdminCoachingKarteForm({
       bookingId,
     })
     setDraftLoaded(false)
-    toast.success(<span role="status">一時保存しました</span>, {
-      id: `karte-draft-${studentId}`,
-      duration: ACTION_TOAST_SUCCESS_DURATION_MS,
-    })
+    notifySuccess('カルテを一時保存しました', `karte-draft-${studentId}`)
   }
 
   const historyPathname = `/admin/coaching/karte/${studentId}`

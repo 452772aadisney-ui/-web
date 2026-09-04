@@ -6,6 +6,10 @@ import { setTodoCompletion } from '@/app/todo/actions'
 import { useAchievementUnlockDialog } from '@/components/achievements/useAchievementUnlockDialog'
 import { getTodayDateKey } from '@/lib/study/dates'
 import type { UnlockedAchievement } from '@/lib/achievements/unlock'
+import {
+  APP_TOAST_SAFE_ERROR_MESSAGE,
+  createToastSession,
+} from '@/lib/toast/app-toast'
 import { cn } from '@/lib/utils'
 import type { TodoCategory, TodoItem } from '@/types/todo'
 
@@ -47,6 +51,7 @@ function TodoCheckbox({
 
     const nextCompleted = !completed
     const previous = completed
+    const toastSession = createToastSession()
     setCompleted(nextCompleted)
     setError(null)
     setPending(true)
@@ -57,8 +62,14 @@ function TodoCheckbox({
     if (result.error) {
       setCompleted(previous)
       setError(result.error)
+      toastSession.error(APP_TOAST_SAFE_ERROR_MESSAGE, 'todo-error')
       return
     }
+
+    toastSession.success(
+      nextCompleted ? 'ToDoを完了しました' : 'ToDoを未完了に戻しました',
+      'todo-success',
+    )
 
     if (result.unlockedAchievements?.length) {
       setLastUnlockedAchievements(result.unlockedAchievements)

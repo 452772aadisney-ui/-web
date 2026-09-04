@@ -11,6 +11,7 @@ import {
   type TextbookActionState,
 } from '@/app/textbooks/actions'
 import { useAchievementUnlockDialog } from '@/components/achievements/useAchievementUnlockDialog'
+import { useActionToast } from '@/hooks/useActionToast'
 import { TextbookBookshelfListItem } from '@/components/textbooks/TextbookCatalogListItem'
 import { TextbookDetailTagFields } from '@/components/textbooks/TextbookDetailTagFields'
 import { TextbookSubjectTagsReadOnly } from '@/components/textbooks/TextbookSubjectTagsReadOnly'
@@ -96,6 +97,11 @@ function TextbookEditForm({
     initialState,
   )
 
+  useActionToast(state, {
+    successMessage: '教材を更新しました',
+    pending,
+  })
+
   useEffect(() => {
     if (state.success) {
       onCancel()
@@ -121,7 +127,11 @@ function TextbookEditForm({
       )}
       <UsageTagFields selectedUsageTags={book.usage_tags} />
       <TextbookDateFields startDate={book.start_date} plannedEndDate={book.planned_end_date} />
-      {state.error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error">{state.error}</p>}
+      {state.error && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
       <div className="flex gap-3">
         <button
           type="submit"
@@ -162,6 +172,11 @@ function CatalogRegisterForm({
     availableCategories.includes(initialSubject) ? initialSubject : availableCategories[0]!,
   )
   const [catalogId, setCatalogId] = useState('')
+
+  useActionToast(state, {
+    successMessage: '教材を登録しました',
+    pending,
+  })
 
   function switchSubject(subject: TextbookSubjectCategoryLabel) {
     setCategoryLabel(subject)
@@ -232,8 +247,11 @@ function CatalogRegisterForm({
       <UsageTagFields selectedUsageTags={selectedCatalog?.usage_tags} />
       <TextbookDateFields />
 
-      {state.error && <p className="text-sm text-error">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">参考書を登録しました</p>}
+      {state.error && (
+        <p className="text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
 
       <button
         type="submit"
@@ -260,6 +278,11 @@ function CreateRegisterForm({
   )
   const { dialog: achievementDialog } = useAchievementUnlockDialog(state.unlockedAchievements)
 
+  useActionToast(state, {
+    successMessage: '教材を登録しました',
+    pending,
+  })
+
   return (
     <>
       {achievementDialog}
@@ -283,8 +306,11 @@ function CreateRegisterForm({
       <UsageTagFields />
       <TextbookDateFields />
 
-      {state.error && <p className="text-sm text-error">{state.error}</p>}
-      {state.success && <p className="text-sm text-green-700">教材を登録しました</p>}
+      {state.error && (
+        <p className="text-sm text-error" role="alert">
+          {state.error}
+        </p>
+      )}
 
       <button
         type="submit"
