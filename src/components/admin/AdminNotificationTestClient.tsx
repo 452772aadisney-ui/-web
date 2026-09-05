@@ -298,7 +298,7 @@ export function AdminNotificationTestClient({
                       <dd className="font-medium">{dryRun.readiness.preferenceEnabled}</dd>
                     </div>
                     <div>
-                      <dt className="text-muted">通知設定OFF</dt>
+                      <dt className="text-muted">管理者により停止</dt>
                       <dd className="font-medium">{dryRun.readiness.preferenceDisabled}</dd>
                     </div>
                     <div>
@@ -380,7 +380,7 @@ export function AdminNotificationTestClient({
                       <dd className="font-medium">{dryRun.current.alreadyRecorded}</dd>
                     </div>
                     <div>
-                      <dt className="text-muted">通知設定OFF</dt>
+                      <dt className="text-muted">管理者により停止</dt>
                       <dd className="font-medium">{dryRun.current.preferenceDisabled}</dd>
                     </div>
                     <div>

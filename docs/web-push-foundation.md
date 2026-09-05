@@ -36,15 +36,27 @@
 5. service role key / Admin Client をブラウザへ渡さない
 
 `notification_events` / `notification_deliveries` も同様に Admin Client 経由のみ。  
-`notification_preferences` のみ本人が参照・更新可。
+`notification_preferences` は **本人 SELECT のみ**。INSERT/UPDATE は管理者の server-only Admin Client のみ（migration `051`）。
 
-### notification_preferences の実効権限
+### notification_preferences の実効権限（051）
 
-- `REVOKE ALL` を `anon` / `authenticated` に対して実行したうえで、`authenticated` に **SELECT / INSERT / UPDATE** のみ `GRANT`
-- **DELETE は GRANT しない**（ポリシーも無し）
-- RLS: `user_id = auth.uid()` の行だけ
+- `authenticated` に **SELECT のみ** GRANT（INSERT / UPDATE / DELETE なし）
+- RLS: 本人 SELECT ポリシーのみ（`user_id = auth.uid()`）
+- 本人 INSERT / UPDATE ポリシーなし
 - `anon` は操作不可
+- 行の作成・変更は Admin Client（service role）のみ
+- 監査: `notification_preference_changes`（一般クライアント GRANT なし・RLS ON）
 
+### カテゴリ boolean の意味（4種共通）
+
+```text
+true  = Push-first。Push不可 / 全端末失敗ならメールfallback
+false = Push・メールの両方を送らない（管理者による停止）
+```
+
+生徒はカテゴリを停止できない。端末の Push 購読解除は可能で、解除後もカテゴリが有効ならメールfallback対象。
+
+既存 false 値は migration で自動 true 化しない。適用前に `supabase/queries/051_notification_preferences_false_counts.sql` で件数確認。
 ---
 
 ## 購読の再同期
@@ -83,7 +95,8 @@ Service Worker の `pushsubscriptionchange` から Next.js Server Action を直�
 | テーブル | 役割 | クライアント直接操作 |
 |----------|------|----------------------|
 | `push_subscriptions` | 端末購読 | 不可（Admin Client） |
-| `notification_preferences` | 種別 ON/OFF（4項目、default ON） | 本人のみ（GRANT + RLS） |
+| `notification_preferences` | 種別配信ゲート（4項目、管理者制御） | 本人 SELECT のみ |
+| `notification_preference_changes` | 管理者変更監査 | 不可 |
 | `notification_events` | 論理通知・冪等 | 不可 |
 | `notification_deliveries` | 端末/メール別結果 | 不可 |
 
@@ -196,7 +209,9 @@ rollback は上記テーブル4つと enum 3つのみ削除する（既存シス
 | 2-2 | 未記録リマインダー Push-first 実装（初期 mode=`legacy`）→ [web-push-study-reminder-integration.md](./web-push-study-reminder-integration.md) |
 | 2-3 | 管理者向け通知テスト（`/admin/notifications/test`） |
 | 2-4 | 管理者向け全体dry-run（件数集計のみ・送信なし） |
-| 第2段階（続き） | allowlist/all への段階切替、他通知接続 |
+| 2-5事前 | study-reminder Cron `maxDuration=60` + soft timeout |
+| 2-6 | 通知カテゴリを管理者のみ停止可能へ（migration `051`・未適用） |
+| 第2段階（続き） | allowlist/all への段階切替、お知らせ/メッセージ/コーチング接続 |
 
 ---
 

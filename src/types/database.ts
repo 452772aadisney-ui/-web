@@ -3,6 +3,7 @@ import type {
   NotificationDeliveryStatus,
   NotificationDeliveryRow,
   NotificationEventRow,
+  NotificationPreferenceChangeRow,
   NotificationPreferencesRow,
   PushNotificationType,
   PushSubscriptionRow,
@@ -14,6 +15,7 @@ export type {
   NotificationDeliveryChannel,
   NotificationDeliveryStatus,
   NotificationPreferenceCategory,
+  NotificationPreferenceChangeRow,
   NotificationDeliveryRow,
   NotificationEventRow,
   NotificationPreferencesRow,
@@ -106,6 +108,21 @@ export interface Database {
           updated_at?: string
         }
         Update: Partial<Omit<NotificationPreferencesRow, 'user_id' | 'created_at'>>
+        Relationships: []
+      }
+      notification_preference_changes: {
+        Row: NotificationPreferenceChangeRow
+        Insert: {
+          id?: string
+          target_user_id: string
+          changed_by_admin_id: string
+          category: NotificationPreferenceChangeRow['category']
+          previous_value: boolean
+          new_value: boolean
+          reason?: string | null
+          created_at?: string
+        }
+        Update: never
         Relationships: []
       }
       notification_events: {

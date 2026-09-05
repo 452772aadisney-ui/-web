@@ -1,10 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useId, useRef, useState, useTransition } from 'react'
-import {
-  getNotificationPreferences,
-  updateNotificationPreference,
-} from '@/app/notifications/actions'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { getNotificationPreferences } from '@/app/notifications/actions'
 import {
   deriveDeviceNotificationStatus,
   deviceStatusDetail,
@@ -25,55 +22,13 @@ import { getVapidPublicKey } from '@/lib/push/env'
 import {
   NOTIFICATION_PREFERENCE_CATEGORIES,
   NOTIFICATION_PREFERENCE_COPY,
-  defaultNotificationPreferences,
+  notificationCategoryStatusLabel,
   type NotificationPreferencesView,
 } from '@/lib/push/preferences'
 import { createToastSession } from '@/lib/toast/app-toast'
-import type { NotificationPreferenceCategory } from '@/types/push'
 import { cn } from '@/lib/utils'
 
 type PrefsLoadState = 'loading' | 'ready' | 'error'
-
-function PreferenceSwitch({
-  id,
-  checked,
-  disabled,
-  onCheckedChange,
-  label,
-}: {
-  id: string
-  checked: boolean
-  disabled: boolean
-  onCheckedChange: (next: boolean) => void
-  label: string
-}) {
-  return (
-    <button
-      id={id}
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      disabled={disabled}
-      onClick={() => onCheckedChange(!checked)}
-      className={cn(
-        'relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition',
-        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
-        checked ? 'border-primary bg-primary' : 'border-border bg-border',
-        disabled && 'cursor-not-allowed opacity-60',
-      )}
-    >
-      <span
-        aria-hidden
-        className={cn(
-          'inline-block h-5 w-5 rounded-full bg-white shadow transition',
-          checked ? 'translate-x-6' : 'translate-x-1',
-        )}
-      />
-      <span className="sr-only">{checked ? 'オン' : 'オフ'}</span>
-    </button>
-  )
-}
 
 export function NotificationSettingsClient({
   initialPreferences,
@@ -91,14 +46,10 @@ export function NotificationSettingsClient({
   )
   const [prefsFromDatabase, setPrefsFromDatabase] = useState(initialPrefsFromDatabase)
   const [deviceBusy, setDeviceBusy] = useState(false)
-  const [savingCategory, setSavingCategory] = useState<NotificationPreferenceCategory | null>(
-    null,
-  )
   const [showIosGuide, setShowIosGuide] = useState(false)
   const [sendingEnabled, setSendingEnabled] = useState(false)
   const [hasBrowserSubscription, setHasBrowserSubscription] = useState(false)
   const [testBusy, setTestBusy] = useState(false)
-  const [, startTransition] = useTransition()
   const busyRef = useRef(false)
   const testBusyRef = useRef(false)
   const baseId = useId()
@@ -127,8 +78,6 @@ export function NotificationSettingsClient({
       nextSendingEnabled = server.value.sendingEnabled
     } else if (server.code === 'network' || server.code === 'unknown') {
       serverStatusFailed = true
-    } else if (server.code === 'not_configured') {
-      // fall through — configured flag handles messaging
     }
     setSendingEnabled(nextSendingEnabled)
 
@@ -209,6 +158,14 @@ export function NotificationSettingsClient({
 
   const handleDisable = async () => {
     if (busyRef.current) return
+    if (
+      !window.confirm(
+        'この端末のWeb通知を停止すると、必要なお知らせはメールで届きます。よろしいですか？',
+      )
+    ) {
+      return
+    }
+
     busyRef.current = true
     setDeviceBusy(true)
     const toastSession = createToastSession()
@@ -249,29 +206,6 @@ export function NotificationSettingsClient({
     }
   }
 
-  const handleTogglePreference = (category: NotificationPreferenceCategory, enabled: boolean) => {
-    if (prefsState !== 'ready' || savingCategory) return
-
-    const previous = prefs
-    setPrefs((current) => ({ ...current, [category]: enabled }))
-    setSavingCategory(category)
-    const toastSession = createToastSession()
-
-    startTransition(async () => {
-      const result = await updateNotificationPreference({ category, enabled })
-      if (!result.ok) {
-        setPrefs(previous)
-        toastSession.error('通知設定を更新できませんでした。もう一度お試しください')
-        setSavingCategory(null)
-        return
-      }
-      setPrefs(result.preferences)
-      setPrefsFromDatabase(true)
-      toastSession.success('通知設定を更新しました', 'notification-prefs-toast')
-      setSavingCategory(null)
-    })
-  }
-
   const headline = deviceStatusHeadline(deviceStatus)
   const detail = deviceStatusDetail(deviceStatus)
   const canEnable =
@@ -289,12 +223,26 @@ export function NotificationSettingsClient({
     !testBusy
   const showTestUnavailableHint =
     deviceStatus === 'subscribed' && hasBrowserSubscription && !sendingEnabled
+  const anyCategoryStopped = NOTIFICATION_PREFERENCE_CATEGORIES.some(
+    (category) => !prefs[category],
+  )
+  const needsPushPrompt =
+    deviceStatus === 'permission_default' ||
+    deviceStatus === 'ready_to_enable' ||
+    deviceStatus === 'needs_sync' ||
+    deviceStatus === 'permission_denied'
 
   return (
     <div className="space-y-6">
       <p className="text-sm text-muted">
-        学習記録のリマインダーや、新しいお知らせをこの端末で受け取れます。
+        通知は、まずWeb通知でお届けします。Web通知を利用できない場合は、登録メールアドレスへお送りします。
       </p>
+
+      {needsPushPrompt && (
+        <p className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-foreground">
+          大切なお知らせをすぐ確認できるよう、この端末の通知を有効にしてください。
+        </p>
+      )}
 
       <section
         className="rounded-2xl border border-border bg-card p-5 shadow-sm"
@@ -324,7 +272,7 @@ export function NotificationSettingsClient({
               type="button"
               onClick={() => void handleEnable()}
               disabled={deviceBusy}
-              className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition hover:bg-primary-hover disabled:opacity-60"
+              className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-hover disabled:opacity-60"
             >
               {deviceBusy
                 ? '処理中…'
@@ -343,6 +291,12 @@ export function NotificationSettingsClient({
             >
               {deviceBusy ? '処理中…' : 'この端末の通知を停止する'}
             </button>
+          )}
+
+          {canDisable && (
+            <p className="w-full text-sm text-muted">
+              この端末のWeb通知を停止すると、必要なお知らせはメールで届きます。
+            </p>
           )}
 
           {canSendTest && (
@@ -388,14 +342,19 @@ export function NotificationSettingsClient({
       <section
         className="rounded-2xl border border-border bg-card p-5 shadow-sm"
         aria-labelledby={`${baseId}-prefs-heading`}
-        aria-busy={prefsState === 'loading' || savingCategory !== null}
       >
         <h2 id={`${baseId}-prefs-heading`} className="text-base font-bold text-foreground">
           受け取る通知の種類
         </h2>
         <p className="mt-2 text-sm text-muted">
-          通知内容の設定は、利用しているすべての端末に反映されます。この端末の通知がオフのときは、ここをオンにしてもこの端末には届きません。
+          通知の配信可否は塾側で管理しています。こちらでは状態の確認のみできます。
         </p>
+
+        {anyCategoryStopped && prefsState === 'ready' && (
+          <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-foreground">
+            この通知は現在停止されています。
+          </p>
+        )}
 
         {prefsState === 'error' ? (
           <div className="mt-4 space-y-3">
@@ -417,23 +376,24 @@ export function NotificationSettingsClient({
           <ul className="mt-4 divide-y divide-border">
             {NOTIFICATION_PREFERENCE_CATEGORIES.map((category) => {
               const copy = NOTIFICATION_PREFERENCE_COPY[category]
-              const switchId = `${baseId}-${category}`
-              const checked = prefs[category]
-              const disabled = prefsState !== 'ready' || savingCategory !== null
+              const enabled = prefs[category]
 
               return (
                 <li key={category} className="flex items-start justify-between gap-4 py-4 first:pt-2">
-                  <label htmlFor={switchId} className="min-w-0 flex-1 cursor-pointer">
+                  <div className="min-w-0 flex-1">
                     <span className="block text-sm font-medium text-foreground">{copy.title}</span>
                     <span className="mt-1 block text-sm text-muted">{copy.description}</span>
-                  </label>
-                  <PreferenceSwitch
-                    id={switchId}
-                    checked={checked}
-                    disabled={disabled}
-                    label={`${copy.title}（${checked ? 'オン' : 'オフ'}）`}
-                    onCheckedChange={(next) => handleTogglePreference(category, next)}
-                  />
+                  </div>
+                  <span
+                    className={cn(
+                      'shrink-0 rounded-lg px-2.5 py-1 text-sm font-medium',
+                      enabled
+                        ? 'bg-primary/10 text-primary'
+                        : 'bg-amber-50 text-amber-900',
+                    )}
+                  >
+                    {notificationCategoryStatusLabel(enabled)}
+                  </span>
                 </li>
               )
             })}
@@ -441,7 +401,7 @@ export function NotificationSettingsClient({
         )}
 
         {!prefsFromDatabase && prefsState === 'ready' && (
-          <p className="mt-2 text-xs text-muted">まだ保存前の初期設定です。変更するとアカウントに保存されます。</p>
+          <p className="mt-2 text-xs text-muted">設定行がない場合は、すべて有効として扱われます。</p>
         )}
       </section>
     </div>

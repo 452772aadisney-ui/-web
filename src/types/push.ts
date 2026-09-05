@@ -69,7 +69,7 @@ export interface NotificationDeliveryRow {
   updated_at: string
 }
 
-/** Defaults when creating preferences on first Push enable. */
+/** Defaults when creating preferences on first Push enable / admin create. */
 export const DEFAULT_NOTIFICATION_PREFERENCES: Pick<
   NotificationPreferencesRow,
   NotificationPreferenceCategory
@@ -78,4 +78,22 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: Pick<
   announcement: true,
   message: true,
   coaching_reminder: true,
+}
+
+/**
+ * Admin-controlled delivery gate (not student opt-out):
+ * true  = Push-first; if Push unavailable/fails → email fallback
+ * false = neither Push nor email
+ */
+export type NotificationCategoryDeliveryGate = boolean
+
+export interface NotificationPreferenceChangeRow {
+  id: string
+  target_user_id: string
+  changed_by_admin_id: string
+  category: NotificationPreferenceCategory
+  previous_value: boolean
+  new_value: boolean
+  reason: string | null
+  created_at: string
 }

@@ -46,18 +46,25 @@ Vercel で `STUDY_REMINDER_DELIVERY_MODE=legacy`（または削除）に戻す�
 
 ---
 
-## 通知設定 OFF（正式移行後 = allowlist/all）
+## 通知カテゴリ停止（管理者制御・2-6）
 
-`notification_preferences.study_reminder = false` のとき:
+`notification_preferences.study_reminder = false` のとき（allowlist / all）:
 
 - Web Push **しない**
 - 22:00 未記録メール **しない**
 - event / delivery **作らない**（優先）
-- 集計: `preferenceDisabled`
+- 集計: `preferenceDisabled`（画面上は「管理者により停止」）
 
 行なし → **ON**（既存設計どおり）。
 
-`legacy` / `dry-run` の従来メールは設定 OFF でも止めない（dry-run 集計では OFF 件数を出す）。
+`legacy` / `dry-run` の従来メールは設定 OFF でも止めない（dry-run 集計では停止件数を出す）。
+
+生徒はカテゴリを変更できない。端末 Push 解除後も true ならメールfallback対象。お知らせ・メッセージ・コーチング送信への接続は後工程。
+
+migration: `051_notification_preferences_admin_control.sql`（**本番未適用**）
+- verify: `supabase/rollbacks/051_notification_preferences_admin_control_verify.sql`
+- rollback: `supabase/rollbacks/051_notification_preferences_admin_control_rollback.sql`
+- false 件数確認: `supabase/queries/051_notification_preferences_false_counts.sql`
 
 ---
 

@@ -3,26 +3,35 @@ import {
   NOTIFICATION_PREFERENCE_CATEGORIES,
   defaultNotificationPreferences,
   isNotificationPreferenceCategory,
+  notificationCategoryStatusLabel,
 } from '@/lib/push/preferences'
 
 describe('notification preferences helpers', () => {
-  it('exposes exactly four user-facing categories without test', () => {
+  it('exposes the four admin-controlled categories', () => {
     expect(NOTIFICATION_PREFERENCE_CATEGORIES).toEqual([
       'study_reminder',
       'announcement',
       'message',
       'coaching_reminder',
     ])
-    expect(NOTIFICATION_PREFERENCE_CATEGORIES).not.toContain('test')
-    expect(isNotificationPreferenceCategory('test')).toBe(false)
   })
 
-  it('defaults all categories to on', () => {
+  it('defaults all categories to enabled', () => {
     expect(defaultNotificationPreferences()).toEqual({
       study_reminder: true,
       announcement: true,
       message: true,
       coaching_reminder: true,
     })
+  })
+
+  it('validates category tokens', () => {
+    expect(isNotificationPreferenceCategory('study_reminder')).toBe(true)
+    expect(isNotificationPreferenceCategory('test')).toBe(false)
+  })
+
+  it('labels student-facing status without switches', () => {
+    expect(notificationCategoryStatusLabel(true)).toBe('有効')
+    expect(notificationCategoryStatusLabel(false)).toBe('停止中')
   })
 })

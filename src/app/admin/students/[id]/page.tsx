@@ -39,7 +39,10 @@ import { createClient } from '@/lib/supabase/server'
 import { DEFAULT_PAGE_SIZE, getTotalPages, parsePageParam } from '@/lib/pagination'
 import type { StudyLog } from '@/lib/study/chart-data'
 import { AdminStudentProfileForm } from '@/components/admin/AdminStudentProfileForm'
+import { AdminStudentNotificationPrefs } from '@/components/admin/AdminStudentNotificationPrefs'
 import { StudentTagAssignForm } from '@/components/tags/StudentTagAssignForm'
+import { getAdminStudentNotificationPrefs } from '@/lib/admin/notification-preferences-admin'
+import { defaultNotificationPreferences } from '@/lib/push/preferences'
 
 async function fetchStudyLogsPaginated(
   studentId: string,
@@ -152,6 +155,16 @@ export default async function AdminStudentStudyPage({
   const profileSubjects = student.subjects ?? []
   const targetSchools = student.target_schools ?? []
   const piePeriod = query.piePeriod === '14' ? '14' : 'all'
+  const prefsResult = await getAdminStudentNotificationPrefs(id)
+  const notificationSnapshot = prefsResult.ok
+    ? prefsResult.snapshot
+    : {
+        preferences: defaultNotificationPreferences(),
+        fromDatabase: false,
+        updatedAt: null,
+        lastChangedByLabel: null,
+        lastChangedAt: null,
+      }
 
   return (
     <AdminPageShell
@@ -195,6 +208,11 @@ export default async function AdminStudentStudyPage({
               }}
             />
           </section>
+
+          <AdminStudentNotificationPrefs
+            studentId={id}
+            initialSnapshot={notificationSnapshot}
+          />
 
           <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
             <h2 className="mb-1 text-lg font-bold">生徒タグ</h2>

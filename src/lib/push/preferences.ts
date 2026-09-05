@@ -44,6 +44,11 @@ export const NOTIFICATION_PREFERENCE_COPY: Record<
   },
   coaching_reminder: {
     title: 'コーチングのお知らせ',
-    description: 'コーチングに関するリマインダーを通知します。',
+    description: 'コーチングに関するお知らせを通知します。',
   },
+}
+
+/** Display label for admin-controlled category status (student UI). */
+export function notificationCategoryStatusLabel(enabled: boolean): string {
+  return enabled ? '有効' : '停止中'
 }
