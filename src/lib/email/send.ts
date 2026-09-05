@@ -1,4 +1,8 @@
 import { getEmailFrom } from '@/lib/email/config'
+import {
+  classifyResendHttpStatus,
+  withResendSendPace,
+} from '@/lib/email/rate-limit'
 
 export type SendEmailInput = {
   to: string
@@ -7,11 +11,22 @@ export type SendEmailInput = {
   replyTo?: string
   /** When true, failure logs omit recipient address (cron / study-reminder path). */
   omitRecipientFromLogs?: boolean
+  /**
+   * When true, wait on the shared Resend pace queue before sending.
+   * Use for study-reminder Cron paths so parallel workers cannot burst.
+   */
+  pace?: boolean
 }
 
 export type SendEmailResult =
   | { ok: true; httpStatus?: number }
-  | { ok: false; skipped?: boolean; error?: string; httpStatus?: number | null }
+  | {
+      ok: false
+      skipped?: boolean
+      error?: string
+      httpStatus?: number | null
+      errorClass?: 'rate_limited' | 'provider_error' | 'network' | 'empty_recipient'
+    }
 
 function formatResendError(raw: string, to: string): string {
   try {
@@ -37,7 +52,7 @@ function formatResendError(raw: string, to: string): string {
   }
 }
 
-export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
+async function sendEmailOnce(input: SendEmailInput): Promise<SendEmailResult> {
   const apiKey = process.env.RESEND_API_KEY?.trim()
   const from = getEmailFrom()
 
@@ -48,7 +63,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
 
   const to = input.to.trim()
   if (!to) {
-    return { ok: false, error: 'Recipient email is empty' }
+    return { ok: false, error: 'Recipient email is empty', errorClass: 'empty_recipient' }
   }
 
   try {
@@ -68,61 +83,100 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
     })
 
     if (!response.ok) {
-      const error = await response.text()
+      const errorClass = classifyResendHttpStatus(response.status)
+      const errorBody = await response.text().catch(() => '')
+
       if (input.omitRecipientFromLogs) {
         console.error('[email] send failed:', {
           status: response.status,
-          errorClass: 'provider_error',
+          errorClass,
         })
-        return { ok: false, error: 'provider_error', httpStatus: response.status }
+        return {
+          ok: false,
+          error: errorClass,
+          httpStatus: response.status,
+          errorClass,
+        }
       }
-      console.error('[email] send failed:', { from, to, error })
-      return { ok: false, error: formatResendError(error, to), httpStatus: response.status }
+
+      console.error('[email] send failed:', {
+        status: response.status,
+        errorClass,
+      })
+      return {
+        ok: false,
+        error: formatResendError(errorBody || `HTTP ${response.status}`, to),
+        httpStatus: response.status,
+        errorClass,
+      }
     }
 
     return { ok: true, httpStatus: response.status }
-  } catch (error) {
-    console.error('[email] send error:', error)
-    return { ok: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  } catch {
+    if (input.omitRecipientFromLogs) {
+      console.error('[email] send failed:', { errorClass: 'network' })
+      return { ok: false, error: 'network', errorClass: 'network' }
+    }
+    console.error('[email] send error: network')
+    return { ok: false, error: 'network', errorClass: 'network' }
   }
 }
 
+export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
+  if (input.pace) {
+    return withResendSendPace(() => sendEmailOnce(input))
+  }
+  return sendEmailOnce(input)
+}
+
+export type SendEmailToManyResult = {
+  recipientCount: number
+  sentCount: number
+  skippedCount: number
+  failedCount: number
+  rateLimitedCount: number
+}
+
+/**
+ * Send the same message to many recipients.
+ * When `pace` is true (study-reminder), sends are strictly sequential with
+ * {@link RESEND_SEND_MIN_INTERVAL_MS} between starts — never a 1-second burst.
+ */
 export async function sendEmailToMany(
   recipients: string[],
   input: Omit<SendEmailInput, 'to'>,
-  options?: { omitRecipientFromLogs?: boolean; concurrency?: number },
-): Promise<{ recipientCount: number; sentCount: number; skippedCount: number }> {
+  options?: { omitRecipientFromLogs?: boolean; pace?: boolean },
+): Promise<SendEmailToManyResult> {
   const uniqueRecipients = [...new Set(recipients.map((email) => email.trim()).filter(Boolean))]
   if (uniqueRecipients.length === 0) {
     console.warn('[email] skipped: recipient list is empty')
-    return { recipientCount: 0, sentCount: 0, skippedCount: 0 }
+    return {
+      recipientCount: 0,
+      sentCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      rateLimitedCount: 0,
+    }
   }
 
-  const concurrency = options?.concurrency
-  let results: SendEmailResult[]
+  const results: SendEmailResult[] = []
 
-  if (concurrency && concurrency > 0 && concurrency < uniqueRecipients.length) {
-    results = new Array(uniqueRecipients.length)
-    let nextIndex = 0
-    async function worker() {
-      for (;;) {
-        const current = nextIndex
-        nextIndex += 1
-        if (current >= uniqueRecipients.length) return
-        results[current] = await sendEmail({
-          to: uniqueRecipients[current]!,
+  if (options?.pace || input.pace) {
+    for (const to of uniqueRecipients) {
+      results.push(
+        await sendEmail({
+          to,
           subject: input.subject,
           text: input.text,
           replyTo: input.replyTo,
-          omitRecipientFromLogs: options?.omitRecipientFromLogs,
-        })
-      }
+          omitRecipientFromLogs: options?.omitRecipientFromLogs ?? input.omitRecipientFromLogs,
+          pace: true,
+        }),
+      )
     }
-    await Promise.all(
-      Array.from({ length: concurrency }, () => worker()),
-    )
   } else {
-    results = await Promise.all(
+    // Non-paced callers (announcements etc.) keep previous parallel behavior.
+    const parallel = await Promise.all(
       uniqueRecipients.map((to) =>
         sendEmail({
           to,
@@ -133,17 +187,29 @@ export async function sendEmailToMany(
         }),
       ),
     )
+    results.push(...parallel)
   }
 
   const sentCount = results.filter((result) => result.ok).length
   const skippedCount = results.filter((result) => !result.ok && result.skipped).length
+  const rateLimitedCount = results.filter(
+    (result) => !result.ok && result.errorClass === 'rate_limited',
+  ).length
+  const failedCount = results.length - sentCount - skippedCount
 
   console.info('[email] batch result:', {
     recipients: uniqueRecipients.length,
     sent: sentCount,
     skipped: skippedCount,
-    failed: results.length - sentCount - skippedCount,
+    failed: failedCount,
+    rateLimited: rateLimitedCount,
   })
 
-  return { recipientCount: uniqueRecipients.length, sentCount, skippedCount }
+  return {
+    recipientCount: uniqueRecipients.length,
+    sentCount,
+    skippedCount,
+    failedCount,
+    rateLimitedCount,
+  }
 }

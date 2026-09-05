@@ -17,7 +17,7 @@ export function buildMissingStudyLogEmailText(dateLabel: string): string {
   ].join('\n')
 }
 
-/** Single-recipient study-reminder email (safe logs; no address in log lines). */
+/** Single-recipient study-reminder email (paced + safe logs; no address in log lines). */
 export async function sendMissingStudyLogEmail(params: {
   to: string
   dateLabel: string
@@ -27,6 +27,7 @@ export async function sendMissingStudyLogEmail(params: {
     subject: STUDY_REMINDER_EMAIL_SUBJECT,
     text: buildMissingStudyLogEmailText(params.dateLabel),
     omitRecipientFromLogs: true,
+    pace: true,
   })
   return result
 }

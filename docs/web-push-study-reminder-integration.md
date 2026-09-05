@@ -100,6 +100,7 @@ Preview（`VERCEL_ENV` があり production 以外）: 新方式の外部送信�
 - 初期取得失敗: 500
 - 一部生徒失敗: **200** + カウンタ（Vercel の全面再実行で legacy 二重メールを避ける）
 - 生徒並列: `STUDY_REMINDER_STUDENT_CONCURRENCY = 3`
+- **Resend 送信ペース（2-2追補）**: study-reminder 経路は共有キュー + `RESEND_SEND_MIN_INTERVAL_MS = 300`（約 3.3 req/s、チーム上限の余裕を確保）。legacy / dry-run 従来メールと新方式 fallback が対象。429 はその場リトライしない。Batch API は不採用（個別監査・1件不正でバッチ全体失敗のリスク）
 
 主要コード:
 

@@ -370,13 +370,13 @@ async function tryEmailFallback(params: {
     return 'email_failed'
   }
 
-  await finalizeEmailDelivery(params.admin, event.eventId, {
-    status: 'failed',
-    http_status: sendResult.httpStatus ?? null,
-    error_code: 'email_send_failed',
-    succeeded_at: null,
-  })
-  return 'email_failed'
+    await finalizeEmailDelivery(params.admin, event.eventId, {
+      status: 'failed',
+      http_status: sendResult.httpStatus ?? null,
+      error_code: sendResult.errorClass ?? 'email_send_failed',
+      succeeded_at: null,
+    })
+    return 'email_failed'
 }
 
 /**

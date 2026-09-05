@@ -9,7 +9,6 @@ import {
 } from '@/lib/announcements/audience'
 import { createClient } from '@/lib/supabase/server'
 import { fetchStudentList } from '@/lib/study/queries'
-import { STUDY_REMINDER_STUDENT_CONCURRENCY } from '@/lib/study/study-reminder-mode'
 import {
   STUDY_REMINDER_EMAIL_SUBJECT,
   buildMissingStudyLogEmailText,
@@ -228,7 +227,7 @@ export async function notifyStudentsMissingTodayStudyLog(
     },
     {
       omitRecipientFromLogs: true,
-      concurrency: STUDY_REMINDER_STUDENT_CONCURRENCY,
+      pace: true,
     },
   )
 }
