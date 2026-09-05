@@ -7,6 +7,10 @@ import {
   isNotificationPreferenceCategory,
   type NotificationPreferencesView,
 } from '@/lib/push/preferences'
+import {
+  ensurePreferencesRowThenUpdateCategory,
+  type PreferenceRow,
+} from '@/lib/push/preferences-write'
 import type { NotificationPreferenceCategory } from '@/types/push'
 import type { Profile } from '@/types/database'
 
@@ -20,6 +24,13 @@ export type NotificationPreferenceUpdateResult =
       ok: false
       error: 'unauthorized' | 'forbidden' | 'invalid' | 'save_failed'
     }
+
+type PreferenceColumns = {
+  study_reminder: boolean
+  announcement: boolean
+  message: boolean
+  coaching_reminder: boolean
+}
 
 async function requireStudentUserId(): Promise<
   | { ok: true; userId: string }
@@ -45,12 +56,7 @@ async function requireStudentUserId(): Promise<
   return { ok: true, userId: user.id }
 }
 
-function toView(row: {
-  study_reminder: boolean
-  announcement: boolean
-  message: boolean
-  coaching_reminder: boolean
-}): NotificationPreferencesView {
+function toView(row: PreferenceColumns): NotificationPreferencesView {
   return {
     study_reminder: row.study_reminder,
     announcement: row.announcement,
@@ -72,12 +78,7 @@ export async function getNotificationPreferences(): Promise<NotificationPreferen
     .from('notification_preferences')
     .select('study_reminder, announcement, message, coaching_reminder')
     .eq('user_id', auth.userId)
-    .maybeSingle<{
-      study_reminder: boolean
-      announcement: boolean
-      message: boolean
-      coaching_reminder: boolean
-    }>()
+    .maybeSingle<PreferenceColumns>()
 
   if (error) {
     return { ok: false, error: 'load_failed' }
@@ -94,8 +95,60 @@ export async function getNotificationPreferences(): Promise<NotificationPreferen
   return { ok: true, preferences: toView(data), fromDatabase: true }
 }
 
+function createPreferencesWriteClient(userId: string) {
+  return {
+    async selectPreferences(): Promise<
+      { ok: true; row: PreferenceRow | null } | { ok: false }
+    > {
+      const supabase = await createClient()
+      const { data, error } = await supabase
+        .from('notification_preferences')
+        .select('study_reminder, announcement, message, coaching_reminder')
+        .eq('user_id', userId)
+        .maybeSingle<PreferenceColumns>()
+
+      if (error) return { ok: false }
+      return { ok: true, row: data ? toView(data) : null }
+    },
+
+    async insertDefaults(): Promise<{ ok: true } | { ok: false; conflict: boolean }> {
+      const supabase = await createClient()
+      const defaults = defaultNotificationPreferences()
+      const { error } = await supabase.from('notification_preferences').insert({
+        user_id: userId,
+        ...defaults,
+      })
+
+      if (!error) return { ok: true }
+      // Unique violation: another request created the row first.
+      if (error.code === '23505') return { ok: false, conflict: true }
+      return { ok: false, conflict: false }
+    },
+
+    async updateCategory(
+      category: NotificationPreferenceCategory,
+      enabled: boolean,
+    ): Promise<{ ok: true; updated: boolean } | { ok: false }> {
+      const supabase = await createClient()
+      // Only the allowlisted column is updated (dynamic key is validated upstream).
+      const patch: Partial<PreferenceColumns> = { [category]: enabled }
+
+      const { data, error } = await supabase
+        .from('notification_preferences')
+        .update(patch)
+        .eq('user_id', userId)
+        .select('user_id')
+        .maybeSingle<{ user_id: string }>()
+
+      if (error) return { ok: false }
+      return { ok: true, updated: Boolean(data) }
+    },
+  }
+}
+
 /**
  * Update a single preference column for the signed-in student.
+ * Missing row → INSERT defaults (all ON) → UPDATE one column → SELECT confirmed values.
  * Does not overwrite other columns with stale client state.
  */
 export async function updateNotificationPreference(input: {
@@ -112,62 +165,16 @@ export async function updateNotificationPreference(input: {
     return { ok: false, error: 'invalid' }
   }
 
-  const category: NotificationPreferenceCategory = input.category
-  const supabase = await createClient()
+  const result = await ensurePreferencesRowThenUpdateCategory(
+    createPreferencesWriteClient(auth.userId),
+    input.category,
+    input.enabled,
+  )
 
-  const { data: existing, error: selectError } = await supabase
-    .from('notification_preferences')
-    .select('study_reminder, announcement, message, coaching_reminder')
-    .eq('user_id', auth.userId)
-    .maybeSingle<{
-      study_reminder: boolean
-      announcement: boolean
-      message: boolean
-      coaching_reminder: boolean
-    }>()
-
-  if (selectError) {
-    return { ok: false, error: 'save_failed' }
-  }
-
-  if (!existing) {
-    const defaults = defaultNotificationPreferences()
-    const insertRow = { ...defaults, [category]: input.enabled, user_id: auth.userId }
-    const { data: inserted, error: insertError } = await supabase
-      .from('notification_preferences')
-      .insert(insertRow)
-      .select('study_reminder, announcement, message, coaching_reminder')
-      .single<{
-        study_reminder: boolean
-        announcement: boolean
-        message: boolean
-        coaching_reminder: boolean
-      }>()
-
-    if (insertError || !inserted) {
-      return { ok: false, error: 'save_failed' }
-    }
-
-    revalidatePath('/dashboard/notifications')
-    return { ok: true, preferences: toView(inserted) }
-  }
-
-  const { data: updated, error: updateError } = await supabase
-    .from('notification_preferences')
-    .update({ [category]: input.enabled })
-    .eq('user_id', auth.userId)
-    .select('study_reminder, announcement, message, coaching_reminder')
-    .single<{
-      study_reminder: boolean
-      announcement: boolean
-      message: boolean
-      coaching_reminder: boolean
-    }>()
-
-  if (updateError || !updated) {
+  if (!result.ok) {
     return { ok: false, error: 'save_failed' }
   }
 
   revalidatePath('/dashboard/notifications')
-  return { ok: true, preferences: toView(updated) }
+  return { ok: true, preferences: result.preferences }
 }
