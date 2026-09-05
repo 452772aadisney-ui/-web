@@ -100,7 +100,18 @@ Preview（`VERCEL_ENV` があり production 以外）: 新方式の外部送信�
 - 初期取得失敗: 500
 - 一部生徒失敗: **200** + カウンタ（Vercel の全面再実行で legacy 二重メールを避ける）
 - 生徒並列: `STUDY_REMINDER_STUDENT_CONCURRENCY = 3`
-- **Resend 送信ペース（2-2追補）**: study-reminder 経路は共有キュー + `RESEND_SEND_MIN_INTERVAL_MS = 300`（約 3.3 req/s、チーム上限の余裕を確保）。legacy / dry-run 従来メールと新方式 fallback が対象。429 はその場リトライしない。Batch API は不採用（個別監査・1件不正でバッチ全体失敗のリスク）
+- **Resend 送信ペース（2-2追補）**: study-reminder 経路は共有キュー + `RESEND_SEND_MIN_INTERVAL_MS = 300`（約 3.3 req/s。Resend 既定はチーム全体 **5 req/s**）。legacy / dry-run 従来メールと新方式 fallback・管理者テストメールが対象。429 はその場リトライしない。Batch API は不採用。プロセス内キューのため、別 Vercel Function インスタンス間の完全な全体制御ではない
+
+---
+
+## 管理者向け通知テスト（2-3）
+
+- URL: `/admin/notifications/test`（ハンバーガー「通知テスト」）
+- `ADMIN_NOTIFICATION_TEST_ENABLED=true` かつ妥当な `NOTIFICATION_TEST_USER_IDS` のみ有効
+- allowlist 外の生徒は選択・送信不可（API でも再検証）
+- 状態確認は送信なし / Push・メールは `notification_type=test` で通常 `study_reminder` と分離
+- メールは必ず `withResendSendPace` 経由
+- 管理者＋対象＋種別で 30 秒クールダウン
 
 主要コード:
 

@@ -1,17 +1,21 @@
 /**
- * Shared Resend send pacing for study-reminder (and any caller that opts in).
- * Keeps request starts spaced so Cron bursts stay under team rate limits.
+ * Shared Resend send pacing for study-reminder and admin notification tests.
+ * Keeps request starts spaced so bursts stay under team rate limits.
  *
- * Resend default is commonly documented around 5–10 req/sec per team.
+ * Resend documents a default of 5 requests/second per team (shared across API keys).
  * We target ~3.3 starts/sec (300ms) to leave headroom for other app traffic.
+ *
+ * Limitation: this queue is process-local (one Vercel Function instance). It does not
+ * coordinate across separate serverless invocations; concurrent Crons/admin actions on
+ * different instances can still share the team-wide Resend limit.
  */
 
 /** Minimum time between starting successive Resend HTTP requests. */
 export const RESEND_SEND_MIN_INTERVAL_MS = 300
 
 /**
- * Study-reminder student-level work may still run in parallel (Push, DB),
- * but all Resend calls must go through {@link withResendSendPace}.
+ * Study-reminder / admin-test email sends must go through {@link withResendSendPace}.
+ * Student-level Push/DB work may still run in parallel.
  */
 export const STUDY_REMINDER_EMAIL_MAX_IN_FLIGHT = 1
 

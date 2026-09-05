@@ -26,5 +26,6 @@ export const ADMIN_HAMBURGER_ITEMS = [
   { href: '/admin', label: 'マイページ' },
   { href: '/admin/faq', label: 'FAQ管理' },
   { href: '/admin/tags', label: 'タグ管理' },
+  { href: '/admin/notifications/test', label: '通知テスト' },
   { href: '/admin/profile', label: 'プロフィールを編集' },
 ] as const
