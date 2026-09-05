@@ -12,7 +12,7 @@ interface ScrollToSectionOnParamProps {
 
 /**
  * Scrolls to `#sectionId` when `paramValue` changes (e.g. pagination query).
- * Skips the initial mount unless landing with a non-default param.
+ * Skips the initial mount so first paint stays at the top of the page.
  */
 export function ScrollToSectionOnParam({
   sectionId,
@@ -22,15 +22,9 @@ export function ScrollToSectionOnParam({
   const isFirstRender = useRef(true)
 
   useEffect(() => {
-    const isDefault =
-      paramValue == null ||
-      paramValue === '' ||
-      paramValue === 1 ||
-      paramValue === '1'
-
     if (isFirstRender.current) {
       isFirstRender.current = false
-      if (isDefault) return
+      return
     }
 
     const el = document.getElementById(sectionId)

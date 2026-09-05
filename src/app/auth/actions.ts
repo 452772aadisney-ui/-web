@@ -105,8 +105,10 @@ export async function signUp(
 
 export async function signOut() {
   const supabase = await createClient()
-  await supabase.auth.signOut()
-  await setFlashToastCookie('logout')
+  const { error } = await supabase.auth.signOut()
+  if (!error) {
+    await setFlashToastCookie('logout')
+  }
   redirect('/login')
 }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
@@ -17,9 +17,13 @@ import { cn } from '@/lib/utils'
 
 interface ScheduleCalendarProps {
   events: CalendarEvent[]
-  /** YYYY-MM-DD — treated as a JST calendar date (year/month/day parts). */
+  /**
+   * YYYY-MM-DD — treated as a JST calendar date (year/month/day parts).
+   * Precedence: when `initialDate` is a valid date key, it wins over `initialMonth`
+   * (selection + visible month both come from that date).
+   */
   initialDate?: string
-  /** YYYY-MM — month to display when no date is selected. */
+  /** YYYY-MM — month to display when no valid `initialDate` is selected. */
   initialMonth?: string
 }
 
@@ -41,6 +45,12 @@ function toMonthKey(date: Date): string {
   return `${y}-${m}`
 }
 
+/**
+ * URL search param precedence:
+ * 1. valid `date` (YYYY-MM-DD) → select that day and show its month
+ * 2. else valid `month` (YYYY-MM) → show that month with no day selected
+ * 3. else → select today (JST) and show its month
+ */
 function resolveInitialState(initialDate?: string, initialMonth?: string) {
   if (initialDate && isValidDateKey(initialDate)) {
     const selected = parseCalendarDateKey(initialDate)
@@ -71,6 +81,13 @@ export function ScheduleCalendar({
   const eventsByDate = useMemo(() => groupEventsByDate(events), [events])
   const eventDates = useMemo(() => getEventDates(events), [events])
 
+  // Keep UI in sync when search params change (history links, back/forward).
+  useEffect(() => {
+    const next = resolveInitialState(initialDate, initialMonth)
+    setSelected(next.selected)
+    setMonth(next.month)
+  }, [initialDate, initialMonth])
+
   const selectedKey = selected ? toLocalDateKey(selected) : null
   const dayEvents = selectedKey ? (eventsByDate.get(selectedKey) ?? []) : []
 
@@ -86,7 +103,13 @@ export function ScheduleCalendar({
     } else {
       params.set('month', toMonthKey(nextMonth))
     }
-    router.replace(`/dashboard/calendar?${params.toString()}`, { scroll: false })
+    const qs = params.toString()
+    const nextPath = `/dashboard/calendar?${qs}`
+    if (typeof window !== 'undefined') {
+      const current = `${window.location.pathname}${window.location.search}`
+      if (current === nextPath) return
+    }
+    router.replace(nextPath, { scroll: false })
   }
 
   return (

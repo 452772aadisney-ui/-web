@@ -452,6 +452,7 @@ function StudentTextbookList({
                       type="button"
                       onClick={() => setEditingId(book.id)}
                       className="text-xs text-primary hover:underline"
+                      aria-label={`${book.name}を編集`}
                     >
                       編集
                     </button>

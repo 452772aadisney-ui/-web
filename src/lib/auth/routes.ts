@@ -10,3 +10,16 @@ export const AUTH_PATHS = ['/login', '/signup', '/forgot-password'] as const
 export function isAuthPath(pathname: string): boolean {
   return AUTH_PATHS.some((path) => pathname.startsWith(path))
 }
+
+/**
+ * Same-origin relative path only (blocks open redirects via `next`).
+ * Rejects protocol-relative (`//`), schemes, backslashes, and userinfo tricks (`@`).
+ */
+export function safeAuthNextPath(next: string | null | undefined): string | null {
+  if (!next) return null
+  if (!next.startsWith('/')) return null
+  if (next.startsWith('//') || next.includes('\\') || next.includes('://') || next.includes('@')) {
+    return null
+  }
+  return next
+}

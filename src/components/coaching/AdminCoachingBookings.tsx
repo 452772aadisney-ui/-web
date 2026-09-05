@@ -70,22 +70,30 @@ function BookingActionButtons({ booking }: { booking: CoachingBookingWithDetails
       )}
       <form
         onSubmit={(event) =>
-          runAction(event, `${studentName} さんの ${datetime} の予約を完了にします。`, completeCoachingBooking)
+          runAction(
+            event,
+            `${studentName} さんの ${datetime} の予約を実施済みにします。`,
+            completeCoachingBooking,
+          )
         }
       >
         <input type="hidden" name="bookingId" value={booking.id} />
         <button type="submit" disabled={pending} className={actionButtonClass}>
-          完了にする
+          実施済みにする
         </button>
       </form>
       <form
         onSubmit={(event) =>
-          runAction(event, `${studentName} さんの ${datetime} の予約を未実施にします。`, markCoachingBookingNoShow)
+          runAction(
+            event,
+            `${studentName} さんの ${datetime} の予約を無断欠席にします。`,
+            markCoachingBookingNoShow,
+          )
         }
       >
         <input type="hidden" name="bookingId" value={booking.id} />
         <button type="submit" disabled={pending} className={actionButtonClass}>
-          未実施
+          無断欠席
         </button>
       </form>
       <form

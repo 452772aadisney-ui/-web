@@ -36,11 +36,12 @@ export function getJstDateKey(date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo' }).format(date)
 }
 
+/** Pure YYYY-MM-DD calendar arithmetic (UTC); not shifted by local TZ / DST. */
 export function shiftDateKey(dateKey: string, days: number): string {
   const [year, month, day] = dateKey.split('-').map(Number)
-  const date = new Date(year, month - 1, day)
-  date.setDate(date.getDate() + days)
-  return toLocalDateKey(date)
+  const date = new Date(Date.UTC(year!, month! - 1, day!))
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
 }
 
 export function formatStudyDateLabel(dateKey: string, todayKey: string): string {

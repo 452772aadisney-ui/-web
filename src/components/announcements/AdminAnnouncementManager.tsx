@@ -215,6 +215,11 @@ export function AdminAnnouncementManager({
                             setExpandedId(expandedId === announcement.id ? null : announcement.id)
                           }
                           className="text-xs text-primary hover:underline"
+                          aria-label={
+                            expandedId === announcement.id
+                              ? `「${announcement.title}」の既読状況を閉じる`
+                              : `「${announcement.title}」の既読状況を見る`
+                          }
                         >
                           {expandedId === announcement.id ? '既読状況を閉じる' : '既読状況を見る'}
                         </button>
@@ -222,12 +227,17 @@ export function AdminAnnouncementManager({
                           type="button"
                           onClick={() => setEditingId(announcement.id)}
                           className="text-xs text-primary hover:underline"
+                          aria-label={`「${announcement.title}」を編集`}
                         >
                           編集
                         </button>
                         <form action={deleteAnnouncement}>
                           <input type="hidden" name="id" value={announcement.id} />
-                          <button type="submit" className="text-xs text-error hover:underline">
+                          <button
+                            type="submit"
+                            className="text-xs text-error hover:underline"
+                            aria-label={`「${announcement.title}」を削除`}
+                          >
                             削除
                           </button>
                         </form>

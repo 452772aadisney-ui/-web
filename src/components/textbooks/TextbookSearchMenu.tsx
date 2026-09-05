@@ -112,6 +112,7 @@ export function TextbookSearchMenu({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="参考書名やキーワードで検索"
+          aria-label="参考書を検索"
           className="w-full rounded-xl border border-border bg-card py-3 pl-4 pr-20 text-sm shadow-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
         />
         <button

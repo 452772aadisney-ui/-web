@@ -158,12 +158,17 @@ export function AdminQuizManager({
                         type="button"
                         onClick={() => setEditingId(master.id)}
                         className="text-xs text-primary hover:underline"
+                        aria-label={`「${master.title}」を編集`}
                       >
                         編集
                       </button>
                       <form action={deleteQuizMaster}>
                         <input type="hidden" name="id" value={master.id} />
-                        <button type="submit" className="text-xs text-error hover:underline">
+                        <button
+                          type="submit"
+                          className="text-xs text-error hover:underline"
+                          aria-label={`「${master.title}」を削除`}
+                        >
                           削除
                         </button>
                       </form>

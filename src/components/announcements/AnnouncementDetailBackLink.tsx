@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
 const ARTICLE_ID = 'announcement-article-body'
+/** Ignore tiny threshold chatter (fonts/layout) so the bottom link does not flicker. */
+const HEIGHT_HYSTERESIS_PX = 8
 
 interface AnnouncementDetailBackLinkProps {
   href?: string
@@ -13,6 +15,9 @@ interface AnnouncementDetailBackLinkProps {
 /**
  * Shows a bottom back link only when the announcement body is taller than the
  * viewport (content needs scrolling). Top BackButton remains separate.
+ *
+ * Measures the article body only (not this link), so showing/hiding the link
+ * cannot change the observed height and create a ResizeObserver loop.
  */
 export function AnnouncementDetailBackLink({
   href = '/dashboard/announcements',
@@ -30,7 +35,12 @@ export function AnnouncementDetailBackLink({
         setShowBottomLink(false)
         return
       }
-      setShowBottomLink(el.getBoundingClientRect().height > window.innerHeight)
+      // Use scrollHeight (content) vs viewport — excludes this sibling link.
+      const overflow = el.scrollHeight - window.innerHeight
+      setShowBottomLink((prev) => {
+        if (prev) return overflow > -HEIGHT_HYSTERESIS_PX
+        return overflow > HEIGHT_HYSTERESIS_PX
+      })
     }
 
     update()

@@ -16,6 +16,9 @@ type Props = {
 /**
  * Accessible confirm dialog using the native dialog element.
  * Prefer over window.confirm for destructive actions.
+ *
+ * Native `<dialog showModal>` provides focus trap + focus restore.
+ * Initial focus is forced onto Cancel (safer default for destructive confirms).
  */
 export function ConfirmDialog({
   open,
@@ -28,6 +31,7 @@ export function ConfirmDialog({
   onCancel,
 }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
   const titleId = useId()
   const descId = useId()
 
@@ -36,6 +40,8 @@ export function ConfirmDialog({
     if (!dialog) return
     if (open) {
       if (!dialog.open) dialog.showModal()
+      // Prefer Cancel over Confirm for destructive dialogs.
+      cancelRef.current?.focus()
     } else if (dialog.open) {
       dialog.close()
     }
@@ -44,6 +50,8 @@ export function ConfirmDialog({
   return (
     <dialog
       ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
       className="w-[min(24rem,calc(100vw-2rem))] rounded-2xl border border-border bg-card p-0 text-foreground shadow-lg backdrop:bg-black/40"
       aria-labelledby={titleId}
       aria-describedby={descId}
@@ -62,6 +70,7 @@ export function ConfirmDialog({
         </p>
         <div className="flex justify-end gap-2">
           <button
+            ref={cancelRef}
             type="button"
             className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition hover:bg-card disabled:opacity-60"
             onClick={onCancel}

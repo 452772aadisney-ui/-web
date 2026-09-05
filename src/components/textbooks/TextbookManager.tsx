@@ -207,13 +207,18 @@ export function TextbookManager({
                       type="button"
                       onClick={() => setEditingId(book.id)}
                       className="text-xs text-primary hover:underline"
+                      aria-label={`${book.name}を編集`}
                     >
                       編集
                     </button>
                     <form action={deleteTextbook}>
                       <input type="hidden" name="textbookId" value={book.id} />
                       <input type="hidden" name="studentId" value={studentId} />
-                      <button type="submit" className="text-xs text-error hover:underline">
+                      <button
+                        type="submit"
+                        className="text-xs text-error hover:underline"
+                        aria-label={`${book.name}を削除`}
+                      >
                         削除
                       </button>
                     </form>

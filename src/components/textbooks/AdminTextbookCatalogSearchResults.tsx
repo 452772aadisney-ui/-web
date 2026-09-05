@@ -64,6 +64,7 @@ function AdminCatalogGridItem({
           type="button"
           onClick={onEdit}
           className="mt-auto w-full rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:bg-card"
+          aria-label={`${item.name}を編集`}
         >
           編集
         </button>

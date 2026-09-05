@@ -772,7 +772,7 @@ async function markCoachingBookingNoShowAction(formData: FormData): Promise<Coac
     .maybeSingle<{ id: string; status: string }>()
 
   if (fetchError || !booking) return { error: '予約が見つかりません' }
-  if (booking.status !== 'scheduled') return { error: '未実施にできる予約ではありません' }
+  if (booking.status !== 'scheduled') return { error: '無断欠席にできる予約ではありません' }
 
   const { error } = await supabase
     .from('coaching_bookings')

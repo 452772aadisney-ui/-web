@@ -23,6 +23,7 @@ export default async function StudentCalendarPage({
   if (!profile) redirect('/login')
 
   const params = await searchParams
+  // URL precedence (see ScheduleCalendar): valid `date` wins over `month`.
   const gradeTagName = await fetchGradeTagNameForProfile(profile.id)
   const isKisotsuStudent = isKisotsuGradeTag(gradeTagName)
 

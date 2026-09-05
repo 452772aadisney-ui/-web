@@ -27,12 +27,13 @@ export default async function AdminCoachingKarteHistoryPage({
 
   const { studentId } = await params
   const query = await searchParams
-  const pageNumber = query.page ? parseInt(query.page, 10) : 1
+  const rawPage = parseInt(query.page ?? '1', 10)
+  const pageNumber = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1
 
   const [student, karteResult, coaches] = await Promise.all([
     fetchStudentProfile(studentId),
     fetchCoachingKarteEntriesForStudent(studentId, {
-      page: Number.isFinite(pageNumber) ? pageNumber : 1,
+      page: pageNumber,
       pageSize: KARTE_HISTORY_PAGE_SIZE,
     }),
     fetchCoachingCoaches(true),

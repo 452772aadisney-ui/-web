@@ -16,12 +16,16 @@ export function getFlashToastMessage(kind: FlashToastKind): string {
   return FLASH_TOAST_MESSAGES[kind]
 }
 
+/** Secure in production HTTPS; omit on localhost HTTP so the cookie still sticks. */
+export const FLASH_TOAST_COOKIE_SECURE = process.env.NODE_ENV === 'production'
+
 /** Cookie options shared by middleware redirects (and mirrored in flash-toast-server). */
 export const FLASH_TOAST_COOKIE_OPTIONS = {
   httpOnly: false,
   maxAge: 60,
   path: '/',
   sameSite: 'lax' as const,
+  secure: FLASH_TOAST_COOKIE_SECURE,
 }
 
 /** Client: read flash kind from document.cookie (does not clear). */
@@ -35,10 +39,11 @@ export function readFlashToastCookieClient(): FlashToastKind | null {
   return isFlashToastKind(value) ? value : null
 }
 
-/** Client: clear the flash cookie after consuming. */
+/** Client: clear the flash cookie after consuming (flags must match set options). */
 export function clearFlashToastCookieClient(): void {
   if (typeof document === 'undefined') return
-  document.cookie = `${FLASH_TOAST_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax`
+  const secure = FLASH_TOAST_COOKIE_SECURE ? '; Secure' : ''
+  document.cookie = `${FLASH_TOAST_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax${secure}`
 }
 
 /** Client: read once and clear. */
