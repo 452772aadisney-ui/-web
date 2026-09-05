@@ -32,14 +32,17 @@ function Calendar({ className, classNames, showOutsideDays = true, style, ...pro
           defaultClassNames[UI.MonthCaption],
           'relative flex w-full items-center justify-center',
         ),
-        [UI.CaptionLabel]: cn(defaultClassNames[UI.CaptionLabel], 'text-base font-medium sm:text-sm'),
         [UI.PreviousMonthButton]: cn(
           defaultClassNames[UI.PreviousMonthButton],
-          'absolute left-0 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border hover:bg-background sm:h-8 sm:w-8',
+          'absolute left-0 z-10 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border hover:bg-background sm:h-8 sm:w-8',
         ),
         [UI.NextMonthButton]: cn(
           defaultClassNames[UI.NextMonthButton],
-          'absolute right-0 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border hover:bg-background sm:h-8 sm:w-8',
+          'absolute right-0 z-10 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border hover:bg-background sm:h-8 sm:w-8',
+        ),
+        [UI.CaptionLabel]: cn(
+          defaultClassNames[UI.CaptionLabel],
+          'pointer-events-none text-base font-medium sm:text-sm',
         ),
         [UI.MonthGrid]: cn(defaultClassNames[UI.MonthGrid], 'w-full table-fixed'),
         [UI.Weekday]: cn(defaultClassNames[UI.Weekday], 'text-muted text-xs sm:text-sm'),

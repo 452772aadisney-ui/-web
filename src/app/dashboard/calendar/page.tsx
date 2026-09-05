@@ -13,11 +13,16 @@ import { fetchTextbooksForStudent } from '@/lib/study/queries'
 import { isKisotsuGradeTag } from '@/lib/tags/grade-order'
 import { fetchGradeTagNameForProfile } from '@/lib/tags/queries'
 
-export default async function StudentCalendarPage() {
+export default async function StudentCalendarPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string; month?: string }>
+}) {
   const profile = await getCurrentProfile()
 
   if (!profile) redirect('/login')
 
+  const params = await searchParams
   const gradeTagName = await fetchGradeTagNameForProfile(profile.id)
   const isKisotsuStudent = isKisotsuGradeTag(gradeTagName)
 
@@ -42,7 +47,11 @@ export default async function StudentCalendarPage() {
           ? '模試・小テスト、宿題・タスク、参考書を一覧できます。'
           : '模試・小テスト、宿題・タスク、参考書、コーチング予約を一覧できます。'}
       </p>
-      <ScheduleCalendar events={events} />
+      <ScheduleCalendar
+        events={events}
+        initialDate={params.date}
+        initialMonth={params.month}
+      />
     </StudentPageShell>
   )
 }

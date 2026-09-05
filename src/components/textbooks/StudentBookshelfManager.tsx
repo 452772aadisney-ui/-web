@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState, useEffect, useMemo, useState } from 'react'
+import { useActionState, useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   addTextbookFromCatalog,
@@ -20,13 +20,17 @@ import {
   UsageTagFields,
   inputClass,
 } from '@/components/textbooks/TextbookFormFields'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { Pagination } from '@/components/ui/Pagination'
 import {
   catalogMatchesCategory,
-  filterTextbooksByStudyCategory,
   getStudySubjectCategoriesForProfile,
   type TextbookSubjectCategoryLabel,
 } from '@/lib/constants/textbook-subject-categories'
-import { Pagination } from '@/components/ui/Pagination'
+import {
+  APP_TOAST_SAFE_ERROR_MESSAGE,
+  createToastSession,
+} from '@/lib/toast/app-toast'
 import { cn } from '@/lib/utils'
 import { formatTextbookPeriod } from '@/lib/textbooks/format'
 import { canStudentEditTextbookSubjectTags } from '@/lib/textbooks/subject-tags'
@@ -324,6 +328,60 @@ function CreateRegisterForm({
   )
 }
 
+function BookshelfDeleteButton({
+  book,
+  studentId,
+}: {
+  book: Textbook
+  studentId: string
+}) {
+  const router = useRouter()
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [pending, startTransition] = useTransition()
+
+  function handleConfirm() {
+    const toastSession = createToastSession()
+    startTransition(async () => {
+      try {
+        const formData = new FormData()
+        formData.set('textbookId', book.id)
+        formData.set('studentId', studentId)
+        await deleteTextbook(formData)
+        setConfirmOpen(false)
+        toastSession.success('本棚から削除しました', `bookshelf-delete-${book.id}`)
+        router.refresh()
+      } catch {
+        toastSession.error(APP_TOAST_SAFE_ERROR_MESSAGE, `bookshelf-delete-error-${book.id}`)
+      }
+    })
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setConfirmOpen(true)}
+        disabled={pending}
+        className="text-xs text-error hover:underline disabled:opacity-60"
+        aria-label={`${book.name}を削除`}
+      >
+        削除
+      </button>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="本棚から削除"
+        description={`「${book.name}」を本棚から削除しますか？\n学習記録は残ります（履歴上の教材名はそのままです）。`}
+        confirmLabel="削除する"
+        busy={pending}
+        onConfirm={handleConfirm}
+        onCancel={() => {
+          if (!pending) setConfirmOpen(false)
+        }}
+      />
+    </>
+  )
+}
+
 function StudentTextbookList({
   studentId,
   profileSubjects,
@@ -397,13 +455,7 @@ function StudentTextbookList({
                     >
                       編集
                     </button>
-                    <form action={deleteTextbook}>
-                      <input type="hidden" name="textbookId" value={book.id} />
-                      <input type="hidden" name="studentId" value={studentId} />
-                      <button type="submit" className="text-xs text-error hover:underline">
-                        削除
-                      </button>
-                    </form>
+                    <BookshelfDeleteButton book={book} studentId={studentId} />
                   </div>
                 </div>
               }

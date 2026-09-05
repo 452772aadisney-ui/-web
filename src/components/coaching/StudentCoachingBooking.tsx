@@ -64,6 +64,7 @@ function BookingForm({
   slot: AvailableCoachingSlot
   onCancel: () => void
 }) {
+  const router = useRouter()
   const [state, formAction, pending] = useActionState(bookCoachingSlot, initialState)
   const { dialog: achievementDialog } = useAchievementUnlockDialog(state.unlockedAchievements)
   const confirmLabel = formatBookingConfirmLabel(slot)
@@ -72,6 +73,13 @@ function BookingForm({
     successMessage: 'コーチングを予約しました',
     pending,
   })
+
+  useEffect(() => {
+    if (state.success) {
+      onCancel()
+      router.refresh()
+    }
+  }, [state.success, onCancel, router])
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

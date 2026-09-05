@@ -4,6 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { formatDuration } from '@/lib/study/chart-data'
 import { formatStudyDateLabel, getJstDateKey, shiftDateKey } from '@/lib/study/dates'
+import { formatJstDateLabelFromDateKey } from '@/lib/datetime/format-jst'
 import { cn } from '@/lib/utils'
 import { MYPAGE_MENU_ICONS } from '@/components/student/MyPageMenuButtons'
 
@@ -60,14 +61,20 @@ export function StudyLogDayNav({
 
       <div className="min-w-0 flex-1 text-center">
         <div className="flex items-center justify-center gap-2">
-          <Image
-            src={MYPAGE_MENU_ICONS.calendar}
-            alt=""
-            width={20}
-            height={20}
-            className="h-5 w-5 shrink-0"
-            aria-hidden
-          />
+          <Link
+            href={`/dashboard/calendar?date=${selectedDate}`}
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-transparent transition hover:border-border hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            aria-label={`${formatJstDateLabelFromDateKey(selectedDate)}の予定をカレンダーで見る`}
+          >
+            <Image
+              src={MYPAGE_MENU_ICONS.calendar}
+              alt=""
+              width={20}
+              height={20}
+              className="h-5 w-5 shrink-0"
+              aria-hidden
+            />
+          </Link>
           <p className="text-base font-bold">{formatStudyDateLabel(selectedDate, todayKey)}</p>
           {hasUnreadOnSelected && <NavUnreadBadge />}
         </div>

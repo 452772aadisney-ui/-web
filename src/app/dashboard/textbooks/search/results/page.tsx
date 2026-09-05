@@ -61,7 +61,7 @@ export default async function TextbookSearchResultsPage({
       mainClassName="max-w-4xl"
     >
       <div className="space-y-6">
-        <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <section>
           <TextbookSearchMenu initialQuery={params.q ?? ''} compact />
         </section>
         <TextbookCatalogSearchResults

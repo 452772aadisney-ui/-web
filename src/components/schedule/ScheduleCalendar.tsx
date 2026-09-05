@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import { Calendar } from '@/components/ui/calendar'
@@ -11,15 +12,62 @@ import {
   groupEventsByDate,
   getEventDates,
 } from '@/lib/calendar/events'
-import { toLocalDateKey } from '@/lib/study/dates'
+import { getJstDateKey, isValidDateKey, toLocalDateKey } from '@/lib/study/dates'
 import { cn } from '@/lib/utils'
 
 interface ScheduleCalendarProps {
   events: CalendarEvent[]
+  /** YYYY-MM-DD — treated as a JST calendar date (year/month/day parts). */
+  initialDate?: string
+  /** YYYY-MM — month to display when no date is selected. */
+  initialMonth?: string
 }
 
-export function ScheduleCalendar({ events }: ScheduleCalendarProps) {
-  const [selected, setSelected] = useState<Date | undefined>(new Date())
+function parseCalendarDateKey(dateKey: string): Date {
+  const [y, m, d] = dateKey.split('-').map(Number)
+  return new Date(y!, m! - 1, d!)
+}
+
+function parseMonthKey(monthKey: string): Date | null {
+  if (!/^\d{4}-\d{2}$/.test(monthKey)) return null
+  const [y, m] = monthKey.split('-').map(Number)
+  if (!y || !m || m < 1 || m > 12) return null
+  return new Date(y, m - 1, 1)
+}
+
+function toMonthKey(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  return `${y}-${m}`
+}
+
+function resolveInitialState(initialDate?: string, initialMonth?: string) {
+  if (initialDate && isValidDateKey(initialDate)) {
+    const selected = parseCalendarDateKey(initialDate)
+    return { selected, month: selected }
+  }
+
+  const monthFromParam = initialMonth ? parseMonthKey(initialMonth) : null
+  if (monthFromParam) {
+    return { selected: undefined as Date | undefined, month: monthFromParam }
+  }
+
+  const today = parseCalendarDateKey(getJstDateKey())
+  return { selected: today, month: today }
+}
+
+export function ScheduleCalendar({
+  events,
+  initialDate,
+  initialMonth,
+}: ScheduleCalendarProps) {
+  const router = useRouter()
+  const initial = useMemo(
+    () => resolveInitialState(initialDate, initialMonth),
+    [initialDate, initialMonth],
+  )
+  const [selected, setSelected] = useState<Date | undefined>(initial.selected)
+  const [month, setMonth] = useState<Date>(initial.month)
   const eventsByDate = useMemo(() => groupEventsByDate(events), [events])
   const eventDates = useMemo(() => getEventDates(events), [events])
 
@@ -27,9 +75,19 @@ export function ScheduleCalendar({ events }: ScheduleCalendarProps) {
   const dayEvents = selectedKey ? (eventsByDate.get(selectedKey) ?? []) : []
 
   const upcoming = useMemo(() => {
-    const today = toLocalDateKey(new Date())
+    const today = getJstDateKey()
     return events.filter((e) => e.date >= today).slice(0, 10)
   }, [events])
+
+  function syncUrl(nextSelected: Date | undefined, nextMonth: Date) {
+    const params = new URLSearchParams()
+    if (nextSelected) {
+      params.set('date', toLocalDateKey(nextSelected))
+    } else {
+      params.set('month', toMonthKey(nextMonth))
+    }
+    router.replace(`/dashboard/calendar?${params.toString()}`, { scroll: false })
+  }
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_1fr]">
@@ -37,20 +95,47 @@ export function ScheduleCalendar({ events }: ScheduleCalendarProps) {
         <Calendar
           className="w-full"
           mode="single"
+          month={month}
+          onMonthChange={(nextMonth) => {
+            setMonth(nextMonth)
+            const keepSelected =
+              selected &&
+              selected.getFullYear() === nextMonth.getFullYear() &&
+              selected.getMonth() === nextMonth.getMonth()
+                ? selected
+                : undefined
+            if (!keepSelected) setSelected(undefined)
+            syncUrl(keepSelected, nextMonth)
+          }}
           selected={selected}
-          onSelect={setSelected}
+          onSelect={(next) => {
+            setSelected(next)
+            if (next) {
+              setMonth(next)
+              syncUrl(next, next)
+            } else {
+              syncUrl(undefined, month)
+            }
+          }}
+          labels={{
+            labelPrevious: () => '前の月へ',
+            labelNext: () => '次の月へ',
+          }}
           modifiers={{ hasEvent: eventDates }}
           modifiersClassNames={{
-            hasEvent: 'relative font-semibold after:absolute after:bottom-0.5 after:left-1/2 after:h-1 after:w-1 after:-translate-x-1/2 after:rounded-full after:bg-primary',
+            hasEvent:
+              'relative font-semibold after:absolute after:bottom-0.5 after:left-1/2 after:h-1 after:w-1 after:-translate-x-1/2 after:rounded-full after:bg-primary',
           }}
         />
         <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">
-          {(Object.keys(CALENDAR_EVENT_LABELS) as Array<keyof typeof CALENDAR_EVENT_LABELS>).map((type) => (
-            <span key={type} className="inline-flex items-center gap-1.5 text-xs text-muted">
-              <span className={cn('h-2 w-2 rounded-full', CALENDAR_EVENT_COLORS[type])} />
-              {CALENDAR_EVENT_LABELS[type]}
-            </span>
-          ))}
+          {(Object.keys(CALENDAR_EVENT_LABELS) as Array<keyof typeof CALENDAR_EVENT_LABELS>).map(
+            (type) => (
+              <span key={type} className="inline-flex items-center gap-1.5 text-xs text-muted">
+                <span className={cn('h-2 w-2 rounded-full', CALENDAR_EVENT_COLORS[type])} />
+                {CALENDAR_EVENT_LABELS[type]}
+              </span>
+            ),
+          )}
         </div>
       </section>
 
@@ -99,7 +184,9 @@ function EventCard({ event, showDate = false }: { event: CalendarEvent; showDate
         <p className="text-xs font-medium text-primary">{CALENDAR_EVENT_LABELS[event.type]}</p>
         <p className="font-medium">{event.title}</p>
         {showDate && (
-          <p className="text-xs text-muted">{Number(y)}年{Number(m)}月{Number(d)}日</p>
+          <p className="text-xs text-muted">
+            {Number(y)}年{Number(m)}月{Number(d)}日
+          </p>
         )}
         {event.subject && <p className="text-sm text-muted">{event.subject}</p>}
         {event.detail && <p className="mt-1 text-xs text-muted">{event.detail}</p>}

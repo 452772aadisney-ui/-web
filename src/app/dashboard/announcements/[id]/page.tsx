@@ -1,7 +1,10 @@
-import Link from 'next/link'
 import { redirect, notFound } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
+import {
+  AnnouncementDetailBackLink,
+  ANNOUNCEMENT_ARTICLE_BODY_ID,
+} from '@/components/announcements/AnnouncementDetailBackLink'
 import { MarkAnnouncementRead } from '@/components/announcements/MarkAnnouncementRead'
 import { LinkifiedText } from '@/components/ui/LinkifiedText'
 import { fetchAnnouncementById } from '@/lib/announcements/queries'
@@ -38,16 +41,11 @@ export default async function StudentAnnouncementDetailPage({
       <article className="overflow-hidden rounded-2xl border border-border bg-white p-6 shadow-sm">
         <h2 className="break-words text-xl font-bold">{announcement.title}</h2>
         <p className="mt-2 text-sm text-muted">{formatDateTime(announcement.created_at)}</p>
-        <div className="mt-6">
+        <div id={ANNOUNCEMENT_ARTICLE_BODY_ID} className="mt-6">
           <LinkifiedText text={announcement.body} />
         </div>
       </article>
-      <Link
-        href="/dashboard/announcements"
-        className="mt-6 inline-block text-sm font-medium text-primary hover:underline"
-      >
-        ← お知らせ一覧に戻る
-      </Link>
+      <AnnouncementDetailBackLink />
     </StudentPageShell>
   )
 }
