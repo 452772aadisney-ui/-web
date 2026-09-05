@@ -6,7 +6,12 @@ import { Toaster } from 'sonner'
 import {
   APP_TOAST_DURATION_MS,
   invalidateToastsOnNavigation,
+  notifySuccess,
 } from '@/lib/toast/app-toast'
+import {
+  consumeFlashToastCookieClient,
+  getFlashToastMessage,
+} from '@/lib/toast/flash-toast'
 
 /**
  * Global toast host. Duration, close button, and route-dismiss are owned here —
@@ -14,6 +19,7 @@ import {
  *
  * Pathname changes dismiss all toasts immediately and invalidate in-flight sessions
  * so late async completions cannot re-show a previous page's toast.
+ * After invalidate (and on first paint), a flash cookie may show one success toast.
  */
 export function AppToaster() {
   const pathname = usePathname()
@@ -22,9 +28,14 @@ export function AppToaster() {
   useEffect(() => {
     if (isFirstPath.current) {
       isFirstPath.current = false
-      return
+    } else {
+      invalidateToastsOnNavigation()
     }
-    invalidateToastsOnNavigation()
+
+    const kind = consumeFlashToastCookieClient()
+    if (kind) {
+      notifySuccess(getFlashToastMessage(kind), `flash-toast-${kind}`)
+    }
   }, [pathname])
 
   return (

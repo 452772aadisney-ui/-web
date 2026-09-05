@@ -2,6 +2,10 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import type { Profile } from '@/types/database'
 import { getDashboardPathForRole, isAuthPath } from '@/lib/auth/routes'
+import {
+  FLASH_TOAST_COOKIE,
+  FLASH_TOAST_COOKIE_OPTIONS,
+} from '@/lib/toast/flash-toast'
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions }
 
@@ -56,7 +60,12 @@ export async function updateSession(request: NextRequest) {
   if (!user && !isAuthPath(pathname) && !isAuthCallback) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
-    return NextResponse.redirect(url)
+    const response = NextResponse.redirect(url)
+    // Only student dashboard prompts get the auth-required toast (not /admin).
+    if (pathname.startsWith('/dashboard')) {
+      response.cookies.set(FLASH_TOAST_COOKIE, 'auth_required', FLASH_TOAST_COOKIE_OPTIONS)
+    }
+    return response
   }
 
   if (user) {

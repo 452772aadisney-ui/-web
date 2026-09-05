@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { resolveGradeTagId } from '@/lib/tags/queries'
 import { isGradeTagName } from '@/lib/tags/grade-order'
 import { getDashboardPathForRole } from '@/lib/auth/routes'
+import { setFlashToastCookie } from '@/lib/toast/flash-toast-server'
 import type { Profile } from '@/types/database'
 
 export type AuthActionState = {
@@ -45,6 +46,7 @@ export async function signIn(
     .eq('id', user.id)
     .single<Profile>()
 
+  await setFlashToastCookie('login')
   redirect(getDashboardPathForRole(profile?.role ?? 'student'))
 }
 
@@ -104,6 +106,7 @@ export async function signUp(
 export async function signOut() {
   const supabase = await createClient()
   await supabase.auth.signOut()
+  await setFlashToastCookie('logout')
   redirect('/login')
 }
 
