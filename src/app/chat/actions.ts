@@ -219,6 +219,7 @@ export async function sendCoachingBookingReminders(
 
   revalidatePath('/admin/chat')
   revalidatePath('/admin/coaching')
+  revalidatePath('/admin/notifications')
 
   if (sentCount === 0) {
     return { error: 'メッセージの送信に失敗しました', failedCount }

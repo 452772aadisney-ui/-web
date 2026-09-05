@@ -5,14 +5,20 @@ import { AdminPageShell } from '@/components/layout/AdminPageShell'
 import { AdminNarrowContent } from '@/components/layout/AdminNarrowContent'
 import { AdminNotificationOpsClient } from '@/components/admin/AdminNotificationOpsClient'
 import { AdminNotificationTestClient } from '@/components/admin/AdminNotificationTestClient'
+import { AdminCoachingBookingReminderPanel } from '@/components/chat/AdminCoachingBookingReminderPanel'
 import { listAdminNotificationTestTargets } from '@/lib/admin/notification-test-service'
 import {
   isAdminNotificationTestEnabled,
   resolveAdminNotificationTestAvailability,
 } from '@/lib/admin/notification-test-config'
 import { loadNotificationOpsSnapshot } from '@/lib/admin/notification-ops-snapshot'
+import { fetchStudentsWithoutCoachingBookingThisWeek } from '@/lib/coaching/queries'
+import { formatWeekRange, getWeekStartMonday } from '@/lib/coaching/week'
 
 export const dynamic = 'force-dynamic'
+
+const COACHING_BOOKING_REMINDER_MESSAGE =
+  '今週のコーチング予約が入っていません。マイページの「コーチング予約」から，早急に予約してください。今週が難しい場合は，必ず担当者に個別で相談してください。'
 
 export default async function AdminNotificationsOpsPage() {
   const profile = await getCurrentProfile()
@@ -21,8 +27,11 @@ export default async function AdminNotificationsOpsPage() {
   if (profile.role !== 'admin') redirect(getDashboardPathForRole('student'))
 
   const availability = resolveAdminNotificationTestAvailability()
-  const listed = await listAdminNotificationTestTargets()
-  const ops = await loadNotificationOpsSnapshot()
+  const [listed, ops, unbookedStudents] = await Promise.all([
+    listAdminNotificationTestTargets(),
+    loadNotificationOpsSnapshot(),
+    fetchStudentsWithoutCoachingBookingThisWeek(),
+  ])
 
   const featureAvailable = listed.ok && listed.featureAvailable
   const disabledReason = !listed.ok
@@ -31,6 +40,7 @@ export default async function AdminNotificationsOpsPage() {
       ? null
       : listed.reason
   const targets = listed.ok && listed.featureAvailable ? listed.targets : []
+  const weekLabel = formatWeekRange(getWeekStartMonday())
 
   return (
     <AdminPageShell title="通知運用" backHref="/admin" backLabel="管理画面">
@@ -54,6 +64,28 @@ export default async function AdminNotificationsOpsPage() {
             initialDisabledReason={disabledReason}
             initialTargets={targets}
           />
+
+          <details className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+            <summary className="cursor-pointer list-none text-base font-bold marker:content-none [&::-webkit-details-marker]:hidden">
+              <span className="inline-flex items-center gap-2">
+                緊急時の手動操作
+                <span className="text-sm font-normal text-muted">
+                  （チャット一括送信・対象 {unbookedStudents.length} 名）
+                </span>
+              </span>
+            </summary>
+            <div className="mt-4 space-y-3">
+              <p className="text-sm text-muted">
+                ここから送るのは <strong>チャットメッセージの一括送信</strong> です。Web Push
+                の予約催促 Cron（Push-first）とは別経路です。展開しただけでは送信されません。
+              </p>
+              <AdminCoachingBookingReminderPanel
+                weekLabel={weekLabel}
+                targetCount={unbookedStudents.length}
+                defaultMessage={COACHING_BOOKING_REMINDER_MESSAGE}
+              />
+            </div>
+          </details>
         </div>
       </AdminNarrowContent>
     </AdminPageShell>

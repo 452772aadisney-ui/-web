@@ -1,7 +1,8 @@
 'use client'
 
-import { useActionState, type FormEvent } from 'react'
+import { useActionState, useState, type FormEvent } from 'react'
 import { sendCoachingBookingReminders, type ChatBulkReminderState } from '@/app/chat/actions'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useActionToast } from '@/hooks/useActionToast'
 
 const initialState: ChatBulkReminderState = {}
@@ -20,6 +21,8 @@ export function AdminCoachingBookingReminderPanel({
   defaultMessage,
 }: AdminCoachingBookingReminderPanelProps) {
   const [state, formAction, pending] = useActionState(sendCoachingBookingReminders, initialState)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [pendingFormData, setPendingFormData] = useState<FormData | null>(null)
 
   const successMessage =
     typeof state.sentCount === 'number'
@@ -37,24 +40,30 @@ export function AdminCoachingBookingReminderPanel({
     event.preventDefault()
     if (targetCount === 0) return
 
-    const formData = new FormData(event.currentTarget)
+    setPendingFormData(new FormData(event.currentTarget))
+    setConfirmOpen(true)
+  }
 
-    if (
-      !window.confirm(
-        `今週（${weekLabel}）未予約の ${targetCount} 名に、予約を促すメッセージを送信します。よろしいですか？`,
-      )
-    ) {
-      return
-    }
+  function handleConfirm() {
+    if (!pendingFormData) return
+    setConfirmOpen(false)
+    formAction(pendingFormData)
+    setPendingFormData(null)
+  }
 
-    formAction(formData)
+  function handleCancel() {
+    if (pending) return
+    setConfirmOpen(false)
+    setPendingFormData(null)
   }
 
   return (
-    <section className="mb-6 rounded-2xl border border-amber-200 bg-amber-50/40 p-5 shadow-sm">
-      <h2 className="text-base font-bold">コーチング予約の催促</h2>
+    <section className="rounded-2xl border border-amber-200 bg-amber-50/40 p-5 shadow-sm">
+      <h2 className="text-base font-bold">コーチング予約の催促（チャット一括送信）</h2>
       <p className="mt-1 text-sm text-muted">
-        今週（{weekLabel}）未予約の生徒 {targetCount} 名に、一括でメッセージを送れます。
+        今週（{weekLabel}）未予約の生徒 {targetCount}{' '}
+        名に、チャットメッセージを一括送信します。Web Push の Cron
+        催促とは別経路です（こちらは手動のチャット催促）。
       </p>
 
       <form onSubmit={handleSubmit} className="mt-4 space-y-3">
@@ -86,6 +95,17 @@ export function AdminCoachingBookingReminderPanel({
               : `${targetCount} 名に予約催促を送信`}
         </button>
       </form>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="チャットで予約催促を送信しますか？"
+        description={`今週（${weekLabel}）未予約の ${targetCount} 名に、予約を促すチャットメッセージを送信します。\n※ Push 通知の自動 Cron とは別の、緊急時向け手動操作です。`}
+        confirmLabel={`${targetCount} 名に送信`}
+        cancelLabel="やめる"
+        busy={pending}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
     </section>
   )
 }

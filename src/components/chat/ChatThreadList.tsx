@@ -17,12 +17,15 @@ interface ChatThreadListProps {
   threads: ChatThreadSummary[]
   hrefForThread: (studentId: string) => string
   emptyMessage?: string
+  /** Preview lines; default 1 (truncate). Use 2 for admin list. */
+  previewLineClamp?: 1 | 2
 }
 
 export function ChatThreadList({
   threads,
   hrefForThread,
   emptyMessage = 'トークがありません。',
+  previewLineClamp = 1,
 }: ChatThreadListProps) {
   if (threads.length === 0) {
     return <p className="text-sm text-muted">{emptyMessage}</p>
@@ -65,10 +68,11 @@ export function ChatThreadList({
                     </span>
                   )}
                 </div>
-                <div className="mt-0.5 flex items-center justify-between gap-2">
+                <div className="mt-0.5 flex items-start justify-between gap-2">
                   <p
                     className={cn(
-                      'truncate text-sm',
+                      'text-sm',
+                      previewLineClamp === 2 ? 'line-clamp-2' : 'truncate',
                       thread.unreadCount > 0 ? 'font-medium text-foreground' : 'text-muted',
                     )}
                   >
