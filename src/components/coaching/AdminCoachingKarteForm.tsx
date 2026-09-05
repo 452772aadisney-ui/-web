@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
@@ -8,13 +9,13 @@ import {
 } from '@/app/coaching/actions'
 import { CoachingKarteHistoryEntry } from '@/components/coaching/CoachingKarteHistoryEntry'
 import { AutoResizeTextarea } from '@/components/ui/AutoResizeTextarea'
-import { Pagination } from '@/components/ui/Pagination'
 import { useActionToast } from '@/hooks/useActionToast'
 import {
   clearKarteDraft,
   loadKarteDraft,
   saveKarteDraft,
 } from '@/lib/coaching/karte-draft'
+import { KARTE_MAIN_HISTORY_PAGE_SIZE } from '@/lib/coaching/karte-constants'
 import { notifySuccess } from '@/lib/toast/app-toast'
 import type { CoachingCoach, CoachingKarteEntryWithDetails } from '@/types/coaching'
 
@@ -30,8 +31,6 @@ interface AdminCoachingKarteFormProps {
   coaches: CoachingCoach[]
   history: CoachingKarteEntryWithDetails[]
   historyTotalCount: number
-  historyPage: number
-  historyPageSize: number
   tableAvailable?: boolean
 }
 
@@ -43,8 +42,6 @@ export function AdminCoachingKarteForm({
   coaches,
   history,
   historyTotalCount,
-  historyPage,
-  historyPageSize,
   tableAvailable = true,
 }: AdminCoachingKarteFormProps) {
   const router = useRouter()
@@ -105,7 +102,7 @@ export function AdminCoachingKarteForm({
     notifySuccess('カルテを一時保存しました', `karte-draft-${studentId}`)
   }
 
-  const historyPathname = `/admin/coaching/karte/${studentId}`
+  const historyHref = `/admin/coaching/karte/${studentId}/history`
 
   return (
     <div className="space-y-6">
@@ -203,7 +200,17 @@ export function AdminCoachingKarteForm({
       </section>
 
       <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-        <h2 className="text-lg font-bold">前回までの記録</h2>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-lg font-bold">前回までの記録</h2>
+          {historyTotalCount > 0 && (
+            <Link
+              href={historyHref}
+              className="shrink-0 text-sm text-primary hover:underline"
+            >
+              すべての記録
+            </Link>
+          )}
+        </div>
         {historyTotalCount === 0 ? (
           <p className="mt-4 text-sm text-muted">まだカルテの記録がありません。</p>
         ) : (
@@ -218,17 +225,13 @@ export function AdminCoachingKarteForm({
                 />
               ))}
             </ul>
-            <Pagination
-              currentPage={historyPage}
-              totalCount={historyTotalCount}
-              pageSize={historyPageSize}
-              pageParam="historyPage"
-              pathname={historyPathname}
-              preserveParams={{
-                booking: defaultBookingId ?? undefined,
-                coach: defaultCoachId ?? undefined,
-              }}
-            />
+            {historyTotalCount > KARTE_MAIN_HISTORY_PAGE_SIZE && (
+              <p className="mt-4 text-sm">
+                <Link href={historyHref} className="font-medium text-primary hover:underline">
+                  すべての記録を見る（全 {historyTotalCount} 件）→
+                </Link>
+              </p>
+            )}
           </>
         )}
       </section>

@@ -12,6 +12,7 @@ import { DailyStudyBarChart } from '@/components/study/DailyStudyBarChart'
 import { SubjectStudyPieSection } from '@/components/study/SubjectStudyPieSection'
 import { fetchCoachingCoaches } from '@/lib/coaching/queries'
 import { fetchCoachingKarteEntriesForStudent } from '@/lib/coaching/karte-queries'
+import { KARTE_MAIN_HISTORY_PAGE_SIZE } from '@/lib/coaching/karte-constants'
 import {
   fetchStudentProfile,
   fetchStudyLogsForStudentInDateRange,
@@ -29,7 +30,7 @@ export default async function AdminCoachingKarteStudentPage({
   searchParams,
 }: {
   params: Promise<{ studentId: string }>
-  searchParams: Promise<{ booking?: string; coach?: string; historyPage?: string; piePeriod?: string }>
+  searchParams: Promise<{ booking?: string; coach?: string; piePeriod?: string }>
 }) {
   const profile = await getCurrentProfile()
 
@@ -39,7 +40,6 @@ export default async function AdminCoachingKarteStudentPage({
   const { studentId } = await params
   const query = await searchParams
 
-  const historyPage = query.historyPage ? parseInt(query.historyPage, 10) : 1
   const recentKeys = getRecentDateKeys(14)
   const rangeFrom = recentKeys[0]!
   const rangeTo = recentKeys[recentKeys.length - 1]!
@@ -55,7 +55,8 @@ export default async function AdminCoachingKarteStudentPage({
       }),
       fetchTextbooksForStudentPreview(studentId, 10),
       fetchCoachingKarteEntriesForStudent(studentId, {
-        page: Number.isFinite(historyPage) ? historyPage : 1,
+        page: 1,
+        pageSize: KARTE_MAIN_HISTORY_PAGE_SIZE,
       }),
       fetchCoachingCoaches(true),
     ])
@@ -176,8 +177,6 @@ export default async function AdminCoachingKarteStudentPage({
             coaches={coaches}
             history={karteResult.entries}
             historyTotalCount={karteResult.totalCount ?? 0}
-            historyPage={karteResult.page ?? 1}
-            historyPageSize={karteResult.pageSize ?? 10}
             tableAvailable={karteResult.tableAvailable}
           />
         </div>

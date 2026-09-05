@@ -7,6 +7,7 @@ import { SubjectStudyPieSection } from '@/components/study/SubjectStudyPieSectio
 import { StudyLogTable } from '@/components/study/StudyLogTable'
 import { TextbookManager } from '@/components/textbooks/TextbookManager'
 import { Pagination } from '@/components/ui/Pagination'
+import { ScrollToSectionOnParam } from '@/components/ui/ScrollToSectionOnParam'
 import {
   buildDailyChartData,
   buildSubjectPieDataFromMinutes,
@@ -248,7 +249,14 @@ export default async function AdminStudentStudyPage({
             <AdminStudentTodoTable items={todoItems} />
           </section>
 
-          <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <section
+            id="student-textbooks"
+            className="rounded-2xl border border-border bg-card p-6 shadow-sm"
+          >
+            <ScrollToSectionOnParam
+              sectionId="student-textbooks"
+              paramValue={query.booksPage ?? textbooksPage.page}
+            />
             <h2 className="mb-1 text-lg font-bold">教材登録</h2>
             <p className="mb-6 text-sm text-muted">
               生徒の使用科目に紐づく教材を登録・管理できます。
