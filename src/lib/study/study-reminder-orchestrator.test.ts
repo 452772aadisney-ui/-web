@@ -360,6 +360,10 @@ describe('runStudyReminderJob modes', () => {
       recipientCount: 2,
       sentCount: 2,
       skippedCount: 0,
+      failedCount: 0,
+      rateLimitedCount: 0,
+      unprocessedCount: 0,
+      timedOut: false,
     })
   })
 
@@ -466,6 +470,10 @@ describe('runStudyReminderJob modes', () => {
       recipientCount: report.notRecorded.length,
       sentCount: report.notRecorded.length,
       skippedCount: 0,
+      failedCount: 0,
+      rateLimitedCount: 0,
+      unprocessedCount: 0,
+      timedOut: false,
     }))
 
     const result = await runStudyReminderJob({
@@ -483,5 +491,26 @@ describe('runStudyReminderJob modes', () => {
     expect(legacyArg.notRecorded.map((s) => s.studentId)).toEqual([
       '22222222-2222-2222-2222-222222222222',
     ])
+  })
+
+  it('marks summary incomplete when legacy email soft-times out', async () => {
+    notifyStudentsMissingTodayStudyLog.mockResolvedValue({
+      recipientCount: 2,
+      sentCount: 1,
+      skippedCount: 0,
+      failedCount: 0,
+      rateLimitedCount: 0,
+      unprocessedCount: 1,
+      timedOut: true,
+    })
+
+    const result = await runStudyReminderJob({})
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.summary.ok).toBe(false)
+    expect(result.summary.timedOut).toBe(true)
+    expect(result.summary.emailUnprocessedCount).toBe(1)
+    expect(result.summary.legacyEmailSentCount).toBe(1)
+    expect(result.summary.durationMs).toBeGreaterThanOrEqual(0)
   })
 })

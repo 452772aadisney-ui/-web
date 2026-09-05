@@ -25,6 +25,7 @@ export type StudyReminderNewPathOutcome =
   | 'email_failed'
   | 'undeliverable'
   | 'non_production_skip'
+  | 'timed_out'
   | 'failed'
 
 export type StudyReminderCandidate = {
@@ -308,7 +309,12 @@ async function tryEmailFallback(params: {
   dateKey: string
   dateLabel: string
   email: string | null
+  deadlineMs?: number
 }): Promise<StudyReminderNewPathOutcome> {
+  if (params.deadlineMs != null && Date.now() >= params.deadlineMs) {
+    return 'timed_out'
+  }
+
   const event = await getOrCreateStudyReminderEvent(
     params.admin,
     params.userId,
@@ -349,6 +355,7 @@ async function tryEmailFallback(params: {
   const sendResult = await sendMissingStudyLogEmail({
     to: params.email,
     dateLabel: params.dateLabel,
+    deadlineMs: params.deadlineMs,
   })
 
   if (sendResult.ok) {
@@ -359,6 +366,16 @@ async function tryEmailFallback(params: {
       succeeded_at: new Date().toISOString(),
     })
     return finalized ? 'email_sent' : 'failed'
+  }
+
+  if (!sendResult.ok && sendResult.errorClass === 'deadline') {
+    await finalizeEmailDelivery(params.admin, event.eventId, {
+      status: 'failed',
+      http_status: null,
+      error_code: 'deadline',
+      succeeded_at: null,
+    })
+    return 'timed_out'
   }
 
   if (sendResult.skipped) {
@@ -388,6 +405,7 @@ export async function processStudyReminderNewPath(params: {
   dateKey: string
   dateLabel: string
   nowMs?: number
+  deadlineMs?: number
   env?: NodeJS.ProcessEnv | Record<string, string | undefined>
 }): Promise<StudyReminderNewPathOutcome> {
   const admin = createAdminClient()
@@ -395,6 +413,10 @@ export async function processStudyReminderNewPath(params: {
 
   const nowMs = params.nowMs ?? Date.now()
   const env = params.env ?? process.env
+
+  if (params.deadlineMs != null && Date.now() >= params.deadlineMs) {
+    return 'timed_out'
+  }
 
   const recorded = await hasStudyLogOnDate(
     admin,
@@ -450,6 +472,7 @@ export async function processStudyReminderNewPath(params: {
         dateKey: params.dateKey,
         dateLabel: params.dateLabel,
         email: params.candidate.email,
+        deadlineMs: params.deadlineMs,
       })
     }
   }
@@ -485,6 +508,7 @@ export async function processStudyReminderNewPath(params: {
     dateKey: params.dateKey,
     dateLabel: params.dateLabel,
     email: params.candidate.email,
+    deadlineMs: params.deadlineMs,
   })
 }
 

@@ -16,6 +16,8 @@ export type SendEmailInput = {
    * Use for study-reminder Cron paths so parallel workers cannot burst.
    */
   pace?: boolean
+  /** Absolute epoch ms; paced sends after this are skipped (soft timeout). */
+  deadlineMs?: number
 }
 
 export type SendEmailResult =
@@ -25,7 +27,12 @@ export type SendEmailResult =
       skipped?: boolean
       error?: string
       httpStatus?: number | null
-      errorClass?: 'rate_limited' | 'provider_error' | 'network' | 'empty_recipient'
+      errorClass?:
+        | 'rate_limited'
+        | 'provider_error'
+        | 'network'
+        | 'empty_recipient'
+        | 'deadline'
     }
 
 function formatResendError(raw: string, to: string): string {
@@ -123,8 +130,20 @@ async function sendEmailOnce(input: SendEmailInput): Promise<SendEmailResult> {
 }
 
 export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
+  if (
+    input.deadlineMs != null &&
+    Date.now() >= input.deadlineMs
+  ) {
+    return { ok: false, skipped: true, error: 'deadline', errorClass: 'deadline' }
+  }
+
   if (input.pace) {
-    return withResendSendPace(() => sendEmailOnce(input))
+    return withResendSendPace(async () => {
+      if (input.deadlineMs != null && Date.now() >= input.deadlineMs) {
+        return { ok: false, skipped: true, error: 'deadline', errorClass: 'deadline' }
+      }
+      return sendEmailOnce(input)
+    })
   }
   return sendEmailOnce(input)
 }
@@ -135,6 +154,9 @@ export type SendEmailToManyResult = {
   skippedCount: number
   failedCount: number
   rateLimitedCount: number
+  /** Recipients not attempted because soft deadline was reached. */
+  unprocessedCount: number
+  timedOut: boolean
 }
 
 /**
@@ -145,7 +167,12 @@ export type SendEmailToManyResult = {
 export async function sendEmailToMany(
   recipients: string[],
   input: Omit<SendEmailInput, 'to'>,
-  options?: { omitRecipientFromLogs?: boolean; pace?: boolean },
+  options?: {
+    omitRecipientFromLogs?: boolean
+    pace?: boolean
+    /** Soft stop before Vercel hard kill; remaining recipients become unprocessed. */
+    deadlineMs?: number
+  },
 ): Promise<SendEmailToManyResult> {
   const uniqueRecipients = [...new Set(recipients.map((email) => email.trim()).filter(Boolean))]
   if (uniqueRecipients.length === 0) {
@@ -156,23 +183,39 @@ export async function sendEmailToMany(
       skippedCount: 0,
       failedCount: 0,
       rateLimitedCount: 0,
+      unprocessedCount: 0,
+      timedOut: false,
     }
   }
 
   const results: SendEmailResult[] = []
+  let unprocessedCount = 0
+  let timedOut = false
+  const deadlineMs = options?.deadlineMs ?? input.deadlineMs
 
   if (options?.pace || input.pace) {
-    for (const to of uniqueRecipients) {
-      results.push(
-        await sendEmail({
-          to,
-          subject: input.subject,
-          text: input.text,
-          replyTo: input.replyTo,
-          omitRecipientFromLogs: options?.omitRecipientFromLogs ?? input.omitRecipientFromLogs,
-          pace: true,
-        }),
-      )
+    for (let i = 0; i < uniqueRecipients.length; i += 1) {
+      if (deadlineMs != null && Date.now() >= deadlineMs) {
+        timedOut = true
+        unprocessedCount = uniqueRecipients.length - i
+        break
+      }
+      const to = uniqueRecipients[i]!
+      const result = await sendEmail({
+        to,
+        subject: input.subject,
+        text: input.text,
+        replyTo: input.replyTo,
+        omitRecipientFromLogs: options?.omitRecipientFromLogs ?? input.omitRecipientFromLogs,
+        pace: true,
+        deadlineMs,
+      })
+      if (!result.ok && result.errorClass === 'deadline') {
+        timedOut = true
+        unprocessedCount = uniqueRecipients.length - i
+        break
+      }
+      results.push(result)
     }
   } else {
     // Non-paced callers (announcements etc.) keep previous parallel behavior.
@@ -191,7 +234,9 @@ export async function sendEmailToMany(
   }
 
   const sentCount = results.filter((result) => result.ok).length
-  const skippedCount = results.filter((result) => !result.ok && result.skipped).length
+  const skippedCount = results.filter(
+    (result) => !result.ok && result.skipped && result.errorClass !== 'deadline',
+  ).length
   const rateLimitedCount = results.filter(
     (result) => !result.ok && result.errorClass === 'rate_limited',
   ).length
@@ -203,6 +248,8 @@ export async function sendEmailToMany(
     skipped: skippedCount,
     failed: failedCount,
     rateLimited: rateLimitedCount,
+    unprocessed: unprocessedCount,
+    timedOut,
   })
 
   return {
@@ -211,5 +258,8 @@ export async function sendEmailToMany(
     skippedCount,
     failedCount,
     rateLimitedCount,
+    unprocessedCount,
+    timedOut,
   }
 }
+

@@ -16,6 +16,7 @@ import {
   type StudyReminderNewPathOutcome,
 } from '@/lib/study/study-reminder-new-path'
 import { evaluateStudyReminderDryRunAggregate } from '@/lib/study/study-reminder-dry-run'
+import { studyReminderSoftDeadlineMs } from '@/lib/study/study-reminder-duration'
 
 export type StudyReminderRunSummary = {
   ok: boolean
@@ -35,6 +36,10 @@ export type StudyReminderRunSummary = {
   emailFailed: number
   nonProductionSkip: number
   failed: number
+  /** Soft-timeout / pacing extras (no PII). */
+  durationMs: number
+  emailUnprocessedCount: number
+  timedOut: boolean
   /** dry-run only fields */
   wouldUsePushFirst?: number
   wouldFallbackToEmail?: number
@@ -112,6 +117,9 @@ function emptySummary(
     emailFailed: 0,
     nonProductionSkip: 0,
     failed: 0,
+    durationMs: 0,
+    emailUnprocessedCount: 0,
+    timedOut: false,
     forcedLegacyReason,
   }
 }
@@ -151,6 +159,11 @@ function tallyOutcome(
     case 'non_production_skip':
       summary.nonProductionSkip += 1
       break
+    case 'timed_out':
+      summary.timedOut = true
+      summary.emailUnprocessedCount += 1
+      summary.ok = false
+      break
     case 'failed':
       summary.failed += 1
       break
@@ -159,11 +172,32 @@ function tallyOutcome(
 
 async function runLegacyEmail(
   report: DailyStudyDigestReport,
-): Promise<{ recipientCount: number; sentCount: number }> {
-  const result = await notifyStudentsMissingTodayStudyLog(report)
+  deadlineMs: number,
+): Promise<{
+  recipientCount: number
+  sentCount: number
+  unprocessedCount: number
+  timedOut: boolean
+}> {
+  const result = await notifyStudentsMissingTodayStudyLog(report, { deadlineMs })
   return {
     recipientCount: result.recipientCount,
     sentCount: result.sentCount,
+    unprocessedCount: result.unprocessedCount,
+    timedOut: result.timedOut,
+  }
+}
+
+function applyLegacyEmailResult(
+  summary: StudyReminderRunSummary,
+  legacy: Awaited<ReturnType<typeof runLegacyEmail>>,
+) {
+  summary.legacyEmailRecipientCount = legacy.recipientCount
+  summary.legacyEmailSentCount = legacy.sentCount
+  summary.emailUnprocessedCount += legacy.unprocessedCount
+  if (legacy.timedOut) {
+    summary.timedOut = true
+    summary.ok = false
   }
 }
 
@@ -176,6 +210,8 @@ export async function runStudyReminderJob(
   | { ok: true; summary: StudyReminderRunSummary }
   | { ok: false; error: 'build_failed' }
 > {
+  const startedAtMs = Date.now()
+  const deadlineMs = studyReminderSoftDeadlineMs(startedAtMs)
   const resolved = resolveEffectiveStudyReminderMode(env)
   const report = await buildTodayMissingStudyReport()
   if (!report) {
@@ -190,9 +226,9 @@ export async function runStudyReminderJob(
   summary.candidates = report.notRecorded.length
 
   if (resolved.mode === 'legacy') {
-    const legacy = await runLegacyEmail(report)
-    summary.legacyEmailRecipientCount = legacy.recipientCount
-    summary.legacyEmailSentCount = legacy.sentCount
+    const legacy = await runLegacyEmail(report, deadlineMs)
+    applyLegacyEmailResult(summary, legacy)
+    summary.durationMs = Date.now() - startedAtMs
     return { ok: true, summary }
   }
 
@@ -208,9 +244,8 @@ export async function runStudyReminderJob(
     }
 
     // Actual delivery remains legacy email.
-    const legacy = await runLegacyEmail(report)
-    summary.legacyEmailRecipientCount = legacy.recipientCount
-    summary.legacyEmailSentCount = legacy.sentCount
+    const legacy = await runLegacyEmail(report, deadlineMs)
+    applyLegacyEmailResult(summary, legacy)
     summary.wouldUsePushFirst = evaluated.aggregate.wouldUsePushFirst
     summary.wouldFallbackToEmail = evaluated.aggregate.wouldFallbackToEmail
     summary.preferenceDisabled = evaluated.aggregate.preferenceDisabled
@@ -218,6 +253,7 @@ export async function runStudyReminderJob(
     summary.noEmail = evaluated.aggregate.cannotDeliver
     summary.recordedBeforeSend = evaluated.aggregate.alreadyRecorded
     summary.failed = evaluated.aggregate.failedToEvaluate
+    summary.durationMs = Date.now() - startedAtMs
     return { ok: true, summary }
   }
 
@@ -240,13 +276,14 @@ export async function runStudyReminderJob(
           dateKey: report.dateKey,
           dateLabel: report.dateLabel,
           env,
+          deadlineMs,
         }),
     )
     for (const outcome of outcomes) tallyOutcome(summary, outcome)
 
-    const legacy = await runLegacyEmail(legacyReport)
-    summary.legacyEmailRecipientCount = legacy.recipientCount
-    summary.legacyEmailSentCount = legacy.sentCount
+    const legacy = await runLegacyEmail(legacyReport, deadlineMs)
+    applyLegacyEmailResult(summary, legacy)
+    summary.durationMs = Date.now() - startedAtMs
     return { ok: true, summary }
   }
 
@@ -260,9 +297,11 @@ export async function runStudyReminderJob(
         dateKey: report.dateKey,
         dateLabel: report.dateLabel,
         env,
+        deadlineMs,
       }),
   )
   for (const outcome of outcomes) tallyOutcome(summary, outcome)
+  summary.durationMs = Date.now() - startedAtMs
   return { ok: true, summary }
 }
 
@@ -288,6 +327,9 @@ export function toPublicStudyReminderSummary(
     emailFailed: summary.emailFailed,
     nonProductionSkip: summary.nonProductionSkip,
     failed: summary.failed,
+    durationMs: summary.durationMs,
+    emailUnprocessedCount: summary.emailUnprocessedCount,
+    timedOut: summary.timedOut,
   }
 
   if (summary.forcedLegacyReason) {

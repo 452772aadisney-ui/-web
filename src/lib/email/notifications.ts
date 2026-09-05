@@ -214,7 +214,16 @@ export async function notifyStudyFeedbackReceived(input: {
 
 export async function notifyStudentsMissingTodayStudyLog(
   report: DailyStudyDigestReport,
-): Promise<{ recipientCount: number; sentCount: number; skippedCount: number }> {
+  options?: { deadlineMs?: number },
+): Promise<{
+  recipientCount: number
+  sentCount: number
+  skippedCount: number
+  failedCount: number
+  rateLimitedCount: number
+  unprocessedCount: number
+  timedOut: boolean
+}> {
   const emails = report.notRecorded
     .map((student) => student.email?.trim())
     .filter((email): email is string => Boolean(email))
@@ -228,6 +237,7 @@ export async function notifyStudentsMissingTodayStudyLog(
     {
       omitRecipientFromLogs: true,
       pace: true,
+      deadlineMs: options?.deadlineMs,
     },
   )
 }

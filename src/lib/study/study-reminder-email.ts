@@ -21,6 +21,7 @@ export function buildMissingStudyLogEmailText(dateLabel: string): string {
 export async function sendMissingStudyLogEmail(params: {
   to: string
   dateLabel: string
+  deadlineMs?: number
 }): Promise<SendEmailResult & { httpStatus?: number | null }> {
   const result = await sendEmail({
     to: params.to,
@@ -28,6 +29,7 @@ export async function sendMissingStudyLogEmail(params: {
     text: buildMissingStudyLogEmailText(params.dateLabel),
     omitRecipientFromLogs: true,
     pace: true,
+    deadlineMs: params.deadlineMs,
   })
   return result
 }

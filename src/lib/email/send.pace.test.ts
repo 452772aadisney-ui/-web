@@ -116,6 +116,22 @@ describe('sendEmailToMany paced study-reminder path', () => {
     vi.useRealTimers()
   })
 
+  it('stops paced sends at soft deadline and reports unprocessed counts', async () => {
+    const { sendEmailToMany } = await import('@/lib/email/send')
+
+    const result = await sendEmailToMany(
+      ['a@example.com', 'b@example.com', 'c@example.com', 'd@example.com'],
+      { subject: 's', text: 't' },
+      { omitRecipientFromLogs: true, pace: true, deadlineMs: Date.now() - 1 },
+    )
+
+    expect(result.timedOut).toBe(true)
+    expect(result.unprocessedCount).toBe(4)
+    expect(result.sentCount).toBe(0)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(JSON.stringify(result)).not.toContain('example.com')
+  })
+
   it('keeps unpaced Promise.all behavior for other email features', async () => {
     const { sendEmailToMany } = await import('@/lib/email/send')
     let inFlight = 0

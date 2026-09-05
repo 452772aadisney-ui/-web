@@ -102,6 +102,12 @@ Preview（`VERCEL_ENV` があり production 以外）: 新方式の外部送信�
 - 一部生徒失敗: **200** + カウンタ（Vercel の全面再実行で legacy 二重メールを避ける）
 - 生徒並列: `STUDY_REMINDER_STUDENT_CONCURRENCY = 3`
 - **Resend 送信ペース（2-2追補）**: study-reminder 経路は共有キュー + `RESEND_SEND_MIN_INTERVAL_MS = 300`（約 3.3 req/s。Resend 既定はチーム全体 **5 req/s**）。legacy / dry-run 従来メールと新方式 fallback・管理者テストメールが対象。429 はその場リトライしない。Batch API は不採用。プロセス内キューのため、別 Vercel Function インスタンス間の完全な全体制御ではない
+- **`maxDuration = 60`（2-5事前）**: App Router の Route Handler で Node.js runtime を維持したまま設定（数値リテラル必須）。Hobby（上限 300s）・Pro（上限 800s）のいずれでも 60s は利用可能。Cron 時刻・URL は変更しない
+- **ソフトタイムアウト**: ハード kill の約 5s 前で paced 送信を打ち切り。`timedOut` / `emailUnprocessedCount` / `durationMs` を個人情報なしで返却。HTTP は 200 のまま（Cron 全面再実行回避）だが `ok: false` で成功と誤表示しない。300ms 間隔・逐次送信は維持
+- **規模の目安（想定 API 往復 400ms）**:
+  - 約 28 宛先: 待機のみ ≈ 8.1s、API込み ≈ 19s → 60s / soft 55s 内に収まる想定
+  - 約 100 宛先: 待機 ≈ 29.7s、API込み ≈ 70s → **1回の実行では安全に収まらない**
+  - 安全側の単発上限目安: `STUDY_REMINDER_SAFE_PACED_EMAIL_RECIPIENTS = 50`。これを超える運用前にバッチ化（キュー新設は今回しない）
 
 ---
 

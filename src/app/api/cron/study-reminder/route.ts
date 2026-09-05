@@ -6,6 +6,12 @@ import {
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+/**
+ * Explicit Function duration for paced Resend sends.
+ * Must be a numeric literal (Next.js rejects imported identifiers).
+ * 60s is within Hobby (max 300s) and Pro (max 800s) Fluid Compute limits.
+ */
+export const maxDuration = 60
 
 const NO_STORE = {
   'Cache-Control': 'no-store',
@@ -36,8 +42,9 @@ export async function GET(request: Request) {
   const body = toPublicStudyReminderSummary(result.summary)
   console.info('[study-reminder] completed', body)
 
-  // Partial per-student failures are reflected in counters; return 200 so Vercel
-  // Cron does not blindly re-fire the whole job (idempotent, but legacy email
-  // path is not). Monitor `failed` / `emailFailed` / `stalePending` instead.
+  // Always HTTP 200 after a successful candidate build so Vercel Cron does not
+  // blindly re-fire (legacy email is not fully idempotent). Soft timeout /
+  // partial failure is signaled via body.ok === false and counters
+  // (timedOut, emailUnprocessedCount, failed, …) — never as a silent full success.
   return NextResponse.json(body, { status: 200, headers: NO_STORE })
 }
