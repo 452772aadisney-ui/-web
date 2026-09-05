@@ -211,8 +211,9 @@ rollback は上記テーブル4つと enum 3つのみ削除する（既存シス
 | 2-4 | 管理者向け全体dry-run（件数集計のみ・送信なし） |
 | 2-5事前 | study-reminder Cron `maxDuration=60` + soft timeout |
 | 2-6 | 通知カテゴリを管理者のみ停止可能へ（migration `051`・未適用） |
-| 第2段階（続き） | allowlist/all への段階切替、お知らせ接続（3-1）、メッセージ/コーチング接続 |
+| 第2段階（続き） | allowlist/all への段階切替、お知らせ接続（3-1）、メッセージ接続（4-1）、コーチング接続 |
 | お知らせ Push-first（3-1） | `docs/web-push-announcement-integration.md`。mode 既定 `legacy`。本番 env 変更は別作業 |
+| メッセージ Push-first（4-1） | `docs/web-push-message-integration.md`。`message_kind` migration 052（**未適用**）。mode 既定 `legacy` |
 
 ---
 

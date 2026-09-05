@@ -53,6 +53,8 @@ export async function notifyChatMessageReceived(input: {
   const preview = truncatePreview(input.body)
   const baseUrl = getAppBaseUrl()
 
+  // Admin → student student-facing mail is handled by deliverStudentMessageNotification.
+  // This function retains student → admin fanout (and any legacy admin callers).
   if (input.senderRole === 'admin') {
     const supabase = await createClient()
     const { data: student } = await supabase
@@ -73,6 +75,8 @@ export async function notifyChatMessageReceived(input: {
         '',
         `確認する: ${baseUrl}/dashboard/chat/room`,
       ].join('\n'),
+      pace: true,
+      omitRecipientFromLogs: true,
     })
     return
   }

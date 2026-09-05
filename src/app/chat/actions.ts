@@ -4,10 +4,11 @@ import { revalidatePath } from 'next/cache'
 import { evaluateAndUnlockAchievements, type UnlockedAchievement } from '@/lib/achievements/unlock'
 import { notifyStudentChatMessage } from '@/lib/discord/notifications'
 import { notifyChatMessageReceived } from '@/lib/email/notifications'
+import { deliverStudentMessageNotification } from '@/lib/chat/message-orchestrator'
 import { createClient } from '@/lib/supabase/server'
 import { fetchStudentsWithoutCoachingBookingThisWeek } from '@/lib/coaching/queries'
 import { fetchChatMessagesPage } from '@/lib/chat/queries'
-import type { ChatMessage } from '@/types/chat'
+import type { ChatMessage, ChatMessageKind } from '@/types/chat'
 import type { UserRole } from '@/types/database'
 
 export type ChatActionState = {
@@ -26,14 +27,28 @@ export type ChatBulkReminderState = {
 const DEFAULT_COACHING_BOOKING_REMINDER =
   '今週のコーチング予約が入っていません。マイページの「コーチング予約」から，早急に予約してください。今週が難しい場合は，必ず担当者に個別で相談してください。'
 
+export type SendChatMessageOptions = {
+  /** Defaults to 'user'. Only admins may set coaching_booking_reminder. */
+  messageKind?: ChatMessageKind
+}
+
 export async function sendChatMessage(
   studentId: string,
   body: string,
+  options?: SendChatMessageOptions,
 ): Promise<ChatActionState> {
   const trimmed = body.trim()
   if (!trimmed) return { error: 'メッセージを入力してください' }
   if (trimmed.length > 2000) return { error: 'メッセージが長すぎます' }
   if (!studentId) return { error: '送信先が不正です' }
+
+  const requestedKind: ChatMessageKind = options?.messageKind ?? 'user'
+  if (
+    requestedKind !== 'user' &&
+    requestedKind !== 'coaching_booking_reminder'
+  ) {
+    return { error: '送信に失敗しました' }
+  }
 
   const supabase = await createClient()
   const {
@@ -68,12 +83,17 @@ export async function sendChatMessage(
     return { error: '送信権限がありません' }
   }
 
+  // Students cannot create coaching reminder kind.
+  const messageKind: ChatMessageKind =
+    profile.role === 'admin' ? requestedKind : 'user'
+
   const { data: message, error: insertError } = await supabase
     .from('chat_messages')
     .insert({
       student_id: studentId,
       sender_id: user.id,
       body: trimmed,
+      message_kind: messageKind,
     })
     .select('*')
     .single<ChatMessage>()
@@ -82,21 +102,41 @@ export async function sendChatMessage(
     return { error: '送信に失敗しました' }
   }
 
+  const senderRole = profile.role === 'admin' ? 'admin' : 'student'
+
   try {
-    const senderRole = profile.role === 'admin' ? 'admin' : 'student'
-
-    await notifyChatMessageReceived({
-      studentId,
-      senderId: user.id,
-      senderRole,
-      body: trimmed,
-    })
-
-    if (senderRole === 'student') {
+    if (senderRole === 'admin') {
+      // Student-facing: mode-aware Push-first (skips non-user kinds).
+      const summary = await deliverStudentMessageNotification({
+        messageId: message.id,
+        studentId,
+        senderId: user.id,
+        senderRole: 'admin',
+        messageKind: message.message_kind ?? messageKind,
+        body: trimmed,
+      })
+      console.info('[chat] student notification summary:', {
+        mode: summary.mode,
+        skippedReason: summary.skippedReason,
+        pushSucceeded: summary.pushSucceeded,
+        emailFallbackSucceeded: summary.emailFallbackSucceeded,
+        preferenceDisabled: summary.preferenceDisabled,
+        cannotDeliver: summary.cannotDeliver,
+        failed: summary.failed,
+        legacyEmailSent: summary.legacyEmailSent,
+      })
+    } else {
+      // Student → admins: unchanged email + Discord (not under MESSAGE_DELIVERY_MODE).
+      await notifyChatMessageReceived({
+        studentId,
+        senderId: user.id,
+        senderRole: 'student',
+        body: trimmed,
+      })
       await notifyStudentChatMessage({ studentId, body: trimmed })
     }
-  } catch (error) {
-    console.error('[chat] notification failed:', error)
+  } catch {
+    console.error('[chat] notification failed after save')
   }
 
   revalidatePath('/dashboard/chat')
@@ -170,7 +210,9 @@ export async function sendCoachingBookingReminders(
   let failedCount = 0
 
   for (const student of students) {
-    const result = await sendChatMessage(student.id, body)
+    const result = await sendChatMessage(student.id, body, {
+      messageKind: 'coaching_booking_reminder',
+    })
     if (result.error) failedCount += 1
     else sentCount += 1
   }

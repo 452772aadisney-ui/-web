@@ -5,6 +5,7 @@ import { createToastSession } from '@/lib/toast/app-toast'
 import type { AdminTestInspectResult, AdminTestTargetOption } from '@/lib/admin/notification-test-service'
 import type { AdminFullDryRunReport } from '@/lib/study/study-reminder-dry-run'
 import type { AnnouncementAdminDryRunReport } from '@/lib/announcements/announcement-dry-run'
+import type { MessageAdminDryRunReport } from '@/lib/chat/message-dry-run'
 
 type Props = {
   initialFeatureAvailable: boolean
@@ -25,6 +26,12 @@ type ApiDryRunResponse = {
 type ApiAnnouncementDryRunResponse = {
   ok: true
   announcementDryRun: AnnouncementAdminDryRunReport
+  notice: string
+}
+
+type ApiMessageDryRunResponse = {
+  ok: true
+  messageDryRun: MessageAdminDryRunReport
   notice: string
 }
 
@@ -54,6 +61,7 @@ async function postJson(
       sent?: number
       dryRun?: AdminFullDryRunReport
       announcementDryRun?: AnnouncementAdminDryRunReport
+      messageDryRun?: MessageAdminDryRunReport
       sumConsistent?: { readiness: boolean; current: boolean }
       notice?: string
     } = {}
@@ -125,8 +133,15 @@ export function AdminNotificationTestClient({
   } | null>(null)
   const [announcementDryRun, setAnnouncementDryRun] =
     useState<AnnouncementAdminDryRunReport | null>(null)
+  const [messageDryRun, setMessageDryRun] = useState<MessageAdminDryRunReport | null>(null)
   const [busy, setBusy] = useState<
-    'inspect' | 'push' | 'email' | 'full-dry-run' | 'announcement-dry-run' | null
+    | 'inspect'
+    | 'push'
+    | 'email'
+    | 'full-dry-run'
+    | 'announcement-dry-run'
+    | 'message-dry-run'
+    | null
   >(null)
   const busyRef = useRef(false)
   const [, startTransition] = useTransition()
@@ -260,6 +275,44 @@ export function AdminNotificationTestClient({
         const data = result.data as ApiAnnouncementDryRunResponse
         setAnnouncementDryRun(data.announcementDryRun)
         toastSession.success('お知らせ通知の準備状況を集計しました', 'admin-notification-test-toast')
+      } finally {
+        busyRef.current = false
+        setBusy(null)
+      }
+    })
+  }
+
+  const runMessageDryRun = () => {
+    if (busyRef.current || !dryRunAvailable) return
+
+    busyRef.current = true
+    setBusy('message-dry-run')
+    const toastSession = createToastSession()
+
+    startTransition(async () => {
+      try {
+        const result = await postJson({ action: 'message-dry-run' })
+        if (!result.ok) {
+          if (result.status === 429) {
+            toastSession.error(
+              result.retryAfterSeconds
+                ? `短時間に何度も実行できません。約${result.retryAfterSeconds}秒後に再度お試しください`
+                : '短時間に何度も実行できません。しばらくしてから再度お試しください',
+              'admin-notification-test-toast',
+            )
+            return
+          }
+          if (result.error === 'in_progress') {
+            toastSession.error('dry-runの実行中です。完了後に再度お試しください', 'admin-notification-test-toast')
+            return
+          }
+          toastSession.error('メッセージ通知の準備状況を取得できませんでした', 'admin-notification-test-toast')
+          return
+        }
+
+        const data = result.data as ApiMessageDryRunResponse
+        setMessageDryRun(data.messageDryRun)
+        toastSession.success('メッセージ通知の準備状況を集計しました', 'admin-notification-test-toast')
       } finally {
         busyRef.current = false
         setBusy(null)
@@ -560,6 +613,107 @@ export function AdminNotificationTestClient({
                     <div>
                       <dt className="text-muted">配信手段なし</dt>
                       <dd className="font-medium">{announcementDryRun.current.cannotDeliver}</dd>
+                    </div>
+                  </dl>
+                </section>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      <section
+        className="rounded-2xl border border-border bg-card p-5 shadow-sm"
+        aria-labelledby={`${baseId}-message-dry-run-heading`}
+      >
+        <h2
+          id={`${baseId}-message-dry-run-heading`}
+          className="text-base font-bold text-foreground"
+        >
+          メッセージ通知の準備状況
+        </h2>
+        <p className="mt-2 text-sm text-muted">
+          全生徒の構造的な準備状況です。実際の受信者はメッセージ送信時にのみ確定します。メッセージ作成・Push・メールは行いません。
+        </p>
+
+        {!dryRunAvailable ? (
+          <p className="mt-4 text-sm text-muted" role="status">
+            {disabledReasonMessage(initialDisabledReason ?? 'flag_off')}
+          </p>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="mt-4 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-card disabled:opacity-60"
+              disabled={busy !== null}
+              onClick={runMessageDryRun}
+            >
+              {busy === 'message-dry-run' ? '集計中…' : '準備状況を集計'}
+            </button>
+
+            {messageDryRun && (
+              <div className="mt-4 space-y-4" aria-live="polite">
+                <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-foreground">
+                  これは全生徒の準備状況です。実際の通知対象は管理者→生徒の通常メッセージ送信時に決まります。
+                </p>
+                <section aria-labelledby={`${baseId}-message-readiness-heading`}>
+                  <h3
+                    id={`${baseId}-message-readiness-heading`}
+                    className="text-sm font-semibold text-foreground"
+                  >
+                    Push準備状況（送信フラグに依存しない）
+                  </h3>
+                  <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="text-muted">対象生徒数</dt>
+                      <dd className="font-medium">{messageDryRun.readiness.recipients}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">管理者により停止</dt>
+                      <dd className="font-medium">{messageDryRun.readiness.preferenceDisabled}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Push準備済み</dt>
+                      <dd className="font-medium">{messageDryRun.readiness.pushReady}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">メールfallback候補</dt>
+                      <dd className="font-medium">{messageDryRun.readiness.emailFallback}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">配信手段なし</dt>
+                      <dd className="font-medium">{messageDryRun.readiness.cannotDeliver}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">判定エラー</dt>
+                      <dd className="font-medium">{messageDryRun.readiness.failed}</dd>
+                    </div>
+                  </dl>
+                </section>
+                <section aria-labelledby={`${baseId}-message-current-heading`}>
+                  <h3
+                    id={`${baseId}-message-current-heading`}
+                    className="text-sm font-semibold text-foreground"
+                  >
+                    現在設定での有効経路（mode={messageDryRun.current.mode} / Push送信=
+                    {messageDryRun.current.pushSendingEnabled ? 'ON' : 'OFF'}）
+                  </h3>
+                  <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="text-muted">Push対象</dt>
+                      <dd className="font-medium">{messageDryRun.current.wouldUsePush}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">メール経路</dt>
+                      <dd className="font-medium">{messageDryRun.current.wouldFallbackEmail}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">管理者により停止</dt>
+                      <dd className="font-medium">{messageDryRun.current.preferenceDisabled}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">配信手段なし</dt>
+                      <dd className="font-medium">{messageDryRun.current.cannotDeliver}</dd>
                     </div>
                   </dl>
                 </section>
