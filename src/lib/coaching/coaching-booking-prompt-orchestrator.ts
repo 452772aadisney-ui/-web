@@ -106,7 +106,13 @@ function tally(
   }
 }
 
-/** Shared by Cron and admin integration test. Never logs student ids. */
+/** Shared by Cron and admin integration test. Never logs student ids.
+ *
+ * Week-scoped idempotency: one `coaching_booking_reminder` per student per JST week.
+ * Admin real-path tests intentionally create the same kind of message; Cron then
+ * counts `duplicate` for chat but still proceeds to Push-first with the Cron
+ * idempotency key (event keys remain separate).
+ */
 export async function ensureBookingPromptChat(params: {
   admin: NonNullable<ReturnType<typeof createAdminClient>>
   studentId: string

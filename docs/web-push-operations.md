@@ -120,8 +120,8 @@ NOTIFICATION_TEST_USER_IDS=<試験用UUIDのみ>
 `/admin/notifications` の「コーチング通知 実経路テスト」:
 
 - 許可されたテストアカウント1人専用。通常Cronは起動しない
-- **予約催促**: 判定のみ / 実経路送信。実送信時はチャットに `coaching_booking_reminder` が追加される場合あり
-- **前日案内**: 明日の `scheduled` 予約が必要。予約の作成・変更はしない
+- **予約催促**: 判定のみ / 実経路送信。実送信時は通常と同じ `coaching_booking_reminder` を当週1件作成（再実行・月曜Cronでは週内重複判定で増殖しない。CronのPushは別キーで継続）
+- **前日案内**: 明日の `scheduled` 予約が必要。予約の作成・変更はしない。チャットなし
 - idempotency は `admin-coaching-*-test:…`（通常の `booking-prompt:` / `session-previous-day:` と分離）
 - 本番利用後は `ADMIN_NOTIFICATION_TEST_ENABLED` を OFF に戻す
 - 緊急停止: `COACHING_REMINDER_DELIVERY_MODE=legacy` ＋管理者テストOFF

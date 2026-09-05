@@ -338,6 +338,32 @@ describe('admin coaching reminder integration test', () => {
     expect(JSON.stringify(result)).not.toMatch(/@|endpoint|p256dh|vapid/i)
   })
 
+  it('does not proliferate chat on re-run when week duplicate is returned', async () => {
+    mockAllowlistedProfile()
+    isStudentExcludedAsGraduate.mockResolvedValue({ ok: true, excluded: false })
+    studentStillUnbookedThisWeek.mockResolvedValue({ ok: true, unbooked: true })
+    getCoachingReminderPreferenceEnabled.mockResolvedValue({ ok: true, enabled: true })
+    ensureBookingPromptChat.mockResolvedValue('duplicate')
+    processCoachingReminderNewPath.mockResolvedValue('push_sent')
+
+    const result = await sendAdminCoachingBookingPromptIntegrationTest({
+      adminUserId: ADMIN,
+      targetUserId: STUDENT,
+      nowMs: 180_000,
+      env: {
+        ADMIN_NOTIFICATION_TEST_ENABLED: 'true',
+        NOTIFICATION_TEST_USER_IDS: STUDENT,
+        VERCEL_ENV: 'production',
+      },
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.chatMessageCreated).toBe(false)
+    expect(result.pushSent).toBe(true)
+    expect(ensureBookingPromptChat).toHaveBeenCalledTimes(1)
+  })
+
   it('maps preference_disabled after chat without push/email', async () => {
     mockAllowlistedProfile()
     isStudentExcludedAsGraduate.mockResolvedValue({ ok: true, excluded: false })

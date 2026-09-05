@@ -129,11 +129,20 @@ Rollback: `COACHING_REMINDER_DELIVERY_MODE=legacy`（または削除）。コー
 | 項目 | 内容 |
 |------|------|
 | 判定のみ | 送信・チャット・event／deliveryなし |
-| 予約催促実送信 | `processCoachingReminderNewPath` + `ensureBookingPromptChat`（チャット追加の可能性あり） |
-| 前日案内実送信 | 明日の `scheduled` 予約のみ。予約の作成・変更なし |
+| 予約催促実送信 | `processCoachingReminderNewPath` + `ensureBookingPromptChat`（実 `coaching_booking_reminder` を当週1件） |
+| 前日案内実送信 | 明日の `scheduled` 予約のみ。予約の作成・変更なし。チャットなし |
 | idempotency | `admin-coaching-booking-prompt-test:…` / `admin-coaching-session-previous-day-test:…` |
-| 通常Cron | 起動しない。冪等性キーも分離。時刻起動は Vercel Logs で別確認 |
+| 通常Cron | 起動しない。event キーも分離。時刻起動は Vercel Logs で別確認 |
 | metadata | `source=admin_notification_ops` + integration `kind` + `adminUserId` |
+
+### 予約催促チャットと月曜Cron
+
+管理者実経路テストは **通常と同じ** `coaching_booking_reminder` を当週1件作成する（テスト専用 kind への分離はしない＝migration不要）。
+
+- 同じ生徒・同じJST週では `ensureBookingPromptChat` が重複判定し、テスト再実行でもチャットが増殖しない
+- 月曜Cronは既存チャットを `duplicate` としてスキップするが、**Push/メールは `booking-prompt:{月曜}` で継続**（admin event キーとは別）
+- つまりテストは「当週のチャット催促を先行実施した」扱い。未予約なら通常Cronの候補判定・Push-firstは妨げない
+- 判定のみではチャット／event／deliveryを作らない
 
 本番利用後は `ADMIN_NOTIFICATION_TEST_ENABLED` を OFF に戻す。緊急停止: `COACHING_REMINDER_DELIVERY_MODE=legacy`。
 

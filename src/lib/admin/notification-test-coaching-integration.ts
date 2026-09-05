@@ -574,6 +574,11 @@ export async function sendAdminCoachingBookingPromptIntegrationTest(params: {
     if (!pref.ok) return { ok: false, code: 'db_error' }
     // Preference re-check: if disabled, still create chat (Cron behavior) then skip send.
 
+    // Real weekly chat (same message_kind + week window as Cron). Intentional:
+    // - Treats the allowlisted test as having received this week's booking-prompt chat early.
+    // - Cron's ensureBookingPromptChat will return duplicate (no second chat).
+    // - Cron Push/email still uses booking-prompt:{monday} and is not blocked by admin events.
+    // - Re-runs in the same week also hit duplicate → chat does not proliferate.
     const chat = await ensureBookingPromptChat({
       admin,
       studentId: params.targetUserId,

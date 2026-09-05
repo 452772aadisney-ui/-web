@@ -190,4 +190,72 @@ describe('coaching reminder orchestrators', () => {
     expect(result.summary.chatCreated).toBe(1)
     expect(processCoachingReminderNewPath).not.toHaveBeenCalled()
   })
+
+  it('booking all path still sends push when weekly chat already exists', async () => {
+    loadBookingPromptCandidates.mockResolvedValue({
+      ok: true,
+      weekMondayKey: '2026-09-07',
+      weekDates: ['2026-09-07'],
+      candidates: [{ studentId: STUDENT, email: 'a@example.com' }],
+      bookedStudentCount: 0,
+    })
+    studentStillUnbookedThisWeek.mockResolvedValue({ ok: true, unbooked: true })
+    processCoachingReminderNewPath.mockResolvedValue('push_sent')
+
+    let insertCalls = 0
+    createAdminClient.mockReturnValue({
+      from(table: string) {
+        if (table === 'profiles') {
+          return {
+            select: () => ({
+              eq: () => ({
+                limit: () => ({
+                  maybeSingle: async () => ({ data: { id: 'admin-1' }, error: null }),
+                }),
+              }),
+            }),
+          }
+        }
+        if (table === 'chat_messages') {
+          return {
+            select: () => ({
+              eq: () => ({
+                eq: () => ({
+                  gte: () => ({
+                    lt: () => ({
+                      limit: async () => ({
+                        data: [{ id: 'existing-from-admin-test' }],
+                        error: null,
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+            insert: () => {
+              insertCalls += 1
+              return { error: null }
+            },
+          }
+        }
+        throw new Error(table)
+      },
+    })
+
+    const result = await runCoachingBookingPromptJob({
+      COACHING_REMINDER_DELIVERY_MODE: 'all',
+      VERCEL_ENV: 'production',
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.summary.chatSkippedDuplicate).toBe(1)
+    expect(result.summary.chatCreated).toBe(0)
+    expect(insertCalls).toBe(0)
+    expect(result.summary.pushSucceeded).toBe(1)
+    expect(processCoachingReminderNewPath).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idempotencyKey: 'booking-prompt:2026-09-07',
+      }),
+    )
+  })
 })
