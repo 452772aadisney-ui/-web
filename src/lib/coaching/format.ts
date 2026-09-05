@@ -60,3 +60,41 @@ export function formatCoachingDateLabel(dateKey: string): string {
     weekday: 'short',
   })
 }
+
+/**
+ * Compact target for aria-label / confirm:
+ * `山田さんの9月6日20時の予約`
+ */
+export function formatCoachingBookingActionTarget(
+  studentName: string,
+  slotDate: string | null | undefined,
+  startTime: string | null | undefined,
+  startsAt: string,
+): string {
+  let monthDay: string
+  let hourLabel: string
+
+  if (slotDate && startTime) {
+    const parts = slotDate.split('-').map(Number)
+    const month = parts[1]
+    const day = parts[2]
+    monthDay = `${month}月${day}日`
+    const hour = Number(normalizeStartTime(startTime).slice(0, 2))
+    hourLabel = `${hour}時`
+  } else {
+    const start = new Date(startsAt)
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Tokyo',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      hourCycle: 'h23',
+    }).formatToParts(start)
+    const get = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((part) => part.type === type)?.value ?? ''
+    monthDay = `${Number(get('month'))}月${Number(get('day'))}日`
+    hourLabel = `${Number(get('hour'))}時`
+  }
+
+  return `${studentName}さんの${monthDay}${hourLabel}の予約`
+}

@@ -4,7 +4,7 @@ import { useActionState } from 'react'
 import { registerStudentQuizzes, type QuizActionState } from '@/app/quizzes/actions'
 import { useActionToast } from '@/hooks/useActionToast'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
-import { getTodayDateKey } from '@/lib/study/dates'
+import { getJstDateKey } from '@/lib/study/dates'
 
 const initialState: QuizActionState = {}
 const fieldClass =
@@ -69,7 +69,7 @@ export function AdminCoachingKarteQuizForm({ studentId }: AdminCoachingKarteQuiz
             type="date"
             name="scheduledOn"
             required
-            defaultValue={getTodayDateKey()}
+            defaultValue={getJstDateKey()}
             className={fieldClass}
           />
         </label>

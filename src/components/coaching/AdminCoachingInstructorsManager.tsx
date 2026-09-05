@@ -234,6 +234,7 @@ export function AdminCoachingInstructorsManager({ coaches }: AdminCoachingInstru
                           type="button"
                           onClick={() => setPreviewCoachId(coach.id)}
                           className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-background"
+                          aria-label={`${coach.name}講師の生徒画面での表示を確認`}
                         >
                           生徒画面での表示を確認
                         </button>

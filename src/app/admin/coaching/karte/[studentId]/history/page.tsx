@@ -11,6 +11,7 @@ import { Pagination } from '@/components/ui/Pagination'
 import { fetchCoachingCoaches } from '@/lib/coaching/queries'
 import { fetchCoachingKarteEntriesForStudent } from '@/lib/coaching/karte-queries'
 import { KARTE_HISTORY_PAGE_SIZE } from '@/lib/coaching/karte-constants'
+import { formatPageItemRangeLabel } from '@/lib/pagination'
 import { fetchStudentProfile } from '@/lib/study/queries'
 
 export default async function AdminCoachingKarteHistoryPage({
@@ -45,6 +46,10 @@ export default async function AdminCoachingKarteHistoryPage({
 
   const personName = getPersonName(student)
   const karteHref = `/admin/coaching/karte/${studentId}`
+  const totalCount = karteResult.totalCount ?? 0
+  const currentPage = karteResult.page ?? 1
+  const pageSize = karteResult.pageSize ?? KARTE_HISTORY_PAGE_SIZE
+  const rangeLabel = formatPageItemRangeLabel(currentPage, pageSize, totalCount)
 
   return (
     <AdminPageShell
@@ -61,13 +66,19 @@ export default async function AdminCoachingKarteHistoryPage({
           <div>
             <h2 className="text-lg font-bold">すべての記録</h2>
             <p className="mt-1 text-sm text-muted">{personName}</p>
+            {totalCount > 0 && (
+              <p className="mt-2 text-sm text-muted">
+                全 {totalCount} 件
+                {rangeLabel ? ` ／ ${rangeLabel}` : null}
+              </p>
+            )}
           </div>
           <Link href={karteHref} className="text-sm text-primary hover:underline">
             ← カルテに戻る
           </Link>
         </div>
 
-        {karteResult.totalCount === 0 ? (
+        {totalCount === 0 ? (
           <p className="mt-4 text-sm text-muted">まだカルテの記録がありません。</p>
         ) : (
           <>
@@ -82,9 +93,9 @@ export default async function AdminCoachingKarteHistoryPage({
               ))}
             </ul>
             <Pagination
-              currentPage={karteResult.page ?? 1}
-              totalCount={karteResult.totalCount ?? 0}
-              pageSize={karteResult.pageSize ?? KARTE_HISTORY_PAGE_SIZE}
+              currentPage={currentPage}
+              totalCount={totalCount}
+              pageSize={pageSize}
               pathname={`/admin/coaching/karte/${studentId}/history`}
             />
           </>

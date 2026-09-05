@@ -11,6 +11,7 @@ import type { CoachingCoach, CoachingKarteEntryWithDetails } from '@/types/coach
 import { AutoResizeTextarea } from '@/components/ui/AutoResizeTextarea'
 import { useActionToast } from '@/hooks/useActionToast'
 import { getPersonName } from '@/lib/auth/display-name'
+import { formatJstDateLabelFromDateKey } from '@/lib/datetime/format-jst'
 
 const initialState: CoachingActionState = {}
 const fieldClass =
@@ -59,6 +60,10 @@ export function CoachingKarteHistoryEntry({
       router.refresh()
     }
   }, [deleteState.success, router])
+
+  const sessionDateLabel = formatJstDateLabelFromDateKey(entry.session_date)
+  const editLabel = `${sessionDateLabel}のカルテを編集`
+  const deleteLabel = `${sessionDateLabel}のカルテを削除`
 
   if (editing) {
     return (
@@ -161,6 +166,7 @@ export function CoachingKarteHistoryEntry({
             onClick={() => setEditing(true)}
             disabled={!tableAvailable}
             className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium disabled:opacity-60"
+            aria-label={editLabel}
           >
             編集
           </button>
@@ -168,7 +174,9 @@ export function CoachingKarteHistoryEntry({
             action={deleteAction}
             onSubmit={(event) => {
               if (
-                !window.confirm('このカルテ記録を削除しますか？この操作は取り消せません。')
+                !window.confirm(
+                  `${sessionDateLabel}のカルテを削除しますか？この操作は取り消せません。`,
+                )
               ) {
                 event.preventDefault()
               }
@@ -180,6 +188,7 @@ export function CoachingKarteHistoryEntry({
               type="submit"
               disabled={deletePending || !tableAvailable}
               className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-error disabled:opacity-60"
+              aria-label={deleteLabel}
             >
               {deletePending ? '削除中…' : '削除'}
             </button>

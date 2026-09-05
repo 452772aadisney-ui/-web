@@ -16,6 +16,7 @@ import {
   saveKarteDraft,
 } from '@/lib/coaching/karte-draft'
 import { KARTE_MAIN_HISTORY_PAGE_SIZE } from '@/lib/coaching/karte-constants'
+import { resolveNewKarteSessionDate } from '@/lib/coaching/karte-session-date'
 import { notifySuccess } from '@/lib/toast/app-toast'
 import type { CoachingCoach, CoachingKarteEntryWithDetails } from '@/types/coaching'
 
@@ -61,7 +62,12 @@ export function AdminCoachingKarteForm({
   useEffect(() => {
     const draft = loadKarteDraft(studentId)
     if (draft) {
-      setSessionDate(draft.sessionDate)
+      // Draft / saved date wins over the server default (JST today).
+      setSessionDate(
+        resolveNewKarteSessionDate({
+          savedOrDraftDate: draft.sessionDate,
+        }),
+      )
       setCoachId(draft.coachId)
       setDiscussionContent(draft.discussionContent)
       setNextCommitments(draft.nextCommitments)
@@ -207,7 +213,7 @@ export function AdminCoachingKarteForm({
               href={historyHref}
               className="shrink-0 text-sm text-primary hover:underline"
             >
-              すべての記録
+              すべての記録を見る
             </Link>
           )}
         </div>

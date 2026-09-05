@@ -23,7 +23,8 @@ import {
   buildDailyChartData,
   buildSubjectPieDataFromMinutes,
 } from '@/lib/study/chart-data'
-import { getRecentDateKeys, getTodayDateKey } from '@/lib/study/dates'
+import { resolveNewKarteSessionDate } from '@/lib/coaching/karte-session-date'
+import { getRecentDateKeys } from '@/lib/study/dates'
 
 export default async function AdminCoachingKarteStudentPage({
   params,
@@ -171,7 +172,7 @@ export default async function AdminCoachingKarteStudentPage({
         <div className="min-w-0">
           <AdminCoachingKarteForm
             studentId={studentId}
-            defaultSessionDate={getTodayDateKey()}
+            defaultSessionDate={resolveNewKarteSessionDate()}
             defaultCoachId={query.coach ?? null}
             defaultBookingId={query.booking ?? null}
             coaches={coaches}
