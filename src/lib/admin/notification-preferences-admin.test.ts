@@ -225,7 +225,6 @@ describe('admin notification preferences control', () => {
       studentUserId: 'student-1',
       category: 'study_reminder',
       enabled: false,
-      reason: 'test stop',
     })
 
     expect(result.ok).toBe(true)
@@ -237,6 +236,7 @@ describe('admin notification preferences control', () => {
       category: 'study_reminder',
       previous_value: true,
       new_value: false,
+      reason: null,
     })
     expect(JSON.stringify(result.snapshot)).not.toContain('@')
   })
@@ -271,6 +271,7 @@ describe('admin notification preferences control', () => {
     })
     expect(result.ok).toBe(true)
     expect(db.auditInserts).toHaveLength(4)
+    expect(db.auditInserts.every((row) => row.reason === null)).toBe(true)
   })
 
   it('skips audit when value is unchanged', async () => {

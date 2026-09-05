@@ -223,9 +223,6 @@ export function NotificationSettingsClient({
     !testBusy
   const showTestUnavailableHint =
     deviceStatus === 'subscribed' && hasBrowserSubscription && !sendingEnabled
-  const anyCategoryStopped = NOTIFICATION_PREFERENCE_CATEGORIES.some(
-    (category) => !prefs[category],
-  )
   const needsPushPrompt =
     deviceStatus === 'permission_default' ||
     deviceStatus === 'ready_to_enable' ||
@@ -349,12 +346,6 @@ export function NotificationSettingsClient({
         <p className="mt-2 text-sm text-muted">
           通知の配信可否は塾側で管理しています。こちらでは状態の確認のみできます。
         </p>
-
-        {anyCategoryStopped && prefsState === 'ready' && (
-          <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-foreground">
-            この通知は現在停止されています。
-          </p>
-        )}
 
         {prefsState === 'error' ? (
           <div className="mt-4 space-y-3">

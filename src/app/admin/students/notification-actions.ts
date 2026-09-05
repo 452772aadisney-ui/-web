@@ -15,13 +15,11 @@ export async function setStudentNotificationCategoryAction(input: {
   studentId: string
   category: string
   enabled: boolean
-  reason?: string
 }): Promise<AdminStudentNotificationActionResult> {
   const result = await updateAdminStudentNotificationPreference({
     studentUserId: input.studentId,
     category: input.category,
     enabled: input.enabled,
-    reason: input.reason,
   })
 
   if (!result.ok) {
@@ -36,12 +34,10 @@ export async function setStudentNotificationCategoryAction(input: {
 export async function setStudentNotificationCategoriesBulkAction(input: {
   studentId: string
   enabled: boolean
-  reason?: string
 }): Promise<AdminStudentNotificationActionResult> {
   const result = await updateAdminStudentNotificationPreferencesBulk({
     studentUserId: input.studentId,
     enabled: input.enabled,
-    reason: input.reason,
   })
 
   if (!result.ok) {

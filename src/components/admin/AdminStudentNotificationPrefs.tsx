@@ -78,9 +78,6 @@ export function AdminStudentNotificationPrefs({
 
   const setCategory = (category: NotificationPreferenceCategory, enabled: boolean) => {
     const title = NOTIFICATION_PREFERENCE_COPY[category].title
-    const reason = !enabled
-      ? (window.prompt('停止理由（任意・個人情報は書かないでください）', '') ?? undefined)
-      : undefined
 
     run(
       () =>
@@ -88,7 +85,6 @@ export function AdminStudentNotificationPrefs({
           studentId,
           category,
           enabled,
-          reason,
         }),
       enabled
         ? `「${title}」を有効にします。よろしいですか？`
@@ -97,16 +93,11 @@ export function AdminStudentNotificationPrefs({
   }
 
   const setAll = (enabled: boolean) => {
-    const reason = !enabled
-      ? (window.prompt('一括停止の理由（任意・個人情報は書かないでください）', '') ?? undefined)
-      : undefined
-
     run(
       () =>
         setStudentNotificationCategoriesBulkAction({
           studentId,
           enabled,
-          reason,
         }),
       enabled
         ? 'この生徒の通知をすべて有効にします。よろしいですか？'
