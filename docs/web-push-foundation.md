@@ -17,7 +17,7 @@
 | `study_reminder` | 学習記録未入力リマインダー | する |
 | `announcement` | 新規お知らせ | する |
 | `message` | 新規メッセージ（管理者→生徒） | する |
-| `coaching_reminder` | コーチング催促 | する |
+| `coaching_reminder` | コーチング予約催促・予約前日案内 | する |
 | `test` | 設定画面からのテスト通知 | **しない** |
 
 ※ 1-2 初版の `chat_message` は **`message`** に改名。
@@ -115,7 +115,7 @@ rollback は上記テーブル4つと enum 3つのみ削除する（既存シス
 | study_reminder | JST 日付（例: `2026-09-04`） |
 | announcement | announcement_id |
 | message | message_id |
-| coaching_reminder | `{booking_id}:{reminder_kind}` |
+| coaching_reminder | `booking-prompt:YYYY-MM-DD`（週次） / `session-previous-day:{bookingId}:{startsAt}`（前日） |
 | test | 操作ごとの UUID |
 
 ### `target_path` 制約
@@ -211,9 +211,10 @@ rollback は上記テーブル4つと enum 3つのみ削除する（既存シス
 | 2-4 | 管理者向け全体dry-run（件数集計のみ・送信なし） |
 | 2-5事前 | study-reminder Cron `maxDuration=60` + soft timeout |
 | 2-6 | 通知カテゴリを管理者のみ停止可能へ（migration `051`・未適用） |
-| 第2段階（続き） | allowlist/all への段階切替、お知らせ接続（3-1）、メッセージ接続（4-1）、コーチング接続 |
+| 第2段階（続き） | allowlist/all への段階切替 |
 | お知らせ Push-first（3-1） | `docs/web-push-announcement-integration.md`。mode 既定 `legacy`。本番 env 変更は別作業 |
-| メッセージ Push-first（4-1） | `docs/web-push-message-integration.md`。`message_kind` migration 052（**未適用**）。mode 既定 `legacy` |
+| メッセージ Push-first（4-1） | `docs/web-push-message-integration.md`。`message_kind` migration 052（**本番適用済み**）。mode 既定 `legacy` |
+| コーチング Push-first（5-1） | `docs/web-push-coaching-reminder-integration.md`。週次＋前日。mode 既定 `legacy`。新規 migration なし |
 
 ---
 

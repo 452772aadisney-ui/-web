@@ -6,6 +6,7 @@ import type { AdminTestInspectResult, AdminTestTargetOption } from '@/lib/admin/
 import type { AdminFullDryRunReport } from '@/lib/study/study-reminder-dry-run'
 import type { AnnouncementAdminDryRunReport } from '@/lib/announcements/announcement-dry-run'
 import type { MessageAdminDryRunReport } from '@/lib/chat/message-dry-run'
+import type { CoachingAdminDryRunReport } from '@/lib/coaching/coaching-reminder-dry-run'
 
 type Props = {
   initialFeatureAvailable: boolean
@@ -32,6 +33,12 @@ type ApiAnnouncementDryRunResponse = {
 type ApiMessageDryRunResponse = {
   ok: true
   messageDryRun: MessageAdminDryRunReport
+  notice: string
+}
+
+type ApiCoachingDryRunResponse = {
+  ok: true
+  coachingDryRun: CoachingAdminDryRunReport
   notice: string
 }
 
@@ -134,6 +141,7 @@ export function AdminNotificationTestClient({
   const [announcementDryRun, setAnnouncementDryRun] =
     useState<AnnouncementAdminDryRunReport | null>(null)
   const [messageDryRun, setMessageDryRun] = useState<MessageAdminDryRunReport | null>(null)
+  const [coachingDryRun, setCoachingDryRun] = useState<CoachingAdminDryRunReport | null>(null)
   const [busy, setBusy] = useState<
     | 'inspect'
     | 'push'
@@ -141,6 +149,7 @@ export function AdminNotificationTestClient({
     | 'full-dry-run'
     | 'announcement-dry-run'
     | 'message-dry-run'
+    | 'coaching-dry-run'
     | null
   >(null)
   const busyRef = useRef(false)
@@ -313,6 +322,44 @@ export function AdminNotificationTestClient({
         const data = result.data as ApiMessageDryRunResponse
         setMessageDryRun(data.messageDryRun)
         toastSession.success('メッセージ通知の準備状況を集計しました', 'admin-notification-test-toast')
+      } finally {
+        busyRef.current = false
+        setBusy(null)
+      }
+    })
+  }
+
+  const runCoachingDryRun = () => {
+    if (busyRef.current || !dryRunAvailable) return
+
+    busyRef.current = true
+    setBusy('coaching-dry-run')
+    const toastSession = createToastSession()
+
+    startTransition(async () => {
+      try {
+        const result = await postJson({ action: 'coaching-dry-run' })
+        if (!result.ok) {
+          if (result.status === 429) {
+            toastSession.error(
+              result.retryAfterSeconds
+                ? `短時間に何度も実行できません。約${result.retryAfterSeconds}秒後に再度お試しください`
+                : '短時間に何度も実行できません。しばらくしてから再度お試しください',
+              'admin-notification-test-toast',
+            )
+            return
+          }
+          if (result.error === 'in_progress') {
+            toastSession.error('dry-runの実行中です。完了後に再度お試しください', 'admin-notification-test-toast')
+            return
+          }
+          toastSession.error('コーチング通知の準備状況を取得できませんでした', 'admin-notification-test-toast')
+          return
+        }
+
+        const data = result.data as ApiCoachingDryRunResponse
+        setCoachingDryRun(data.coachingDryRun)
+        toastSession.success('コーチング通知の準備状況を集計しました', 'admin-notification-test-toast')
       } finally {
         busyRef.current = false
         setBusy(null)
@@ -716,6 +763,146 @@ export function AdminNotificationTestClient({
                       <dd className="font-medium">{messageDryRun.current.cannotDeliver}</dd>
                     </div>
                   </dl>
+                </section>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      <section
+        className="rounded-2xl border border-border bg-card p-5 shadow-sm"
+        aria-labelledby={`${baseId}-coaching-dry-run-heading`}
+      >
+        <h2
+          id={`${baseId}-coaching-dry-run-heading`}
+          className="text-base font-bold text-foreground"
+        >
+          コーチング通知の準備状況
+        </h2>
+        <p className="mt-2 text-sm text-muted">
+          週次の予約催促と、予約前日案内の準備状況です。チャット作成・Push・メール・予約変更は行いません。
+        </p>
+
+        {!dryRunAvailable ? (
+          <p className="mt-4 text-sm text-muted" role="status">
+            {disabledReasonMessage(initialDisabledReason ?? 'flag_off')}
+          </p>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="mt-4 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-card disabled:opacity-60"
+              disabled={busy !== null}
+              onClick={runCoachingDryRun}
+            >
+              {busy === 'coaching-dry-run' ? '集計中…' : '準備状況を集計'}
+            </button>
+
+            {coachingDryRun && (
+              <div className="mt-4 space-y-6" aria-live="polite">
+                <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-foreground">
+                  これは判定結果の確認です。通知送信・チャット作成は行われていません（mode=
+                  {coachingDryRun.mode} / Push送信=
+                  {coachingDryRun.pushSendingEnabled ? 'ON' : 'OFF'}）。
+                </p>
+
+                <section aria-labelledby={`${baseId}-coaching-booking-heading`}>
+                  <h3
+                    id={`${baseId}-coaching-booking-heading`}
+                    className="text-sm font-semibold text-foreground"
+                  >
+                    週次予約催促（週開始 {coachingDryRun.bookingPrompt.weekMondayKey}）
+                  </h3>
+                  <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="text-muted">コーチング対象・今週未予約</dt>
+                      <dd className="font-medium">
+                        {coachingDryRun.bookingPrompt.coachingEligibleUnbooked}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">今週予約済み</dt>
+                      <dd className="font-medium">{coachingDryRun.bookingPrompt.bookedThisWeek}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">管理者により停止</dt>
+                      <dd className="font-medium">
+                        {coachingDryRun.bookingPrompt.preferenceDisabled}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Push準備済み</dt>
+                      <dd className="font-medium">{coachingDryRun.bookingPrompt.pushReady}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">メールfallback</dt>
+                      <dd className="font-medium">{coachingDryRun.bookingPrompt.emailFallback}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">配信手段なし</dt>
+                      <dd className="font-medium">{coachingDryRun.bookingPrompt.cannotDeliver}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">判定エラー</dt>
+                      <dd className="font-medium">{coachingDryRun.bookingPrompt.failed}</dd>
+                    </div>
+                  </dl>
+                  <p className="mt-2 text-xs text-muted">
+                    現在設定: Push {coachingDryRun.bookingPromptCurrent.wouldUsePush} / メール{' '}
+                    {coachingDryRun.bookingPromptCurrent.wouldFallbackEmail} / 停止{' '}
+                    {coachingDryRun.bookingPromptCurrent.preferenceDisabled} / 手段なし{' '}
+                    {coachingDryRun.bookingPromptCurrent.cannotDeliver}
+                  </p>
+                </section>
+
+                <section aria-labelledby={`${baseId}-coaching-session-heading`}>
+                  <h3
+                    id={`${baseId}-coaching-session-heading`}
+                    className="text-sm font-semibold text-foreground"
+                  >
+                    予約前日案内（翌日 {coachingDryRun.sessionPreviousDay.tomorrowKey}）
+                  </h3>
+                  <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="text-muted">翌日の有効予約</dt>
+                      <dd className="font-medium">
+                        {coachingDryRun.sessionPreviousDay.validBookingsTomorrow}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">管理者により停止</dt>
+                      <dd className="font-medium">
+                        {coachingDryRun.sessionPreviousDay.preferenceDisabled}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Push準備済み</dt>
+                      <dd className="font-medium">{coachingDryRun.sessionPreviousDay.pushReady}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">メールfallback</dt>
+                      <dd className="font-medium">
+                        {coachingDryRun.sessionPreviousDay.emailFallback}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">配信手段なし</dt>
+                      <dd className="font-medium">
+                        {coachingDryRun.sessionPreviousDay.cannotDeliver}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">判定エラー</dt>
+                      <dd className="font-medium">{coachingDryRun.sessionPreviousDay.failed}</dd>
+                    </div>
+                  </dl>
+                  <p className="mt-2 text-xs text-muted">
+                    現在設定: Push {coachingDryRun.sessionPreviousDayCurrent.wouldUsePush} / メール{' '}
+                    {coachingDryRun.sessionPreviousDayCurrent.wouldFallbackEmail} / 停止{' '}
+                    {coachingDryRun.sessionPreviousDayCurrent.preferenceDisabled} / 手段なし{' '}
+                    {coachingDryRun.sessionPreviousDayCurrent.cannotDeliver}
+                  </p>
                 </section>
               </div>
             )}

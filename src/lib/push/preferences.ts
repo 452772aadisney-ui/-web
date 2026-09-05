@@ -44,7 +44,8 @@ export const NOTIFICATION_PREFERENCE_COPY: Record<
   },
   coaching_reminder: {
     title: 'コーチングのお知らせ',
-    description: 'コーチングに関するお知らせを通知します。',
+    description:
+      'コーチングの予約案内と、予約前日のお知らせを受け取ります。',
   },
 }
 

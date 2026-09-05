@@ -9,6 +9,7 @@ const {
   listAdminNotificationTestTargets,
   resolveAdminNotificationTestAvailability,
   runAdminFullStudyReminderDryRun,
+  runAdminCoachingReminderDryRun,
 } = vi.hoisted(() => ({
   createClient: vi.fn(),
   verifyRequestOrigin: vi.fn(),
@@ -18,6 +19,7 @@ const {
   listAdminNotificationTestTargets: vi.fn(),
   resolveAdminNotificationTestAvailability: vi.fn(),
   runAdminFullStudyReminderDryRun: vi.fn(),
+  runAdminCoachingReminderDryRun: vi.fn(),
 }))
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -39,6 +41,18 @@ vi.mock('@/lib/admin/notification-test-service', () => ({
 
 vi.mock('@/lib/admin/notification-test-full-dry-run', () => ({
   runAdminFullStudyReminderDryRun: (...args: unknown[]) => runAdminFullStudyReminderDryRun(...args),
+}))
+
+vi.mock('@/lib/admin/notification-test-coaching-dry-run', () => ({
+  runAdminCoachingReminderDryRun: (...args: unknown[]) => runAdminCoachingReminderDryRun(...args),
+}))
+
+vi.mock('@/lib/admin/notification-test-announcement-dry-run', () => ({
+  runAdminAnnouncementDeliveryDryRun: vi.fn(),
+}))
+
+vi.mock('@/lib/admin/notification-test-message-dry-run', () => ({
+  runAdminMessageDeliveryDryRun: vi.fn(),
 }))
 
 vi.mock('@/lib/admin/notification-test-config', async () => {
@@ -285,6 +299,67 @@ describe('POST /api/admin/notification-test', () => {
     expect(res.status).toBe(429)
     const body = await res.json()
     expect(body.retryAfterSeconds).toBe(45)
+  })
+
+  it('runs coaching dry-run without PII', async () => {
+    runAdminCoachingReminderDryRun.mockResolvedValue({
+      ok: true,
+      report: {
+        evaluatedAt: '2026-09-06T12:00:00.000Z',
+        durationMs: 12,
+        mode: 'legacy',
+        pushSendingEnabled: false,
+        forcedLegacyReason: null,
+        bookingPrompt: {
+          weekMondayKey: '2026-08-31',
+          coachingEligibleUnbooked: 3,
+          bookedThisWeek: 2,
+          preferenceDisabled: 1,
+          pushReady: 1,
+          emailFallback: 1,
+          cannotDeliver: 0,
+          failed: 0,
+        },
+        sessionPreviousDay: {
+          tomorrowKey: '2026-09-07',
+          validBookingsTomorrow: 2,
+          preferenceDisabled: 0,
+          pushReady: 1,
+          emailFallback: 1,
+          cannotDeliver: 0,
+          failed: 0,
+        },
+        bookingPromptCurrent: {
+          preferenceDisabled: 1,
+          wouldUsePush: 0,
+          wouldFallbackEmail: 2,
+          cannotDeliver: 0,
+          failed: 0,
+        },
+        sessionPreviousDayCurrent: {
+          preferenceDisabled: 0,
+          wouldUsePush: 0,
+          wouldFallbackEmail: 2,
+          cannotDeliver: 0,
+          failed: 0,
+        },
+      },
+    })
+
+    const res = await POST(
+      new Request('https://app.example/api/admin/notification-test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://app.example' },
+        body: JSON.stringify({ action: 'coaching-dry-run' }),
+      }),
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+    expect(body.coachingDryRun.bookingPrompt.coachingEligibleUnbooked).toBe(3)
+    expect(body.coachingDryRun.sessionPreviousDay.validBookingsTomorrow).toBe(2)
+    expect(JSON.stringify(body)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i)
+    expect(JSON.stringify(body)).not.toContain('@')
   })
 })
 

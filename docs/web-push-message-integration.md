@@ -23,15 +23,13 @@
 
 当初、催促は `sendCoachingBookingReminders` → `sendChatMessage` で **通常行と同一** だった。
 
-**migration 052（未適用）** で `message_kind` を追加:
+**migration 052（本番適用済み）** で `message_kind` を追加:
 
 - `user`（通常）
 - `coaching_booking_reminder`（催促一括）
 
 Push-first の `message` 通知は **`message_kind=user` かつ admin→student のみ**。  
-催促は除外し、将来の `coaching_reminder` 接続へ委ねる。
-
-**本番へ本機能を載せる前に 052 を適用すること。** 未適用のまま insert すると `message_kind` 列不足で失敗する。
+催促は除外し、`coaching_reminder`（5-1）へ接続済み。
 
 verify: `supabase/rollbacks/052_chat_message_kind_verify.sql`  
 rollback: `supabase/rollbacks/052_chat_message_kind_rollback.sql`
@@ -128,6 +126,9 @@ idempotencyKey: message:{messageId}
 
 ## 第5段階（コーチング催促）への引き継ぎ
 
-- `message_kind=coaching_booking_reminder` を送信側で既に付与
-- 通知は `notification_type=coaching_reminder` + 専用 idempotency（booking/week）を推奨
-- 通常 `message` 通知と二重にしないこと（本実装は催促を message 経路から除外済み）
+完了: [web-push-coaching-reminder-integration.md](./web-push-coaching-reminder-integration.md)
+
+- `message_kind=coaching_booking_reminder` を送信側で付与（週次）
+- 通知は `notification_type=coaching_reminder` + idempotency（週次 / 予約+開始時刻）
+- 通常 `message` 通知と二重にしない（催促は message 経路から除外済み）
+- 前日案内はチャット非保存（event 直送）
