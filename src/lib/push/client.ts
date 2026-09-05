@@ -36,6 +36,7 @@ export type PushLocalState = {
 export type PushServerStatus = {
   configured: boolean
   subscribed: boolean
+  sendingEnabled: boolean
 }
 
 const SAFE_MESSAGES: Record<PushClientErrorCode, string> = {
@@ -207,11 +208,78 @@ export async function fetchPushServerStatus(): Promise<PushClientResult<PushServ
     typeof value !== 'object' ||
     Array.isArray(value) ||
     typeof (value as { configured?: unknown }).configured !== 'boolean' ||
-    typeof (value as { subscribed?: unknown }).subscribed !== 'boolean'
+    typeof (value as { subscribed?: unknown }).subscribed !== 'boolean' ||
+    typeof (value as { sendingEnabled?: unknown }).sendingEnabled !== 'boolean'
   ) {
     return fail('unknown')
   }
   return ok(value as PushServerStatus)
+}
+
+export async function sendTestPushNotificationFromUser(): Promise<
+  PushClientResult<{ sent: number; retryAfterSeconds?: number }>
+> {
+  const subscription = await getCurrentPushSubscription()
+  if (!subscription) return fail('subscribe_failed')
+  const payload = subscriptionToJson(subscription)
+  if (!payload) return fail('subscribe_failed')
+
+  try {
+    const response = await fetch('/api/push/test', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+    })
+
+    if (response.status === 401) return fail('unauthorized')
+    if (response.status === 403) return fail('forbidden')
+    if (response.status === 404) return fail('subscribe_failed')
+    if (response.status === 503) return fail('not_configured')
+    if (response.status === 429) {
+      let retryAfterSeconds: number | undefined
+      try {
+        const data = (await response.json()) as { retryAfterSeconds?: unknown }
+        if (typeof data.retryAfterSeconds === 'number' && data.retryAfterSeconds > 0) {
+          retryAfterSeconds = Math.ceil(data.retryAfterSeconds)
+        }
+      } catch {
+        // ignore
+      }
+      return {
+        ok: false,
+        code: 'unknown',
+        message:
+          retryAfterSeconds && retryAfterSeconds > 0
+            ? `テスト通知は短時間に何度も送れません。約${retryAfterSeconds}秒後に再度お試しください`
+            : 'テスト通知は短時間に何度も送れません。しばらくしてから再度お試しください',
+      }
+    }
+    if (!response.ok) {
+      return {
+        ok: false,
+        code: 'unknown',
+        message: 'テスト通知の送信に失敗しました',
+      }
+    }
+
+    const data = (await response.json()) as { sent?: unknown }
+    const sent = typeof data.sent === 'number' ? data.sent : 0
+    if (sent < 1) {
+      return {
+        ok: false,
+        code: 'unknown',
+        message: 'テスト通知の送信に失敗しました',
+      }
+    }
+    return ok({ sent })
+  } catch {
+    return fail('network')
+  }
 }
 
 /**

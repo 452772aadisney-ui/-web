@@ -4,8 +4,9 @@
 
 実装スコープ:
 
-- **1-3** = DB・RLS・型（migration `050`。**本番 DB 未適用**）
-- **1-4** = Manifest・Service Worker・登録ヘルパー（購読 API / VAPID / 送信は未実装）
+- **1-3** = DB・RLS・型（migration `050`。**本番適用済み**）
+- **1-4〜1-7** = Manifest / SW / 購読 / 設定画面 / 送信基盤・テスト通知
+- 第2段階 = 既存通知種別への接続・メールフォールバック
 
 ---
 
@@ -153,8 +154,8 @@ rollback は上記テーブル4つと enum 3つのみ削除する（既存シス
 - 解除順: **サーバー無効化 → ブラウザ unsubscribe**
 - 起動時再同期: permission=granted かつ既存購読がある場合のみ（許可ダイアログなし）
 - ログアウト: `HamburgerMenu` で Push クリーンアップ後に `signOut`（失敗してもログアウト続行）
-- 環境変数: `.env.local.example` 参照。`PUSH_SENDING_ENABLED` は厳密に `true` のときのみ送信可（送信自体は未実装）
-- `web-push` パッケージは未追加（鍵生成は `npx web-push generate-vapid-keys`、送信工程で追加予定）
+- 環境変数: `.env.local.example` 参照。`PUSH_SENDING_ENABLED` は厳密に `true` のときのみ送信可
+- `web-push@3.6.7`（Node runtime 専用。クライアント / SW には含めない）
 
 ---
 
@@ -170,6 +171,18 @@ rollback は上記テーブル4つと enum 3つのみ削除する（既存シス
 
 ---
 
+## 送信基盤・テスト通知（1-7）
+
+- 共通送信: `src/lib/push/send-service.ts`（`web-push` 3.6.7、Node runtime）
+- `PUSH_SENDING_ENABLED` は厳密に `true` のみ。Preview（`VERCEL_ENV` が production 以外）は送信不可
+- テスト API: `POST /api/push/test`（現在端末の endpoint+p256dh+auth 照合、30秒クールダウン）
+- 設定画面: 購読済みかつ送信可能時のみ「テスト通知を送る」
+- flag OFF 時はイベントを作らず、購読・カテゴリ設定は継続利用可
+- 同一 event の failed/pending delivery は今工程では再送しない（新しい idempotency key が必要）
+- 404/410 のみ購読無効化。429/5xx は一時失敗として記録のみ
+
+---
+
 ## フェーズ
 
 | 工程 | 内容 |
@@ -178,7 +191,8 @@ rollback は上記テーブル4つと enum 3つのみ削除する（既存シス
 | 1-4 | Manifest・Service Worker |
 | 1-5 | 購読 API・クライアント基盤 |
 | 1-6 | 生徒向け通知設定画面 |
-| 1-7 以降 | テスト通知・送信・既存メール接続 |
+| 1-7 | 送信基盤・テスト通知 |
+| 第2段階 | 学習リマインダー / お知らせ / メッセージ / コーチング接続、メールフォールバック |
 
 ---
 

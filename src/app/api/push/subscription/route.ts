@@ -74,7 +74,7 @@ export async function GET() {
   if ('ok' in status && status.ok === false) {
     if (status.code === 'admin_unavailable') {
       return NextResponse.json(
-        { configured, subscribed: false },
+        { configured, subscribed: false, sendingEnabled: false },
         { status: 200, headers: NO_STORE },
       )
     }

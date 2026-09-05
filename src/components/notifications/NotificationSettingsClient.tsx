@@ -19,6 +19,7 @@ import {
   getLocalPushState,
   isStandaloneDisplayMode,
   likelyRequiresStandaloneForPush,
+  sendTestPushNotificationFromUser,
 } from '@/lib/push/client'
 import { getVapidPublicKey } from '@/lib/push/env'
 import {
@@ -94,8 +95,12 @@ export function NotificationSettingsClient({
     null,
   )
   const [showIosGuide, setShowIosGuide] = useState(false)
+  const [sendingEnabled, setSendingEnabled] = useState(false)
+  const [hasBrowserSubscription, setHasBrowserSubscription] = useState(false)
+  const [testBusy, setTestBusy] = useState(false)
   const [, startTransition] = useTransition()
   const busyRef = useRef(false)
+  const testBusyRef = useRef(false)
   const baseId = useId()
 
   const refreshDeviceStatus = useCallback(async () => {
@@ -104,24 +109,28 @@ export function NotificationSettingsClient({
     const requiresStandalone = likelyRequiresStandaloneForPush()
     setShowIosGuide(requiresStandalone)
 
-    let hasBrowserSubscription = false
+    let browserSubscription = false
     try {
       const sub = await getCurrentPushSubscription()
-      hasBrowserSubscription = Boolean(sub)
+      browserSubscription = Boolean(sub)
     } catch {
-      hasBrowserSubscription = false
+      browserSubscription = false
     }
+    setHasBrowserSubscription(browserSubscription)
 
     let serverSubscribed = false
     let serverStatusFailed = false
+    let nextSendingEnabled = false
     const server = await fetchPushServerStatus()
     if (server.ok) {
       serverSubscribed = server.value.subscribed
+      nextSendingEnabled = server.value.sendingEnabled
     } else if (server.code === 'network' || server.code === 'unknown') {
       serverStatusFailed = true
     } else if (server.code === 'not_configured') {
       // fall through — configured flag handles messaging
     }
+    setSendingEnabled(nextSendingEnabled)
 
     const permission =
       local.permission === 'granted' ||
@@ -136,7 +145,7 @@ export function NotificationSettingsClient({
         requiresStandalone,
         configured,
         permission,
-        hasBrowserSubscription,
+        hasBrowserSubscription: browserSubscription,
         serverSubscribed,
         serverStatusFailed,
       }),
@@ -219,6 +228,27 @@ export function NotificationSettingsClient({
     }
   }
 
+  const handleSendTest = async () => {
+    if (testBusyRef.current || busyRef.current) return
+    testBusyRef.current = true
+    setTestBusy(true)
+    const toastSession = createToastSession()
+
+    try {
+      const result = await sendTestPushNotificationFromUser()
+      if (!result.ok) {
+        toastSession.error(result.message, 'notification-test-toast')
+        await refreshDeviceStatus()
+        return
+      }
+      toastSession.success('テスト通知を送信しました', 'notification-test-toast')
+      await refreshDeviceStatus()
+    } finally {
+      testBusyRef.current = false
+      setTestBusy(false)
+    }
+  }
+
   const handleTogglePreference = (category: NotificationPreferenceCategory, enabled: boolean) => {
     if (prefsState !== 'ready' || savingCategory) return
 
@@ -251,6 +281,14 @@ export function NotificationSettingsClient({
       deviceStatus === 'needs_sync')
   const canDisable = !deviceBusy && deviceStatus === 'subscribed'
   const showDeniedRetry = deviceStatus === 'permission_denied'
+  const canSendTest =
+    deviceStatus === 'subscribed' &&
+    hasBrowserSubscription &&
+    sendingEnabled &&
+    !deviceBusy &&
+    !testBusy
+  const showTestUnavailableHint =
+    deviceStatus === 'subscribed' && hasBrowserSubscription && !sendingEnabled
 
   return (
     <div className="space-y-6">
@@ -305,6 +343,23 @@ export function NotificationSettingsClient({
             >
               {deviceBusy ? '処理中…' : 'この端末の通知を停止する'}
             </button>
+          )}
+
+          {canSendTest && (
+            <button
+              type="button"
+              onClick={() => void handleSendTest()}
+              disabled={testBusy || deviceBusy}
+              className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm font-medium text-primary transition hover:bg-primary/10 disabled:opacity-60"
+            >
+              {testBusy ? '送信中…' : 'テスト通知を送る'}
+            </button>
+          )}
+
+          {showTestUnavailableHint && (
+            <p className="w-full text-sm text-muted">
+              現在テスト通知は利用できません。通知の受け取り設定や購読はそのまま利用できます。
+            </p>
           )}
 
           {showDeniedRetry && (

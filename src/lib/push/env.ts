@@ -5,9 +5,9 @@ export function getVapidPublicKey(): string | null {
   return key && key.length > 0 ? key : null
 }
 
-/** Sending is allowed only when the string is exactly `true`. */
+/** Sending is allowed only when the string is exactly `true` (no trim / case fold). */
 export function isPushSendingEnabled(): boolean {
-  return process.env.PUSH_SENDING_ENABLED?.trim() === 'true'
+  return process.env.PUSH_SENDING_ENABLED === 'true'
 }
 
 export function getVapidSubject(): string | null {

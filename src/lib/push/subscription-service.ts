@@ -2,10 +2,12 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { DEFAULT_NOTIFICATION_PREFERENCES } from '@/types/push'
 import type { PushSubscriptionInput } from '@/lib/push/subscription-input'
 import { truncateUserAgent } from '@/lib/push/subscription-input'
+import { isPushSendingAvailable } from '@/lib/push/send-config'
 
 export type SubscriptionStatusResult = {
   configured: boolean
   subscribed: boolean
+  sendingEnabled: boolean
 }
 
 export type SubscriptionWriteResult =
@@ -244,6 +246,7 @@ export async function getPushSubscriptionStatusForUser(params: {
     return {
       configured: params.configured,
       subscribed: (data?.length ?? 0) > 0,
+      sendingEnabled: isPushSendingAvailable(),
     }
   } catch {
     return { ok: false, code: 'db_error' }
