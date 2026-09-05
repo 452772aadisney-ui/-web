@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  assertCurrentEffectiveSum,
   assertDryRunFinalSum,
+  assertPushReadinessSum,
+  classifyCurrentEffective,
+  classifyPushReadiness,
   classifyStudyReminderDryRunFinal,
   emptyDryRunAggregate,
+  evaluateAdminFullDryRunReport,
   evaluateStudyReminderDryRunAggregate,
 } from '@/lib/study/study-reminder-dry-run'
 
@@ -322,5 +327,175 @@ describe('assertDryRunFinalSum', () => {
     aggregate.totalStudents = 2
     aggregate.alreadyRecorded = 1
     expect(assertDryRunFinalSum(aggregate)).toBe(false)
+  })
+})
+
+describe('classifyPushReadiness vs classifyCurrentEffective', () => {
+  const base = {
+    recordedLookupOk: true,
+    hasLog: false,
+    preferenceLookupOk: true,
+    preferenceEnabled: true,
+    subscriptionLookupOk: true,
+    hasActivePush: true,
+    emailLookupOk: true,
+    hasEmail: true,
+  }
+
+  it('counts active push as ready even when PUSH sending is OFF', () => {
+    expect(classifyPushReadiness(base)).toBe('ready_for_push')
+    expect(
+      classifyCurrentEffective({
+        input: { ...base, pushSendingEnabled: false },
+        mode: 'all',
+        studentId: 's1',
+        allowlist: null,
+      }),
+    ).toBe('would_use_email')
+  })
+
+  it('counts push when flag ON under all mode', () => {
+    expect(
+      classifyCurrentEffective({
+        input: { ...base, pushSendingEnabled: true },
+        mode: 'all',
+        studentId: 's1',
+        allowlist: null,
+      }),
+    ).toBe('would_use_push')
+  })
+
+  it('prefers legacy email under legacy and dry-run', () => {
+    for (const mode of ['legacy', 'dry-run'] as const) {
+      expect(
+        classifyCurrentEffective({
+          input: { ...base, pushSendingEnabled: true },
+          mode,
+          studentId: 's1',
+          allowlist: null,
+        }),
+      ).toBe('would_use_email')
+    }
+  })
+
+  it('uses allowlist membership for new-path under allowlist mode', () => {
+    const allow = new Set(['aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'])
+    expect(
+      classifyCurrentEffective({
+        input: { ...base, pushSendingEnabled: true },
+        mode: 'allowlist',
+        studentId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        allowlist: allow,
+      }),
+    ).toBe('would_use_push')
+    expect(
+      classifyCurrentEffective({
+        input: { ...base, pushSendingEnabled: true },
+        mode: 'allowlist',
+        studentId: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+        allowlist: allow,
+      }),
+    ).toBe('would_use_email')
+  })
+
+  it('classifies no-push+email and no-push+no-email for readiness', () => {
+    expect(
+      classifyPushReadiness({ ...base, hasActivePush: false, hasEmail: true }),
+    ).toBe('email_only')
+    expect(
+      classifyPushReadiness({ ...base, hasActivePush: false, hasEmail: false }),
+    ).toBe('cannot_deliver')
+  })
+
+  it('classifies preference off and recorded', () => {
+    expect(classifyPushReadiness({ ...base, preferenceEnabled: false })).toBe(
+      'preference_disabled',
+    )
+    expect(classifyPushReadiness({ ...base, hasLog: true })).toBe('already_recorded')
+  })
+})
+
+describe('evaluateAdminFullDryRunReport', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    isPushSendingAvailable.mockReturnValue(false)
+  })
+
+  it('separates readiness push from current legacy email when push flag OFF', async () => {
+    mockBulkAdmin({
+      students: [
+        { id: 's1', email: 'a@example.com' },
+        { id: 's2', email: 'b@example.com' },
+        { id: 's3', email: null },
+      ],
+      logs: [],
+      prefs: [
+        { user_id: 's1', study_reminder: true },
+        { user_id: 's2', study_reminder: true },
+        { user_id: 's3', study_reminder: false },
+      ],
+      subs: [{ user_id: 's1' }],
+    })
+
+    const result = await evaluateAdminFullDryRunReport({
+      dateKey: '2026-09-05',
+      env: { STUDY_REMINDER_DELIVERY_MODE: 'legacy' },
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    expect(result.report.readiness.readyForPush).toBe(1)
+    expect(result.report.readiness.emailOnly).toBe(1)
+    expect(result.report.readiness.preferenceDisabled).toBe(1)
+    expect(assertPushReadinessSum(result.report.readiness)).toBe(true)
+
+    expect(result.report.current.legacyEmailPreferred).toBe(true)
+    expect(result.report.current.pushSendingEnabled).toBe(false)
+    expect(result.report.current.wouldUsePush).toBe(0)
+    expect(result.report.current.wouldUseEmail).toBe(2) // s1+s2; s3 pref off still legacy email if has email — but s3 has no email
+    expect(result.report.current.cannotDeliver).toBe(1) // s3 no email
+    expect(result.report.current.preferenceDisabled).toBe(0)
+    expect(assertCurrentEffectiveSum(result.report.current)).toBe(true)
+    expect(JSON.stringify(result.report)).not.toContain('@')
+  })
+
+  it('shows push under all when sending is available', async () => {
+    isPushSendingAvailable.mockReturnValue(true)
+    mockBulkAdmin({
+      students: [{ id: 's1', email: 'a@example.com' }],
+      logs: [],
+      prefs: [],
+      subs: [{ user_id: 's1' }],
+    })
+
+    const result = await evaluateAdminFullDryRunReport({
+      dateKey: '2026-09-05',
+      env: { STUDY_REMINDER_DELIVERY_MODE: 'all' },
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.report.readiness.readyForPush).toBe(1)
+    expect(result.report.current.wouldUsePush).toBe(1)
+    expect(result.report.current.legacyEmailPreferred).toBe(false)
+  })
+
+  it('does not call send helpers for dual report', async () => {
+    mockBulkAdmin({
+      students: [{ id: 's1', email: 'a@example.com' }],
+      logs: [],
+      prefs: [],
+      subs: [],
+    })
+    const sendService = await import('@/lib/push/send-service')
+    const emailSend = await import('@/lib/email/send')
+    const pushSpy = vi.spyOn(sendService, 'sendPushNotification')
+    const emailSpy = vi.spyOn(emailSend, 'sendEmail')
+
+    await evaluateAdminFullDryRunReport({ dateKey: '2026-09-05' })
+
+    expect(pushSpy).not.toHaveBeenCalled()
+    expect(emailSpy).not.toHaveBeenCalled()
+    pushSpy.mockRestore()
+    emailSpy.mockRestore()
   })
 })

@@ -3,7 +3,7 @@
 import { useId, useRef, useState, useTransition } from 'react'
 import { createToastSession } from '@/lib/toast/app-toast'
 import type { AdminTestInspectResult, AdminTestTargetOption } from '@/lib/admin/notification-test-service'
-import type { StudyReminderDryRunAggregate } from '@/lib/study/study-reminder-dry-run'
+import type { AdminFullDryRunReport } from '@/lib/study/study-reminder-dry-run'
 
 type Props = {
   initialFeatureAvailable: boolean
@@ -16,8 +16,8 @@ type ApiInspectResponse = { ok: true; inspect: AdminTestInspectResult }
 
 type ApiDryRunResponse = {
   ok: true
-  dryRun: StudyReminderDryRunAggregate
-  sumConsistent: boolean
+  dryRun: AdminFullDryRunReport
+  sumConsistent: { readiness: boolean; current: boolean }
   notice: string
 }
 
@@ -45,8 +45,8 @@ async function postJson(
       ok?: boolean
       inspect?: AdminTestInspectResult
       sent?: number
-      dryRun?: StudyReminderDryRunAggregate
-      sumConsistent?: boolean
+      dryRun?: AdminFullDryRunReport
+      sumConsistent?: { readiness: boolean; current: boolean }
       notice?: string
     } = {}
     try {
@@ -110,8 +110,11 @@ export function AdminNotificationTestClient({
     initialTargets.length === 1 ? initialTargets[0]!.id : '',
   )
   const [inspect, setInspect] = useState<AdminTestInspectResult | null>(null)
-  const [dryRun, setDryRun] = useState<StudyReminderDryRunAggregate | null>(null)
-  const [dryRunSumOk, setDryRunSumOk] = useState<boolean | null>(null)
+  const [dryRun, setDryRun] = useState<AdminFullDryRunReport | null>(null)
+  const [dryRunSumOk, setDryRunSumOk] = useState<{
+    readiness: boolean
+    current: boolean
+  } | null>(null)
   const [busy, setBusy] = useState<'inspect' | 'push' | 'email' | 'full-dry-run' | null>(null)
   const busyRef = useRef(false)
   const [, startTransition] = useTransition()
@@ -243,7 +246,7 @@ export function AdminNotificationTestClient({
             </button>
 
             {dryRun && (
-              <div className="mt-4 space-y-3" aria-live="polite">
+              <div className="mt-4 space-y-4" aria-live="polite">
                 <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-foreground">
                   これは判定結果の確認です。Push・メールは送信されていません。
                 </p>
@@ -256,14 +259,6 @@ export function AdminNotificationTestClient({
                     <dt className="text-muted">実行日時</dt>
                     <dd className="font-medium">{formatEvaluatedAt(dryRun.evaluatedAt)}</dd>
                   </div>
-                  <div>
-                    <dt className="text-muted">通常配信モード</dt>
-                    <dd className="font-medium">{dryRun.deliveryMode}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted">Push送信機能</dt>
-                    <dd className="font-medium">{dryRun.pushSendingEnabled ? 'ON' : 'OFF'}</dd>
-                  </div>
                   {typeof dryRun.durationMs === 'number' ? (
                     <div>
                       <dt className="text-muted">処理時間</dt>
@@ -272,62 +267,145 @@ export function AdminNotificationTestClient({
                   ) : null}
                 </dl>
 
-                <h3 className="pt-2 text-sm font-semibold text-foreground">最終分類（重複なし）</h3>
-                <dl className="grid gap-2 text-sm text-foreground sm:grid-cols-2">
-                  <div>
-                    <dt className="text-muted">生徒数</dt>
-                    <dd className="font-medium">{dryRun.totalStudents}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted">本日記録済み</dt>
-                    <dd className="font-medium">{dryRun.alreadyRecorded}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted">通知設定OFF</dt>
-                    <dd className="font-medium">{dryRun.preferenceDisabled}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted">Push対象</dt>
-                    <dd className="font-medium">{dryRun.wouldUsePushFirst}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted">メールfallback対象</dt>
-                    <dd className="font-medium">{dryRun.wouldFallbackToEmail}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted">配信手段なし</dt>
-                    <dd className="font-medium">{dryRun.cannotDeliver}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted">判定エラー</dt>
-                    <dd className="font-medium">{dryRun.failedToEvaluate}</dd>
-                  </div>
-                </dl>
-                {dryRunSumOk === false ? (
-                  <p className="text-sm text-amber-800" role="status">
-                    最終分類の合計が生徒数と一致しません。再実行して確認してください。
+                <section
+                  className="rounded-xl border border-border bg-background p-4"
+                  aria-labelledby={`${baseId}-readiness-heading`}
+                >
+                  <h3
+                    id={`${baseId}-readiness-heading`}
+                    className="text-sm font-semibold text-foreground"
+                  >
+                    Pushを有効化した場合の準備状況
+                  </h3>
+                  <p className="mt-1 text-sm text-muted">
+                    準備状況は、Push送信を有効にした場合の想定です。このdry-runでは実際の通知は送信していません。
                   </p>
-                ) : null}
+                  <dl className="mt-3 grid gap-2 text-sm text-foreground sm:grid-cols-2">
+                    <div>
+                      <dt className="text-muted">生徒数</dt>
+                      <dd className="font-medium">{dryRun.readiness.totalStudents}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">本日記録済み</dt>
+                      <dd className="font-medium">{dryRun.readiness.alreadyRecorded}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">本日未記録</dt>
+                      <dd className="font-medium">{dryRun.readiness.missingStudyLog}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">通知設定ON（設定行なし含む）</dt>
+                      <dd className="font-medium">{dryRun.readiness.preferenceEnabled}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">通知設定OFF</dt>
+                      <dd className="font-medium">{dryRun.readiness.preferenceDisabled}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">有効Push購読あり</dt>
+                      <dd className="font-medium">
+                        {dryRun.readiness.withActivePushSubscription}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">有効Push購読なし</dt>
+                      <dd className="font-medium">
+                        {dryRun.readiness.withoutActivePushSubscription}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">メールあり</dt>
+                      <dd className="font-medium">{dryRun.readiness.withEmail}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">メールなし</dt>
+                      <dd className="font-medium">{dryRun.readiness.withoutEmail}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Push有効化時のPush対象</dt>
+                      <dd className="font-medium">{dryRun.readiness.readyForPush}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Push有効化時のメールfallback</dt>
+                      <dd className="font-medium">{dryRun.readiness.emailOnly}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">配信手段なし</dt>
+                      <dd className="font-medium">{dryRun.readiness.cannotDeliver}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">判定エラー</dt>
+                      <dd className="font-medium">{dryRun.readiness.failedToEvaluate}</dd>
+                    </div>
+                  </dl>
+                  {dryRunSumOk?.readiness === false ? (
+                    <p className="mt-2 text-sm text-amber-800" role="status">
+                      準備状況の最終分類合計が生徒数と一致しません。
+                    </p>
+                  ) : null}
+                </section>
 
-                <h3 className="pt-2 text-sm font-semibold text-foreground">参考値（重複し得る）</h3>
-                <dl className="grid gap-2 text-sm text-foreground sm:grid-cols-2">
-                  <div>
-                    <dt className="text-muted">本日未記録</dt>
-                    <dd className="font-medium">{dryRun.missingStudyLog}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted">通知設定ON（設定行なし含む）</dt>
-                    <dd className="font-medium">{dryRun.preferenceEnabled}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted">有効Push購読あり</dt>
-                    <dd className="font-medium">{dryRun.withActivePushSubscription}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted">有効Push購読なし</dt>
-                    <dd className="font-medium">{dryRun.withoutActivePushSubscription}</dd>
-                  </div>
-                </dl>
+                <section
+                  className="rounded-xl border border-border bg-background p-4"
+                  aria-labelledby={`${baseId}-current-heading`}
+                >
+                  <h3
+                    id={`${baseId}-current-heading`}
+                    className="text-sm font-semibold text-foreground"
+                  >
+                    現在の本番設定での動作
+                  </h3>
+                  <p className="mt-1 text-sm text-muted">
+                    {dryRun.current.legacyEmailPreferred
+                      ? '通常配信モードが legacy / dry-run のため、実配信は従来メールが優先されます（Pushは送りません）。'
+                      : '通常配信モードに沿った新方式の分岐です。Push送信機能がOFFならPush対象は0になります。'}
+                  </p>
+                  <dl className="mt-3 grid gap-2 text-sm text-foreground sm:grid-cols-2">
+                    <div>
+                      <dt className="text-muted">通常配信モード</dt>
+                      <dd className="font-medium">{dryRun.current.deliveryMode}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Push送信機能</dt>
+                      <dd className="font-medium">
+                        {dryRun.current.pushSendingEnabled ? 'ON' : 'OFF'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">生徒数</dt>
+                      <dd className="font-medium">{dryRun.current.totalStudents}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">本日記録済み</dt>
+                      <dd className="font-medium">{dryRun.current.alreadyRecorded}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">通知設定OFF</dt>
+                      <dd className="font-medium">{dryRun.current.preferenceDisabled}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">現在設定でのPush対象</dt>
+                      <dd className="font-medium">{dryRun.current.wouldUsePush}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">現在設定でのメール経路</dt>
+                      <dd className="font-medium">{dryRun.current.wouldUseEmail}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">配信手段なし</dt>
+                      <dd className="font-medium">{dryRun.current.cannotDeliver}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">判定エラー</dt>
+                      <dd className="font-medium">{dryRun.current.failedToEvaluate}</dd>
+                    </div>
+                  </dl>
+                  {dryRunSumOk?.current === false ? (
+                    <p className="mt-2 text-sm text-amber-800" role="status">
+                      現在設定の最終分類合計が生徒数と一致しません。
+                    </p>
+                  ) : null}
+                </section>
               </div>
             )}
           </>

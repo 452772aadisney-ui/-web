@@ -9,13 +9,18 @@ import {
   endAdminFullDryRun,
 } from '@/lib/admin/notification-test-dry-run-gate'
 import {
-  assertDryRunFinalSum,
-  evaluateStudyReminderDryRunAggregate,
-  type StudyReminderDryRunAggregate,
+  assertCurrentEffectiveSum,
+  assertPushReadinessSum,
+  evaluateAdminFullDryRunReport,
+  type AdminFullDryRunReport,
 } from '@/lib/study/study-reminder-dry-run'
 
 export type AdminFullDryRunResult =
-  | { ok: true; aggregate: StudyReminderDryRunAggregate; sumConsistent: boolean }
+  | {
+      ok: true
+      report: AdminFullDryRunReport
+      sumConsistent: { readiness: boolean; current: boolean }
+    }
   | {
       ok: false
       code:
@@ -28,7 +33,7 @@ export type AdminFullDryRunResult =
     }
 
 /**
- * Evaluate all students with the shared Cron dry-run classifier.
+ * Evaluate all students with dual readiness / current-effective aggregates.
  * Gated by ADMIN_NOTIFICATION_TEST_ENABLED only (not NOTIFICATION_TEST_USER_IDS).
  */
 export async function runAdminFullStudyReminderDryRun(params: {
@@ -51,15 +56,18 @@ export async function runAdminFullStudyReminderDryRun(params: {
   }
 
   try {
-    const evaluated = await evaluateStudyReminderDryRunAggregate({ env })
+    const evaluated = await evaluateAdminFullDryRunReport({ env })
     if (!evaluated.ok) {
       return { ok: false, code: evaluated.code }
     }
 
     return {
       ok: true,
-      aggregate: evaluated.aggregate,
-      sumConsistent: assertDryRunFinalSum(evaluated.aggregate),
+      report: evaluated.report,
+      sumConsistent: {
+        readiness: assertPushReadinessSum(evaluated.report.readiness),
+        current: assertCurrentEffectiveSum(evaluated.report.current),
+      },
     }
   } finally {
     endAdminFullDryRun(params.adminUserId)

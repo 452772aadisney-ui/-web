@@ -137,20 +137,23 @@ Preview（`VERCEL_ENV` があり production 以外）: 新方式の外部送信�
 - 正しい Origin・JSON Content-Type・変更系 POST
 - サーバー側で再認証
 - **`NOTIFICATION_TEST_USER_IDS` は対象制限に使わない**（全生徒を集計）
-- `PUSH_SENDING_ENABLED=false` でも実行可（送信しないため）
+- `PUSH_SENDING_ENABLED=false` でも実行可。準備状況では購読ありをPush対象として数え、現在設定ではPush送信なしとして表示する
 - `STUDY_REMINDER_DELIVERY_MODE` が `legacy` でも実行可（結果に現在の通常配信モードを表示するだけ。mode は変更しない）
 
 ### 集計項目
 
-最終分類（重複なし・合計＝生徒数）:
+**Pushを有効化した場合の準備状況**（`PUSH_SENDING_ENABLED` に依存しない）:
 
-- 本日記録済み / 通知設定OFF / Push対象 / メールfallback対象 / 配信手段なし / 判定エラー
+- 最終分類（重複なし）: 本日記録済み / 通知設定OFF / Push有効化時のPush対象 / メールfallback / 配信手段なし / 判定エラー
+- 参考: 本日未記録 / 設定ON / 有効Push購読あり・なし / メールあり・なし
 
-参考値（重複し得る）:
+**現在の本番設定での動作**（mode + Push送信フラグを反映）:
 
-- 本日未記録 / 通知設定ON / 有効Push購読あり・なし
+- `legacy` / `dry-run`: 従来メール優先（Push対象は0。設定OFFでも従来メール経路）
+- `allowlist` / `all`: 新方式（PushフラグOFFならメールfallbackへ）
+- 最終分類（重複なし）: 記録済み / 設定OFF / Push対象 / メール経路 / 配信手段なし / 判定エラー
 
-画面・APIは **件数と日付・時刻・配信モードのみ**。個人別一覧は出さない。
+画面は2カードで分離表示。個人別一覧は出さない。
 
 ### 個人情報を表示しないこと
 
@@ -160,12 +163,13 @@ Preview（`VERCEL_ENV` があり production 以外）: 新方式の外部送信�
 
 | | 管理画面全体dry-run | Cron `dry-run` モード |
 |---|---|---|
-| 対象 | 全生徒 | 当日未記録候補（集計ロジックは共通分類器） |
+| 対象 | 全生徒 | 当日未記録候補 |
+| 集計 | 準備状況 + 現在設定の二系統 | 新方式分類カウンタ（実配信は従来メール） |
 | 実配信 | **なし** | 従来メールを維持 |
 | 環境変数 | 変更しない | 変更しない（この機能では） |
 | 実行 | 管理者UI / `action=full-dry-run` | `0 13 * * *` + `CRON_SECRET` |
 
-共通化: `src/lib/study/study-reminder-dry-run.ts`（Cron orchestrator の dry-run も同関数を利用）。
+共通化: `src/lib/study/study-reminder-dry-run.ts`（Cron は `evaluateStudyReminderDryRunAggregate`、管理画面は `evaluateAdminFullDryRunReport`）。
 
 ### 回数制限
 

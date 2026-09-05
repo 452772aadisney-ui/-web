@@ -7,8 +7,8 @@ import {
 import { runAdminFullStudyReminderDryRun } from '@/lib/admin/notification-test-full-dry-run'
 import { ADMIN_FULL_DRY_RUN_COOLDOWN_MS } from '@/lib/admin/notification-test-config'
 
-const { evaluateStudyReminderDryRunAggregate } = vi.hoisted(() => ({
-  evaluateStudyReminderDryRunAggregate: vi.fn(),
+const { evaluateAdminFullDryRunReport } = vi.hoisted(() => ({
+  evaluateAdminFullDryRunReport: vi.fn(),
 }))
 
 vi.mock('@/lib/study/study-reminder-dry-run', async () => {
@@ -17,8 +17,8 @@ vi.mock('@/lib/study/study-reminder-dry-run', async () => {
   )
   return {
     ...actual,
-    evaluateStudyReminderDryRunAggregate: (...args: unknown[]) =>
-      evaluateStudyReminderDryRunAggregate(...args),
+    evaluateAdminFullDryRunReport: (...args: unknown[]) =>
+      evaluateAdminFullDryRunReport(...args),
   }
 })
 
@@ -54,29 +54,43 @@ describe('runAdminFullStudyReminderDryRun', () => {
       env: { ADMIN_NOTIFICATION_TEST_ENABLED: 'false' },
     })
     expect(result).toEqual({ ok: false, code: 'feature_disabled' })
-    expect(evaluateStudyReminderDryRunAggregate).not.toHaveBeenCalled()
+    expect(evaluateAdminFullDryRunReport).not.toHaveBeenCalled()
   })
 
-  it('returns aggregate without requiring allowlist', async () => {
-    evaluateStudyReminderDryRunAggregate.mockResolvedValue({
+  it('returns dual report without requiring allowlist', async () => {
+    evaluateAdminFullDryRunReport.mockResolvedValue({
       ok: true,
-      aggregate: {
+      report: {
         dateKey: '2026-09-05',
         evaluatedAt: '2026-09-05T13:00:00.000Z',
         durationMs: 12,
-        deliveryMode: 'legacy',
-        pushSendingEnabled: false,
-        totalStudents: 1,
-        alreadyRecorded: 1,
-        preferenceDisabled: 0,
-        wouldUsePushFirst: 0,
-        wouldFallbackToEmail: 0,
-        cannotDeliver: 0,
-        failedToEvaluate: 0,
-        missingStudyLog: 0,
-        preferenceEnabled: 1,
-        withActivePushSubscription: 0,
-        withoutActivePushSubscription: 1,
+        readiness: {
+          totalStudents: 1,
+          alreadyRecorded: 1,
+          preferenceDisabled: 0,
+          readyForPush: 0,
+          emailOnly: 0,
+          cannotDeliver: 0,
+          failedToEvaluate: 0,
+          missingStudyLog: 0,
+          preferenceEnabled: 1,
+          withActivePushSubscription: 0,
+          withoutActivePushSubscription: 1,
+          withEmail: 1,
+          withoutEmail: 0,
+        },
+        current: {
+          deliveryMode: 'legacy',
+          pushSendingEnabled: false,
+          legacyEmailPreferred: true,
+          totalStudents: 1,
+          alreadyRecorded: 1,
+          preferenceDisabled: 0,
+          wouldUsePush: 0,
+          wouldUseEmail: 0,
+          cannotDeliver: 0,
+          failedToEvaluate: 0,
+        },
       },
     })
 
@@ -84,13 +98,12 @@ describe('runAdminFullStudyReminderDryRun', () => {
       adminUserId: 'admin-1',
       env: {
         ADMIN_NOTIFICATION_TEST_ENABLED: 'true',
-        // allowlist intentionally unset
       },
     })
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.sumConsistent).toBe(true)
-    expect(JSON.stringify(result.aggregate)).not.toContain('admin-1')
+    expect(result.sumConsistent).toEqual({ readiness: true, current: true })
+    expect(JSON.stringify(result.report)).not.toContain('admin-1')
   })
 })

@@ -119,7 +119,7 @@ export async function POST(request: Request) {
     // Counts only — never user IDs, names, emails, or endpoints.
     return json({
       ok: true,
-      dryRun: result.aggregate,
+      dryRun: result.report,
       sumConsistent: result.sumConsistent,
       notice: 'evaluation_only_no_notifications_sent',
     })

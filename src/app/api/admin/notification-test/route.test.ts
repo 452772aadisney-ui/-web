@@ -215,24 +215,38 @@ describe('POST /api/admin/notification-test', () => {
   it('runs full dry-run without targetUserId and without PII', async () => {
     runAdminFullStudyReminderDryRun.mockResolvedValue({
       ok: true,
-      sumConsistent: true,
-      aggregate: {
+      sumConsistent: { readiness: true, current: true },
+      report: {
         dateKey: '2026-09-05',
         evaluatedAt: '2026-09-05T13:00:00.000Z',
         durationMs: 8,
-        deliveryMode: 'legacy',
-        pushSendingEnabled: false,
-        totalStudents: 2,
-        alreadyRecorded: 1,
-        preferenceDisabled: 0,
-        wouldUsePushFirst: 0,
-        wouldFallbackToEmail: 1,
-        cannotDeliver: 0,
-        failedToEvaluate: 0,
-        missingStudyLog: 1,
-        preferenceEnabled: 2,
-        withActivePushSubscription: 0,
-        withoutActivePushSubscription: 2,
+        readiness: {
+          totalStudents: 2,
+          alreadyRecorded: 1,
+          preferenceDisabled: 0,
+          readyForPush: 1,
+          emailOnly: 0,
+          cannotDeliver: 0,
+          failedToEvaluate: 0,
+          missingStudyLog: 1,
+          preferenceEnabled: 2,
+          withActivePushSubscription: 1,
+          withoutActivePushSubscription: 1,
+          withEmail: 2,
+          withoutEmail: 0,
+        },
+        current: {
+          deliveryMode: 'legacy',
+          pushSendingEnabled: false,
+          legacyEmailPreferred: true,
+          totalStudents: 2,
+          alreadyRecorded: 1,
+          preferenceDisabled: 0,
+          wouldUsePush: 0,
+          wouldUseEmail: 1,
+          cannotDeliver: 0,
+          failedToEvaluate: 0,
+        },
       },
     })
 
@@ -247,7 +261,8 @@ describe('POST /api/admin/notification-test', () => {
     const body = await res.json()
     expect(body.ok).toBe(true)
     expect(body.notice).toBe('evaluation_only_no_notifications_sent')
-    expect(body.dryRun.totalStudents).toBe(2)
+    expect(body.dryRun.readiness.readyForPush).toBe(1)
+    expect(body.dryRun.current.wouldUsePush).toBe(0)
     expect(JSON.stringify(body)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i)
     expect(JSON.stringify(body)).not.toContain('@')
     expect(inspectAdminNotificationTestTarget).not.toHaveBeenCalled()

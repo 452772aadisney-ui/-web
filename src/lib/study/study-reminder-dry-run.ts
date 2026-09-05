@@ -8,7 +8,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { isPushSendingAvailable } from '@/lib/push/send-config'
 import { DEFAULT_NOTIFICATION_PREFERENCES } from '@/types/push'
 import { getJstDateKey } from '@/lib/study/dates'
-import { resolveEffectiveStudyReminderMode } from '@/lib/study/study-reminder-mode'
+import { resolveEffectiveStudyReminderMode, type StudyReminderDeliveryMode } from '@/lib/study/study-reminder-mode'
 
 const PAGE_SIZE = 1000
 /** Keep `.in(...)` URL length under PostgREST limits. */
@@ -54,6 +54,89 @@ export function classifyStudyReminderDryRunFinal(
   if (!input.preferenceEnabled) return 'preference_disabled'
   if (input.hasActivePush && input.pushSendingEnabled) return 'would_use_push'
   if (input.hasEmail) return 'would_fallback_email'
+  return 'cannot_deliver'
+}
+
+/** Push readiness (assumes Push sending could be enabled; no env gate). */
+export type StudyReminderPushReadinessBucket =
+  | 'already_recorded'
+  | 'preference_disabled'
+  | 'ready_for_push'
+  | 'email_only'
+  | 'cannot_deliver'
+  | 'failed'
+
+export type StudyReminderCurrentEffectiveBucket =
+  | 'already_recorded'
+  | 'preference_disabled'
+  | 'would_use_push'
+  | 'would_use_email'
+  | 'cannot_deliver'
+  | 'failed'
+
+/**
+ * Readiness: PUSH_SENDING_ENABLED is ignored (treated as enabled for classification).
+ */
+export function classifyPushReadiness(
+  input: Omit<StudyReminderDryRunClassifyInput, 'pushSendingEnabled'>,
+): StudyReminderPushReadinessBucket {
+  const final = classifyStudyReminderDryRunFinal({
+    ...input,
+    pushSendingEnabled: true,
+  })
+  switch (final) {
+    case 'already_recorded':
+      return 'already_recorded'
+    case 'preference_disabled':
+      return 'preference_disabled'
+    case 'would_use_push':
+      return 'ready_for_push'
+    case 'would_fallback_email':
+      return 'email_only'
+    case 'cannot_deliver':
+      return 'cannot_deliver'
+    case 'failed':
+      return 'failed'
+  }
+}
+
+/**
+ * Current production-like branch for one student under effective delivery mode.
+ * legacy / dry-run → legacy email preferred (preference OFF still emails).
+ * allowlist / all → new-path with actual pushSendingEnabled.
+ */
+export function classifyCurrentEffective(params: {
+  input: StudyReminderDryRunClassifyInput
+  mode: StudyReminderDeliveryMode
+  studentId: string
+  allowlist: ReadonlySet<string> | null
+}): StudyReminderCurrentEffectiveBucket {
+  const { input, mode, studentId, allowlist } = params
+  if (
+    !input.recordedLookupOk ||
+    !input.preferenceLookupOk ||
+    !input.subscriptionLookupOk ||
+    !input.emailLookupOk
+  ) {
+    return 'failed'
+  }
+  if (input.hasLog) return 'already_recorded'
+
+  const usesNewPath =
+    mode === 'all' ||
+    (mode === 'allowlist' &&
+      allowlist != null &&
+      allowlist.has(studentId.toLowerCase()))
+
+  if (!usesNewPath) {
+    // legacy, dry-run, or non-allowlisted under allowlist mode
+    if (input.hasEmail) return 'would_use_email'
+    return 'cannot_deliver'
+  }
+
+  if (!input.preferenceEnabled) return 'preference_disabled'
+  if (input.hasActivePush && input.pushSendingEnabled) return 'would_use_push'
+  if (input.hasEmail) return 'would_use_email'
   return 'cannot_deliver'
 }
 
@@ -107,12 +190,114 @@ export function emptyDryRunAggregate(
   }
 }
 
+/** Admin dual report: readiness vs current env (counts only). */
+export type StudyReminderPushReadinessAggregate = {
+  totalStudents: number
+  alreadyRecorded: number
+  preferenceDisabled: number
+  readyForPush: number
+  emailOnly: number
+  cannotDeliver: number
+  failedToEvaluate: number
+  missingStudyLog: number
+  preferenceEnabled: number
+  withActivePushSubscription: number
+  withoutActivePushSubscription: number
+  withEmail: number
+  withoutEmail: number
+}
+
+export type StudyReminderCurrentEffectiveAggregate = {
+  deliveryMode: StudyReminderDeliveryMode
+  pushSendingEnabled: boolean
+  /** true when mode is legacy or dry-run (actual Cron delivery stays legacy email). */
+  legacyEmailPreferred: boolean
+  totalStudents: number
+  alreadyRecorded: number
+  preferenceDisabled: number
+  wouldUsePush: number
+  wouldUseEmail: number
+  cannotDeliver: number
+  failedToEvaluate: number
+}
+
+export type AdminFullDryRunReport = {
+  dateKey: string
+  evaluatedAt: string
+  durationMs: number
+  readiness: StudyReminderPushReadinessAggregate
+  current: StudyReminderCurrentEffectiveAggregate
+}
+
+export function emptyPushReadinessAggregate(): StudyReminderPushReadinessAggregate {
+  return {
+    totalStudents: 0,
+    alreadyRecorded: 0,
+    preferenceDisabled: 0,
+    readyForPush: 0,
+    emailOnly: 0,
+    cannotDeliver: 0,
+    failedToEvaluate: 0,
+    missingStudyLog: 0,
+    preferenceEnabled: 0,
+    withActivePushSubscription: 0,
+    withoutActivePushSubscription: 0,
+    withEmail: 0,
+    withoutEmail: 0,
+  }
+}
+
+export function emptyCurrentEffectiveAggregate(extras: {
+  deliveryMode: StudyReminderDeliveryMode
+  pushSendingEnabled: boolean
+}): StudyReminderCurrentEffectiveAggregate {
+  return {
+    deliveryMode: extras.deliveryMode,
+    pushSendingEnabled: extras.pushSendingEnabled,
+    legacyEmailPreferred:
+      extras.deliveryMode === 'legacy' || extras.deliveryMode === 'dry-run',
+    totalStudents: 0,
+    alreadyRecorded: 0,
+    preferenceDisabled: 0,
+    wouldUsePush: 0,
+    wouldUseEmail: 0,
+    cannotDeliver: 0,
+    failedToEvaluate: 0,
+  }
+}
+
 export function assertDryRunFinalSum(aggregate: StudyReminderDryRunAggregate): boolean {
   const sum =
     aggregate.alreadyRecorded +
     aggregate.preferenceDisabled +
     aggregate.wouldUsePushFirst +
     aggregate.wouldFallbackToEmail +
+    aggregate.cannotDeliver +
+    aggregate.failedToEvaluate
+  return sum === aggregate.totalStudents
+}
+
+export function assertPushReadinessSum(
+  aggregate: StudyReminderPushReadinessAggregate,
+): boolean {
+  const sum =
+    aggregate.alreadyRecorded +
+    aggregate.preferenceDisabled +
+    aggregate.readyForPush +
+    aggregate.emailOnly +
+    aggregate.cannotDeliver +
+    aggregate.failedToEvaluate
+  return sum === aggregate.totalStudents
+}
+
+export function assertCurrentEffectiveSum(
+  aggregate: StudyReminderCurrentEffectiveAggregate,
+): boolean {
+  const sum =
+    aggregate.alreadyRecorded +
+    aggregate.preferenceDisabled +
+    aggregate.wouldUsePush +
+    aggregate.wouldUseEmail +
     aggregate.cannotDeliver +
     aggregate.failedToEvaluate
   return sum === aggregate.totalStudents
@@ -134,6 +319,58 @@ function tallyFinal(
       break
     case 'would_fallback_email':
       aggregate.wouldFallbackToEmail += 1
+      break
+    case 'cannot_deliver':
+      aggregate.cannotDeliver += 1
+      break
+    case 'failed':
+      aggregate.failedToEvaluate += 1
+      break
+  }
+}
+
+function tallyReadiness(
+  aggregate: StudyReminderPushReadinessAggregate,
+  bucket: StudyReminderPushReadinessBucket,
+) {
+  switch (bucket) {
+    case 'already_recorded':
+      aggregate.alreadyRecorded += 1
+      break
+    case 'preference_disabled':
+      aggregate.preferenceDisabled += 1
+      break
+    case 'ready_for_push':
+      aggregate.readyForPush += 1
+      break
+    case 'email_only':
+      aggregate.emailOnly += 1
+      break
+    case 'cannot_deliver':
+      aggregate.cannotDeliver += 1
+      break
+    case 'failed':
+      aggregate.failedToEvaluate += 1
+      break
+  }
+}
+
+function tallyCurrent(
+  aggregate: StudyReminderCurrentEffectiveAggregate,
+  bucket: StudyReminderCurrentEffectiveBucket,
+) {
+  switch (bucket) {
+    case 'already_recorded':
+      aggregate.alreadyRecorded += 1
+      break
+    case 'preference_disabled':
+      aggregate.preferenceDisabled += 1
+      break
+    case 'would_use_push':
+      aggregate.wouldUsePush += 1
+      break
+    case 'would_use_email':
+      aggregate.wouldUseEmail += 1
       break
     case 'cannot_deliver':
       aggregate.cannotDeliver += 1
@@ -176,6 +413,7 @@ async function fetchAllPages<T>(
 /**
  * Bulk read-only evaluation for all students (or a prefiltered id set).
  * Selects only id/email/flags — never endpoints or keys.
+ * Cron dry-run uses this with the live PUSH_SENDING_ENABLED gate.
  */
 export async function evaluateStudyReminderDryRunAggregate(params?: {
   dateKey?: string
@@ -239,6 +477,89 @@ export async function evaluateStudyReminderDryRunAggregate(params?: {
 
   aggregate.durationMs = Date.now() - started
   return { ok: true, aggregate }
+}
+
+/**
+ * Admin full dry-run: readiness (Push-on assumption) + current env effective path.
+ * One snapshot load; never sends or writes.
+ */
+export async function evaluateAdminFullDryRunReport(params?: {
+  dateKey?: string
+  env?: NodeJS.ProcessEnv | Record<string, string | undefined>
+}): Promise<
+  | { ok: true; report: AdminFullDryRunReport }
+  | { ok: false; code: 'admin_unavailable' | 'query_failed' }
+> {
+  const started = Date.now()
+  const env = params?.env ?? process.env
+  const dateKey = params?.dateKey ?? getJstDateKey()
+  const pushSendingEnabled = isPushSendingAvailable(env)
+  const resolved = resolveEffectiveStudyReminderMode(env)
+  const evaluatedAt = new Date().toISOString()
+
+  const admin = createAdminClient()
+  if (!admin) return { ok: false, code: 'admin_unavailable' }
+
+  const loaded = await loadDryRunSnapshots(admin, dateKey)
+  if (!loaded.ok) return { ok: false, code: 'query_failed' }
+
+  const readiness = emptyPushReadinessAggregate()
+  const current = emptyCurrentEffectiveAggregate({
+    deliveryMode: resolved.mode,
+    pushSendingEnabled,
+  })
+
+  for (const student of loaded.students) {
+    readiness.totalStudents += 1
+    current.totalStudents += 1
+
+    const hasLog = loaded.hasLogByStudentId.get(student.id) === true
+    const pref = loaded.preferenceByUserId.get(student.id)
+    const preferenceEnabled =
+      pref === undefined ? DEFAULT_NOTIFICATION_PREFERENCES.study_reminder : pref
+    const hasActivePush = loaded.pushUserIds.has(student.id)
+    const hasEmail = student.hasEmail
+
+    if (!hasLog) readiness.missingStudyLog += 1
+    if (preferenceEnabled) readiness.preferenceEnabled += 1
+    if (hasActivePush) readiness.withActivePushSubscription += 1
+    else readiness.withoutActivePushSubscription += 1
+    if (hasEmail) readiness.withEmail += 1
+    else readiness.withoutEmail += 1
+
+    const baseInput: Omit<StudyReminderDryRunClassifyInput, 'pushSendingEnabled'> = {
+      recordedLookupOk: true,
+      hasLog,
+      preferenceLookupOk: true,
+      preferenceEnabled,
+      subscriptionLookupOk: true,
+      hasActivePush,
+      emailLookupOk: true,
+      hasEmail,
+    }
+
+    tallyReadiness(readiness, classifyPushReadiness(baseInput))
+    tallyCurrent(
+      current,
+      classifyCurrentEffective({
+        input: { ...baseInput, pushSendingEnabled },
+        mode: resolved.mode,
+        studentId: student.id,
+        allowlist: resolved.allowlist,
+      }),
+    )
+  }
+
+  return {
+    ok: true,
+    report: {
+      dateKey,
+      evaluatedAt,
+      durationMs: Date.now() - started,
+      readiness,
+      current,
+    },
+  }
 }
 
 async function loadDryRunSnapshots(
