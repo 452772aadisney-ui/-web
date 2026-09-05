@@ -9,6 +9,11 @@ import {
 } from '@/lib/announcements/audience'
 import { createClient } from '@/lib/supabase/server'
 import { fetchStudentList } from '@/lib/study/queries'
+import { STUDY_REMINDER_STUDENT_CONCURRENCY } from '@/lib/study/study-reminder-mode'
+import {
+  STUDY_REMINDER_EMAIL_SUBJECT,
+  buildMissingStudyLogEmailText,
+} from '@/lib/study/study-reminder-email'
 
 async function fetchProfileTagAssignments(): Promise<Array<{ profile_id: string; tag_id: string }>> {
   const supabase = await createClient()
@@ -211,20 +216,19 @@ export async function notifyStudyFeedbackReceived(input: {
 export async function notifyStudentsMissingTodayStudyLog(
   report: DailyStudyDigestReport,
 ): Promise<{ recipientCount: number; sentCount: number; skippedCount: number }> {
-  const baseUrl = getAppBaseUrl()
-  const url = `${baseUrl}/dashboard/study`
-
   const emails = report.notRecorded
     .map((student) => student.email?.trim())
     .filter((email): email is string => Boolean(email))
 
-  return sendEmailToMany(emails, {
-    subject: '【受験生web】本日の学習記録が未入力です',
-    text: [
-      '本日（' + report.dateLabel + '）の学習記録がまだ登録されていません。',
-      '忘れずに記録してください。',
-      '',
-      `記録する: ${url}`,
-    ].join('\n'),
-  })
+  return sendEmailToMany(
+    emails,
+    {
+      subject: STUDY_REMINDER_EMAIL_SUBJECT,
+      text: buildMissingStudyLogEmailText(report.dateLabel),
+    },
+    {
+      omitRecipientFromLogs: true,
+      concurrency: STUDY_REMINDER_STUDENT_CONCURRENCY,
+    },
+  )
 }

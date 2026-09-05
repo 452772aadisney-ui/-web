@@ -192,8 +192,9 @@ rollback は上記テーブル4つと enum 3つのみ削除する（既存シス
 | 1-5 | 購読 API・クライアント基盤 |
 | 1-6 | 生徒向け通知設定画面 |
 | 1-7 | 送信基盤・テスト通知 |
-| 2-1 | 未記録リマインダー調査・統合設計（実装なし）→ [web-push-study-reminder-integration.md](./web-push-study-reminder-integration.md) |
-| 第2段階（2-2〜） | 学習リマインダー Push-first 実装、他通知接続、メールフォールバック |
+| 2-1 | 未記録リマインダー調査・設計 |
+| 2-2 | 未記録リマインダー Push-first 実装（初期 mode=`legacy`）→ [web-push-study-reminder-integration.md](./web-push-study-reminder-integration.md) |
+| 第2段階（続き） | allowlist/all への段階切替、他通知接続 |
 
 ---
 

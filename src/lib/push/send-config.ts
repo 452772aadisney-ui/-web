@@ -47,7 +47,7 @@ function looksLikeBase64UrlKey(value: string, minLen: number): boolean {
  * - Local/dev without `VERCEL_ENV` can send when the flag is true (manual testing)
  */
 export function resolvePushSendConfig(
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
 ): PushSendConfigResult {
   // Exact match only — no trim, no case folding (" true", "TRUE", "1" all fail).
   if (env.PUSH_SENDING_ENABLED !== 'true') {
@@ -80,7 +80,7 @@ export function resolvePushSendConfig(
 
 /** Public-safe flag for UI (does not distinguish incomplete vs disabled). */
 export function isPushSendingAvailable(
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
 ): boolean {
   return resolvePushSendConfig(env).ok
 }

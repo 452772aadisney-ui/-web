@@ -5,11 +5,13 @@ export type SendEmailInput = {
   subject: string
   text: string
   replyTo?: string
+  /** When true, failure logs omit recipient address (cron / study-reminder path). */
+  omitRecipientFromLogs?: boolean
 }
 
 export type SendEmailResult =
-  | { ok: true }
-  | { ok: false; skipped?: boolean; error?: string }
+  | { ok: true; httpStatus?: number }
+  | { ok: false; skipped?: boolean; error?: string; httpStatus?: number | null }
 
 function formatResendError(raw: string, to: string): string {
   try {
@@ -67,11 +69,18 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
 
     if (!response.ok) {
       const error = await response.text()
+      if (input.omitRecipientFromLogs) {
+        console.error('[email] send failed:', {
+          status: response.status,
+          errorClass: 'provider_error',
+        })
+        return { ok: false, error: 'provider_error', httpStatus: response.status }
+      }
       console.error('[email] send failed:', { from, to, error })
-      return { ok: false, error: formatResendError(error, to) }
+      return { ok: false, error: formatResendError(error, to), httpStatus: response.status }
     }
 
-    return { ok: true }
+    return { ok: true, httpStatus: response.status }
   } catch (error) {
     console.error('[email] send error:', error)
     return { ok: false, error: error instanceof Error ? error.message : 'Unknown error' }
@@ -81,6 +90,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
 export async function sendEmailToMany(
   recipients: string[],
   input: Omit<SendEmailInput, 'to'>,
+  options?: { omitRecipientFromLogs?: boolean; concurrency?: number },
 ): Promise<{ recipientCount: number; sentCount: number; skippedCount: number }> {
   const uniqueRecipients = [...new Set(recipients.map((email) => email.trim()).filter(Boolean))]
   if (uniqueRecipients.length === 0) {
@@ -88,15 +98,42 @@ export async function sendEmailToMany(
     return { recipientCount: 0, sentCount: 0, skippedCount: 0 }
   }
 
-  const results = await Promise.all(
-    uniqueRecipients.map((to) =>
-      sendEmail({
-        to,
-        subject: input.subject,
-        text: input.text,
-      }),
-    ),
-  )
+  const concurrency = options?.concurrency
+  let results: SendEmailResult[]
+
+  if (concurrency && concurrency > 0 && concurrency < uniqueRecipients.length) {
+    results = new Array(uniqueRecipients.length)
+    let nextIndex = 0
+    async function worker() {
+      for (;;) {
+        const current = nextIndex
+        nextIndex += 1
+        if (current >= uniqueRecipients.length) return
+        results[current] = await sendEmail({
+          to: uniqueRecipients[current]!,
+          subject: input.subject,
+          text: input.text,
+          replyTo: input.replyTo,
+          omitRecipientFromLogs: options?.omitRecipientFromLogs,
+        })
+      }
+    }
+    await Promise.all(
+      Array.from({ length: concurrency }, () => worker()),
+    )
+  } else {
+    results = await Promise.all(
+      uniqueRecipients.map((to) =>
+        sendEmail({
+          to,
+          subject: input.subject,
+          text: input.text,
+          replyTo: input.replyTo,
+          omitRecipientFromLogs: options?.omitRecipientFromLogs,
+        }),
+      ),
+    )
+  }
 
   const sentCount = results.filter((result) => result.ok).length
   const skippedCount = results.filter((result) => !result.ok && result.skipped).length
