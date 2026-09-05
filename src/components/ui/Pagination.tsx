@@ -89,11 +89,16 @@ export function Pagination({
           href={buildPageHref(pathname, prevPage, pageParam, preserveParams)}
           className={cn(linkClass, 'px-3')}
           scroll={false}
+          aria-label="前のページ"
         >
           前へ
         </Link>
       ) : (
-        <span className={cn(linkClass, 'px-3', disabledClass)} aria-disabled="true">
+        <span
+          className={cn(linkClass, 'px-3', disabledClass)}
+          aria-disabled="true"
+          aria-label="前のページ"
+        >
           前へ
         </span>
       )}
@@ -107,7 +112,11 @@ export function Pagination({
             <span key={page} className="flex items-center gap-1">
               {showEllipsis && <span className="px-1 text-sm text-muted">…</span>}
               {page === currentPage ? (
-                <span className={cn(linkClass, activeClass)} aria-current="page">
+                <span
+                  className={cn(linkClass, activeClass)}
+                  aria-current="page"
+                  aria-label={`ページ ${page}`}
+                >
                   {page}
                 </span>
               ) : (
@@ -115,6 +124,7 @@ export function Pagination({
                   href={buildPageHref(pathname, page, pageParam, preserveParams)}
                   className={linkClass}
                   scroll={false}
+                  aria-label={`ページ ${page}`}
                 >
                   {page}
                 </Link>
@@ -129,11 +139,16 @@ export function Pagination({
           href={buildPageHref(pathname, nextPage, pageParam, preserveParams)}
           className={cn(linkClass, 'px-3')}
           scroll={false}
+          aria-label="次のページ"
         >
           次へ
         </Link>
       ) : (
-        <span className={cn(linkClass, 'px-3', disabledClass)} aria-disabled="true">
+        <span
+          className={cn(linkClass, 'px-3', disabledClass)}
+          aria-disabled="true"
+          aria-label="次のページ"
+        >
           次へ
         </span>
       )}

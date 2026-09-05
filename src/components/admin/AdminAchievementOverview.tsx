@@ -4,6 +4,7 @@ import type {
   AdminAchievementStatusRow,
   AdminStudentRankingRow,
 } from '@/lib/achievements/admin-queries'
+import { formatJstDateTime } from '@/lib/datetime/format-jst'
 import { cn } from '@/lib/utils'
 
 const CATEGORY_LABELS: Record<AdminAchievementStatusRow['category'], string> = {
@@ -13,16 +14,6 @@ const CATEGORY_LABELS: Record<AdminAchievementStatusRow['category'], string> = {
   daily: '1日',
   balance: 'バランス',
   secret: 'シークレット',
-}
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('ja-JP', {
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }
 
 function RankingTable({ rankings }: { rankings: AdminStudentRankingRow[] }) {
@@ -119,7 +110,7 @@ function AchievementStatusTable({ achievements }: { achievements: AdminAchieveme
                     >
                       {student.name}
                     </Link>
-                    <span className="text-muted">{formatDateTime(student.unlockedAt)}</span>
+                    <span className="text-muted">{formatJstDateTime(student.unlockedAt)}</span>
                   </li>
                 ))}
               </ul>

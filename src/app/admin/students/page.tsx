@@ -75,6 +75,7 @@ export default async function AdminStudentsPage({
             name="q"
             defaultValue={query}
             placeholder="氏名・生徒ID・メールで検索"
+            aria-label="生徒を検索"
             className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
           {grade && <input type="hidden" name="grade" value={grade} />}

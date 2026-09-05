@@ -24,8 +24,17 @@ export const STUDENT_HAMBURGER_ITEMS = [
 
 export const ADMIN_HAMBURGER_ITEMS = [
   { href: '/admin', label: 'マイページ' },
+  { href: '/admin/students', label: '生徒一覧' },
+  { href: '/admin/study-daily', label: '毎日管理' },
+  { href: '/admin/schedule', label: 'スケジュール' },
+  { href: '/admin/quizzes', label: '小テスト' },
+  { href: '/admin/coaching', label: 'コーチング' },
+  { href: '/admin/bookshelf', label: '本棚' },
+  { href: '/admin/chat', label: 'メッセージ' },
+  { href: '/admin/announcements', label: 'お知らせ' },
+  { href: '/admin/achievements', label: '実績' },
   { href: '/admin/faq', label: 'FAQ管理' },
   { href: '/admin/tags', label: 'タグ管理' },
   { href: '/admin/notifications', label: '通知運用' },
-  { href: '/admin/profile', label: 'プロフィールを編集' },
+  { href: '/admin/profile', label: 'プロフィール' },
 ] as const

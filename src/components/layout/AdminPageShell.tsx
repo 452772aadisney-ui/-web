@@ -17,6 +17,7 @@ interface AdminPageShellProps {
   title: string
   backHref?: string
   backLabel?: string
+  /** Legacy main nav strip. Default off — navigation lives in the hamburger. */
   showMainNav?: boolean
   children: ReactNode
 }
@@ -25,7 +26,7 @@ export async function AdminPageShell({
   title,
   backHref,
   backLabel,
-  showMainNav = true,
+  showMainNav = false,
   children,
 }: AdminPageShellProps) {
   const profile = await getCurrentProfile()
@@ -34,7 +35,16 @@ export async function AdminPageShell({
     ? await fetchIncompleteStudyFeedbackCount(getJstDateKey())
     : 0
 
-  const menuItems: HamburgerMenuItem[] = ADMIN_HAMBURGER_ITEMS.map((item) => ({ ...item }))
+  const menuItems: HamburgerMenuItem[] = ADMIN_HAMBURGER_ITEMS.map((item) => {
+    const next: HamburgerMenuItem = { ...item }
+    if (item.href === '/admin/chat') {
+      next.badgeCount = unreadChatCount
+    }
+    if (item.href === '/admin/study-daily') {
+      next.badgeCount = incompleteStudyFeedbackCount
+    }
+    return next
+  })
   const shellWidthClass = `mx-auto w-full ${ADMIN_SHELL_MAX_WIDTH_CLASS}`
 
   return (
