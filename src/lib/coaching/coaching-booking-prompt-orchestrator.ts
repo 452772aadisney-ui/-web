@@ -106,7 +106,8 @@ function tally(
   }
 }
 
-async function ensureBookingPromptChat(params: {
+/** Shared by Cron and admin integration test. Never logs student ids. */
+export async function ensureBookingPromptChat(params: {
   admin: NonNullable<ReturnType<typeof createAdminClient>>
   studentId: string
   weekMondayKey: string

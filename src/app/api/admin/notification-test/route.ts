@@ -21,6 +21,12 @@ import {
   inspectAdminStudyReminderIntegration,
   sendAdminStudyReminderIntegrationTest,
 } from '@/lib/admin/notification-test-study-reminder-integration'
+import {
+  inspectAdminCoachingBookingPromptIntegration,
+  inspectAdminCoachingSessionPreviousDayIntegration,
+  sendAdminCoachingBookingPromptIntegrationTest,
+  sendAdminCoachingSessionPreviousDayIntegrationTest,
+} from '@/lib/admin/notification-test-coaching-integration'
 import type { Profile } from '@/types/database'
 
 export const runtime = 'nodejs'
@@ -181,6 +187,141 @@ export async function POST(request: Request) {
       emailSent: result.emailSent,
       skippedReason: result.skippedReason,
       failed: result.failed,
+    })
+  }
+
+  if (action === 'coaching-booking-inspect') {
+    const targetUserId =
+      typeof body.targetUserId === 'string' ? body.targetUserId.trim() : ''
+    if (!targetUserId) return jsonError(400, 'invalid_target')
+
+    const result = await inspectAdminCoachingBookingPromptIntegration({ targetUserId })
+    if (!result.ok) {
+      if (result.code === 'feature_disabled') return jsonError(503, 'feature_disabled')
+      if (result.code === 'forbidden_target') return jsonError(403, 'forbidden')
+      if (result.code === 'invalid_target') return jsonError(400, 'invalid_target')
+      if (result.code === 'admin_unavailable') return jsonError(503, 'unavailable')
+      return jsonError(500, 'internal_error')
+    }
+    return json({ ok: true, coachingBookingInspect: result.inspect })
+  }
+
+  if (action === 'coaching-booking-send') {
+    const targetUserId =
+      typeof body.targetUserId === 'string' ? body.targetUserId.trim() : ''
+    if (!targetUserId) return jsonError(400, 'invalid_target')
+
+    const result = await sendAdminCoachingBookingPromptIntegrationTest({
+      adminUserId: auth.userId,
+      targetUserId,
+    })
+    if (!result.ok) {
+      if (result.code === 'rate_limited') {
+        return jsonError(429, 'rate_limited', {
+          retryAfterSeconds: result.retryAfterSeconds,
+          eligible: Boolean(result.eligible),
+          sent: false,
+          pushSent: false,
+          emailSent: false,
+          chatMessageCreated: Boolean(result.chatMessageCreated),
+          skippedReason: result.skippedReason ?? null,
+          failed: Boolean(result.failed),
+        })
+      }
+      if (result.code === 'in_progress') return jsonError(409, 'in_progress')
+      if (result.code === 'feature_disabled') return jsonError(503, 'feature_disabled')
+      if (result.code === 'forbidden_target') return jsonError(403, 'forbidden')
+      if (result.code === 'invalid_target') return jsonError(400, 'invalid_target')
+      if (result.code === 'admin_unavailable') return jsonError(503, 'unavailable')
+      return jsonError(502, 'send_failed', {
+        eligible: Boolean(result.eligible),
+        sent: false,
+        pushSent: false,
+        emailSent: false,
+        chatMessageCreated: Boolean(result.chatMessageCreated),
+        skippedReason: null,
+        failed: true,
+      })
+    }
+
+    return json({
+      ok: true,
+      eligible: result.eligible,
+      sent: result.sent,
+      pushSent: result.pushSent,
+      emailSent: result.emailSent,
+      chatMessageCreated: result.chatMessageCreated,
+      skippedReason: result.skippedReason,
+      failed: result.failed,
+    })
+  }
+
+  if (action === 'coaching-session-inspect') {
+    const targetUserId =
+      typeof body.targetUserId === 'string' ? body.targetUserId.trim() : ''
+    if (!targetUserId) return jsonError(400, 'invalid_target')
+
+    const result = await inspectAdminCoachingSessionPreviousDayIntegration({
+      targetUserId,
+    })
+    if (!result.ok) {
+      if (result.code === 'feature_disabled') return jsonError(503, 'feature_disabled')
+      if (result.code === 'forbidden_target') return jsonError(403, 'forbidden')
+      if (result.code === 'invalid_target') return jsonError(400, 'invalid_target')
+      if (result.code === 'admin_unavailable') return jsonError(503, 'unavailable')
+      return jsonError(500, 'internal_error')
+    }
+    return json({ ok: true, coachingSessionInspect: result.inspect })
+  }
+
+  if (action === 'coaching-session-send') {
+    const targetUserId =
+      typeof body.targetUserId === 'string' ? body.targetUserId.trim() : ''
+    if (!targetUserId) return jsonError(400, 'invalid_target')
+
+    const result = await sendAdminCoachingSessionPreviousDayIntegrationTest({
+      adminUserId: auth.userId,
+      targetUserId,
+    })
+    if (!result.ok) {
+      if (result.code === 'rate_limited') {
+        return jsonError(429, 'rate_limited', {
+          retryAfterSeconds: result.retryAfterSeconds,
+          eligible: Boolean(result.eligible),
+          sent: false,
+          pushSent: false,
+          emailSent: false,
+          chatMessageCreated: false,
+          skippedReason: result.skippedReason ?? null,
+          failed: Boolean(result.failed),
+        })
+      }
+      if (result.code === 'in_progress') return jsonError(409, 'in_progress')
+      if (result.code === 'feature_disabled') return jsonError(503, 'feature_disabled')
+      if (result.code === 'forbidden_target') return jsonError(403, 'forbidden')
+      if (result.code === 'invalid_target') return jsonError(400, 'invalid_target')
+      if (result.code === 'admin_unavailable') return jsonError(503, 'unavailable')
+      return jsonError(502, 'send_failed', {
+        eligible: Boolean(result.eligible),
+        sent: false,
+        pushSent: false,
+        emailSent: false,
+        chatMessageCreated: false,
+        skippedReason: null,
+        failed: true,
+      })
+    }
+
+    return json({
+      ok: true,
+      eligible: result.eligible,
+      sent: result.sent,
+      pushSent: result.pushSent,
+      emailSent: result.emailSent,
+      chatMessageCreated: result.chatMessageCreated,
+      skippedReason: result.skippedReason,
+      failed: result.failed,
+      processedCount: result.processedCount ?? 0,
     })
   }
 

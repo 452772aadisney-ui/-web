@@ -12,6 +12,10 @@ const {
   runAdminCoachingReminderDryRun,
   inspectAdminStudyReminderIntegration,
   sendAdminStudyReminderIntegrationTest,
+  inspectAdminCoachingBookingPromptIntegration,
+  sendAdminCoachingBookingPromptIntegrationTest,
+  inspectAdminCoachingSessionPreviousDayIntegration,
+  sendAdminCoachingSessionPreviousDayIntegrationTest,
 } = vi.hoisted(() => ({
   createClient: vi.fn(),
   verifyRequestOrigin: vi.fn(),
@@ -24,6 +28,10 @@ const {
   runAdminCoachingReminderDryRun: vi.fn(),
   inspectAdminStudyReminderIntegration: vi.fn(),
   sendAdminStudyReminderIntegrationTest: vi.fn(),
+  inspectAdminCoachingBookingPromptIntegration: vi.fn(),
+  sendAdminCoachingBookingPromptIntegrationTest: vi.fn(),
+  inspectAdminCoachingSessionPreviousDayIntegration: vi.fn(),
+  sendAdminCoachingSessionPreviousDayIntegrationTest: vi.fn(),
 }))
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -64,6 +72,17 @@ vi.mock('@/lib/admin/notification-test-study-reminder-integration', () => ({
     inspectAdminStudyReminderIntegration(...args),
   sendAdminStudyReminderIntegrationTest: (...args: unknown[]) =>
     sendAdminStudyReminderIntegrationTest(...args),
+}))
+
+vi.mock('@/lib/admin/notification-test-coaching-integration', () => ({
+  inspectAdminCoachingBookingPromptIntegration: (...args: unknown[]) =>
+    inspectAdminCoachingBookingPromptIntegration(...args),
+  sendAdminCoachingBookingPromptIntegrationTest: (...args: unknown[]) =>
+    sendAdminCoachingBookingPromptIntegrationTest(...args),
+  inspectAdminCoachingSessionPreviousDayIntegration: (...args: unknown[]) =>
+    inspectAdminCoachingSessionPreviousDayIntegration(...args),
+  sendAdminCoachingSessionPreviousDayIntegrationTest: (...args: unknown[]) =>
+    sendAdminCoachingSessionPreviousDayIntegrationTest(...args),
 }))
 
 vi.mock('@/lib/admin/notification-test-config', async () => {
@@ -499,6 +518,58 @@ describe('POST /api/admin/notification-test', () => {
       failed: false,
     })
     expect(JSON.stringify(body)).not.toMatch(/@|endpoint|p256dh|vapid|allowlist/i)
+  })
+
+  it('rejects coaching-booking-send for forbidden allowlist target', async () => {
+    sendAdminCoachingBookingPromptIntegrationTest.mockResolvedValue({
+      ok: false,
+      code: 'forbidden_target',
+    })
+    const res = await POST(
+      new Request('https://app.example/api/admin/notification-test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://app.example' },
+        body: JSON.stringify({
+          action: 'coaching-booking-send',
+          targetUserId: '22222222-2222-2222-2222-222222222222',
+        }),
+      }),
+    )
+    expect(res.status).toBe(403)
+  })
+
+  it('returns coaching-session-inspect without sending', async () => {
+    inspectAdminCoachingSessionPreviousDayIntegration.mockResolvedValue({
+      ok: true,
+      inspect: {
+        tomorrowKey: '2026-09-07',
+        scheduledCount: 0,
+        startTimes: [],
+        preferenceEnabled: true,
+        preferenceRowExists: false,
+        hasActivePushSubscription: false,
+        canEmailFallback: true,
+        pushSendingEnabled: true,
+        deliveryMode: 'all',
+        bookings: [],
+        projectedOutcome: 'no_scheduled_booking',
+        projectedOutcomeLabel: '明日のscheduled予約なし',
+      },
+    })
+    const res = await POST(
+      new Request('https://app.example/api/admin/notification-test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://app.example' },
+        body: JSON.stringify({
+          action: 'coaching-session-inspect',
+          targetUserId: '11111111-1111-1111-1111-111111111111',
+        }),
+      }),
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.coachingSessionInspect.projectedOutcome).toBe('no_scheduled_booking')
+    expect(sendAdminCoachingSessionPreviousDayIntegrationTest).not.toHaveBeenCalled()
   })
 })
 

@@ -122,6 +122,23 @@ Rollback: `COACHING_REMINDER_DELIVERY_MODE=legacy`（または削除）。コー
 
 ---
 
+## 管理者向け実経路テスト（7-6）
+
+`/admin/notifications` の「コーチング通知 実経路テスト」。許可されたテストアカウント1人専用。
+
+| 項目 | 内容 |
+|------|------|
+| 判定のみ | 送信・チャット・event／deliveryなし |
+| 予約催促実送信 | `processCoachingReminderNewPath` + `ensureBookingPromptChat`（チャット追加の可能性あり） |
+| 前日案内実送信 | 明日の `scheduled` 予約のみ。予約の作成・変更なし |
+| idempotency | `admin-coaching-booking-prompt-test:…` / `admin-coaching-session-previous-day-test:…` |
+| 通常Cron | 起動しない。冪等性キーも分離。時刻起動は Vercel Logs で別確認 |
+| metadata | `source=admin_notification_ops` + integration `kind` + `adminUserId` |
+
+本番利用後は `ADMIN_NOTIFICATION_TEST_ENABLED` を OFF に戻す。緊急停止: `COACHING_REMINDER_DELIVERY_MODE=legacy`。
+
+---
+
 ## 性能・pace
 
 - 候補一括取得、生徒並列数 3、メールは `withResendSendPace`（300ms+）

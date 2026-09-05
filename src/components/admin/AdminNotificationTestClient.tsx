@@ -7,6 +7,10 @@ import type {
   AdminTestTargetOption,
 } from '@/lib/admin/notification-test-service'
 import type { StudyReminderIntegrationInspect } from '@/lib/admin/notification-test-study-reminder-integration'
+import type {
+  CoachingBookingPromptInspect,
+  CoachingSessionPreviousDayInspect,
+} from '@/lib/admin/notification-test-coaching-integration'
 import type { AdminFullDryRunReport } from '@/lib/study/study-reminder-dry-run'
 import type { AnnouncementAdminDryRunReport } from '@/lib/announcements/announcement-dry-run'
 import type { MessageAdminDryRunReport } from '@/lib/chat/message-dry-run'
@@ -38,6 +42,28 @@ type ApiStudyReminderSendResponse = {
   emailSent: boolean
   skippedReason: string | null
   failed: boolean
+}
+
+type ApiCoachingBookingInspectResponse = {
+  ok: true
+  coachingBookingInspect: CoachingBookingPromptInspect
+}
+
+type ApiCoachingSessionInspectResponse = {
+  ok: true
+  coachingSessionInspect: CoachingSessionPreviousDayInspect
+}
+
+type ApiCoachingIntegrationSendResponse = {
+  ok: true
+  eligible: boolean
+  sent: boolean
+  pushSent: boolean
+  emailSent: boolean
+  chatMessageCreated: boolean
+  skippedReason: string | null
+  failed: boolean
+  processedCount?: number
 }
 
 type ApiDryRunResponse = {
@@ -158,6 +184,10 @@ export function AdminNotificationTestClient({
   const [inspect, setInspect] = useState<AdminTestInspectResult | null>(null)
   const [studyInspect, setStudyInspect] =
     useState<StudyReminderIntegrationInspect | null>(null)
+  const [coachingBookingInspect, setCoachingBookingInspect] =
+    useState<CoachingBookingPromptInspect | null>(null)
+  const [coachingSessionInspect, setCoachingSessionInspect] =
+    useState<CoachingSessionPreviousDayInspect | null>(null)
   const [dryRun, setDryRun] = useState<AdminFullDryRunReport | null>(null)
   const [dryRunSumOk, setDryRunSumOk] = useState<{
     readiness: boolean
@@ -174,6 +204,10 @@ export function AdminNotificationTestClient({
     | 'email'
     | 'study-reminder-inspect'
     | 'study-reminder-send'
+    | 'coaching-booking-inspect'
+    | 'coaching-booking-send'
+    | 'coaching-session-inspect'
+    | 'coaching-session-send'
     | 'full-dry-run'
     | 'announcement-dry-run'
     | 'message-dry-run'
@@ -291,6 +325,232 @@ export function AdminNotificationTestClient({
           return
         }
         toastSession.success('実経路テストが完了しました', 'admin-notification-test-toast')
+      } finally {
+        busyRef.current = false
+        setBusy(null)
+      }
+    })
+  }
+
+  const toastCoachingSendResult = (
+    toastSession: ReturnType<typeof createToastSession>,
+    data: ApiCoachingIntegrationSendResponse,
+  ) => {
+    if (data.skippedReason === 'already_booked') {
+      toastSession.success('今週予約ありのため対象外です（送信していません）', 'admin-notification-test-toast')
+      return
+    }
+    if (data.skippedReason === 'graduate_excluded') {
+      toastSession.success('既卒除外のため対象外です（送信していません）', 'admin-notification-test-toast')
+      return
+    }
+    if (data.skippedReason === 'no_scheduled_booking') {
+      toastSession.success('明日のscheduled予約がないため対象外です', 'admin-notification-test-toast')
+      return
+    }
+    if (data.skippedReason === 'cancelled_or_changed') {
+      toastSession.success('予約が変更・取消されたため送信していません', 'admin-notification-test-toast')
+      return
+    }
+    if (data.skippedReason === 'preference_disabled') {
+      toastSession.success(
+        data.chatMessageCreated
+          ? '管理者により停止中です（チャットのみ作成、通知は送っていません）'
+          : '管理者により停止中です（送信していません）',
+        'admin-notification-test-toast',
+      )
+      return
+    }
+    if (data.skippedReason === 'preview') {
+      toastSession.success('Previewのため非送信です', 'admin-notification-test-toast')
+      return
+    }
+    if (data.skippedReason === 'undeliverable') {
+      toastSession.success('配信手段なしです（送信していません）', 'admin-notification-test-toast')
+      return
+    }
+    if (data.pushSent) {
+      toastSession.success(
+        data.chatMessageCreated
+          ? 'Pushで送信しました（チャット追加あり・メールなし）'
+          : 'Pushで送信しました（メールなし）',
+        'admin-notification-test-toast',
+      )
+      return
+    }
+    if (data.emailSent) {
+      toastSession.success(
+        data.chatMessageCreated
+          ? 'メールfallbackで送信しました（チャット追加あり）'
+          : 'メールfallbackで送信しました',
+        'admin-notification-test-toast',
+      )
+      return
+    }
+    toastSession.success('実経路テストが完了しました', 'admin-notification-test-toast')
+  }
+
+  const runCoachingBookingInspect = () => {
+    if (busyRef.current || !sendFeatureAvailable || !targetId) return
+    busyRef.current = true
+    setBusy('coaching-booking-inspect')
+    const toastSession = createToastSession()
+    startTransition(async () => {
+      try {
+        const result = await postJson({
+          action: 'coaching-booking-inspect',
+          targetUserId: targetId,
+        })
+        if (!result.ok) {
+          toastSession.error(
+            result.error === 'forbidden'
+              ? '対象を確認できませんでした'
+              : '予約催促の判定を完了できませんでした',
+            'admin-notification-test-toast',
+          )
+          return
+        }
+        const data = result.data as ApiCoachingBookingInspectResponse
+        setCoachingBookingInspect(data.coachingBookingInspect)
+        toastSession.success('判定のみ完了しました（送信していません）', 'admin-notification-test-toast')
+      } finally {
+        busyRef.current = false
+        setBusy(null)
+      }
+    })
+  }
+
+  const runCoachingBookingSend = () => {
+    if (busyRef.current || !sendFeatureAvailable || !targetId) return
+    if (
+      !window.confirm(
+        [
+          '選択したテストアカウント1人だけに、今週のコーチング予約催促の実経路テストを実行します。',
+          selectedLabel ? `対象表示名: ${selectedLabel}` : '',
+          'テストアカウントのチャットにも予約催促が1件追加されます。',
+          '通常の月曜Cronは起動しません。一般生徒には送られません。よろしいですか？',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      )
+    ) {
+      return
+    }
+
+    busyRef.current = true
+    setBusy('coaching-booking-send')
+    const toastSession = createToastSession()
+    startTransition(async () => {
+      try {
+        const result = await postJson({
+          action: 'coaching-booking-send',
+          targetUserId: targetId,
+        })
+        if (!result.ok) {
+          if (result.status === 429) {
+            toastSession.error(
+              result.retryAfterSeconds
+                ? `短時間に何度も実行できません。約${result.retryAfterSeconds}秒後に再度お試しください`
+                : '短時間に何度も実行できません。しばらくしてから再度お試しください',
+              'admin-notification-test-toast',
+            )
+            return
+          }
+          if (result.error === 'in_progress') {
+            toastSession.error('別の処理が実行中です', 'admin-notification-test-toast')
+            return
+          }
+          toastSession.error('テスト通知を送信できませんでした', 'admin-notification-test-toast')
+          return
+        }
+        toastCoachingSendResult(
+          toastSession,
+          result.data as ApiCoachingIntegrationSendResponse,
+        )
+      } finally {
+        busyRef.current = false
+        setBusy(null)
+      }
+    })
+  }
+
+  const runCoachingSessionInspect = () => {
+    if (busyRef.current || !sendFeatureAvailable || !targetId) return
+    busyRef.current = true
+    setBusy('coaching-session-inspect')
+    const toastSession = createToastSession()
+    startTransition(async () => {
+      try {
+        const result = await postJson({
+          action: 'coaching-session-inspect',
+          targetUserId: targetId,
+        })
+        if (!result.ok) {
+          toastSession.error(
+            result.error === 'forbidden'
+              ? '対象を確認できませんでした'
+              : '前日案内の判定を完了できませんでした',
+            'admin-notification-test-toast',
+          )
+          return
+        }
+        const data = result.data as ApiCoachingSessionInspectResponse
+        setCoachingSessionInspect(data.coachingSessionInspect)
+        toastSession.success('判定のみ完了しました（送信していません）', 'admin-notification-test-toast')
+      } finally {
+        busyRef.current = false
+        setBusy(null)
+      }
+    })
+  }
+
+  const runCoachingSessionSend = () => {
+    if (busyRef.current || !sendFeatureAvailable || !targetId) return
+    if (
+      !window.confirm(
+        [
+          '選択したテストアカウント1人だけに、コーチング前日案内の実経路テストを実行します。',
+          selectedLabel ? `対象表示名: ${selectedLabel}` : '',
+          '明日のscheduled予約がある場合のみ送信します（予約は作成・変更しません）。',
+          '通常の20時Cronは起動しません。一般生徒には送られません。よろしいですか？',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      )
+    ) {
+      return
+    }
+
+    busyRef.current = true
+    setBusy('coaching-session-send')
+    const toastSession = createToastSession()
+    startTransition(async () => {
+      try {
+        const result = await postJson({
+          action: 'coaching-session-send',
+          targetUserId: targetId,
+        })
+        if (!result.ok) {
+          if (result.status === 429) {
+            toastSession.error(
+              result.retryAfterSeconds
+                ? `短時間に何度も実行できません。約${result.retryAfterSeconds}秒後に再度お試しください`
+                : '短時間に何度も実行できません。しばらくしてから再度お試しください',
+              'admin-notification-test-toast',
+            )
+            return
+          }
+          if (result.error === 'in_progress') {
+            toastSession.error('別の処理が実行中です', 'admin-notification-test-toast')
+            return
+          }
+          toastSession.error('テスト通知を送信できませんでした', 'admin-notification-test-toast')
+          return
+        }
+        toastCoachingSendResult(
+          toastSession,
+          result.data as ApiCoachingIntegrationSendResponse,
+        )
       } finally {
         busyRef.current = false
         setBusy(null)
@@ -1088,6 +1348,8 @@ export function AdminNotificationTestClient({
                 setTargetId(event.target.value)
                 setInspect(null)
                 setStudyInspect(null)
+                setCoachingBookingInspect(null)
+                setCoachingSessionInspect(null)
               }}
               disabled={busy !== null}
             >
@@ -1173,6 +1435,138 @@ export function AdminNotificationTestClient({
                 <p className="text-xs text-muted">判定のみでは送信・event／delivery作成は行いません。</p>
               </dl>
             )}
+          </section>
+
+          <section
+            className="rounded-2xl border border-border bg-card p-5 shadow-sm"
+            aria-labelledby={`${baseId}-coaching-path-heading`}
+          >
+            <h2 id={`${baseId}-coaching-path-heading`} className="text-base font-bold text-foreground">
+              コーチング通知 実経路テスト
+            </h2>
+            <p className="mt-2 text-sm text-muted">
+              通常Cronを起動せず、選択したテストアカウント1人だけを現在のコーチング通知経路で判定・送信します。
+              通常の冪等性キーは使いません。
+            </p>
+
+            <div className="mt-5 border-t border-border pt-4">
+              <h3 className="text-sm font-bold text-foreground">今週のコーチング予約催促</h3>
+              <p className="mt-1 text-xs text-muted">
+                固定文面: 受験生web / 今週のコーチングを予約してください。 / /dashboard/coaching
+              </p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <button
+                  type="button"
+                  className="rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-card disabled:opacity-60"
+                  disabled={!targetId || busy !== null}
+                  onClick={runCoachingBookingInspect}
+                >
+                  {busy === 'coaching-booking-inspect' ? '判定中…' : '判定のみ'}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition hover:bg-primary-hover disabled:opacity-60"
+                  disabled={!targetId || busy !== null}
+                  onClick={runCoachingBookingSend}
+                >
+                  {busy === 'coaching-booking-send' ? '送信中…' : '予約催促を実経路テスト'}
+                </button>
+              </div>
+              {coachingBookingInspect && (
+                <dl className="mt-4 space-y-2 text-sm text-foreground" aria-live="polite">
+                  <div className="font-medium">
+                    想定結果：{coachingBookingInspect.projectedOutcomeLabel}
+                  </div>
+                  <div>対象週（JST）: {coachingBookingInspect.weekLabel}</div>
+                  <div>生徒として有効: {coachingBookingInspect.isStudent ? 'はい' : 'いいえ'}</div>
+                  <div>
+                    既卒除外: {coachingBookingInspect.graduateExcluded ? '該当' : '非該当'}
+                  </div>
+                  <div>
+                    今週のコーチング予約:{' '}
+                    {coachingBookingInspect.hasBookingThisWeek ? 'あり' : 'なし'}
+                  </div>
+                  <div>
+                    管理者通知設定:{' '}
+                    {coachingBookingInspect.preferenceEnabled ? '有効' : '停止中'}
+                  </div>
+                  <div>
+                    有効Push購読:{' '}
+                    {coachingBookingInspect.hasActivePushSubscription ? 'あり' : 'なし'}
+                  </div>
+                  <div>
+                    メールfallback:{' '}
+                    {coachingBookingInspect.canEmailFallback ? '可能' : '不可'}
+                  </div>
+                  <p className="text-xs text-muted">
+                    判定のみでは送信・チャット作成・event作成は行いません。実送信時はチャットに催促が追加される場合があります。
+                  </p>
+                </dl>
+              )}
+            </div>
+
+            <div className="mt-5 border-t border-border pt-4">
+              <h3 className="text-sm font-bold text-foreground">コーチング前日の時刻通知</h3>
+              <p className="mt-1 text-xs text-muted">
+                固定文面: 受験生web / 明日HH:mmからコーチングです。 / /dashboard/coaching
+              </p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <button
+                  type="button"
+                  className="rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-card disabled:opacity-60"
+                  disabled={!targetId || busy !== null}
+                  onClick={runCoachingSessionInspect}
+                >
+                  {busy === 'coaching-session-inspect' ? '判定中…' : '判定のみ'}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition hover:bg-primary-hover disabled:opacity-60"
+                  disabled={!targetId || busy !== null}
+                  onClick={runCoachingSessionSend}
+                >
+                  {busy === 'coaching-session-send' ? '送信中…' : '前日案内を実経路テスト'}
+                </button>
+              </div>
+              {coachingSessionInspect && (
+                <dl className="mt-4 space-y-2 text-sm text-foreground" aria-live="polite">
+                  <div className="font-medium">
+                    想定結果：{coachingSessionInspect.projectedOutcomeLabel}
+                  </div>
+                  <div>明日の日付（JST）: {coachingSessionInspect.tomorrowKey}</div>
+                  <div>明日のscheduled予約件数: {coachingSessionInspect.scheduledCount}</div>
+                  <div>
+                    予約開始時刻:{' '}
+                    {coachingSessionInspect.startTimes.length > 0
+                      ? coachingSessionInspect.startTimes.join(' / ')
+                      : 'なし'}
+                  </div>
+                  {coachingSessionInspect.bookings.length > 0 && (
+                    <div>
+                      キャンセル状態:{' '}
+                      {coachingSessionInspect.bookings
+                        .map((b) => `${b.startTimeHm}=${b.status}`)
+                        .join(' / ')}
+                    </div>
+                  )}
+                  <div>
+                    管理者通知設定:{' '}
+                    {coachingSessionInspect.preferenceEnabled ? '有効' : '停止中'}
+                  </div>
+                  <div>
+                    有効Push購読:{' '}
+                    {coachingSessionInspect.hasActivePushSubscription ? 'あり' : 'なし'}
+                  </div>
+                  <div>
+                    メールfallback:{' '}
+                    {coachingSessionInspect.canEmailFallback ? '可能' : '不可'}
+                  </div>
+                  <p className="text-xs text-muted">
+                    判定のみでは送信・event作成は行いません。予約の作成・変更はしません。
+                  </p>
+                </dl>
+              )}
+            </div>
           </section>
 
           <section

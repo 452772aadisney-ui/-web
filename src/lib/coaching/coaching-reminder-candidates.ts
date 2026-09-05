@@ -114,6 +114,33 @@ export async function loadBookingPromptCandidates(params?: {
   }
 }
 
+/** Single-student graduate (既卒) exclusion — no full student scan. */
+export async function isStudentExcludedAsGraduate(
+  admin: AdminClient,
+  studentId: string,
+): Promise<{ ok: true; excluded: boolean } | { ok: false }> {
+  const { data, error } = await admin
+    .from('profile_student_tags')
+    .select('tag_id, student_tags(name, category)')
+    .eq('profile_id', studentId)
+
+  if (error) return { ok: false }
+
+  for (const row of (data ?? []) as Array<{
+    student_tags:
+      | { name: string; category: string | null }
+      | Array<{ name: string; category: string | null }>
+      | null
+  }>) {
+    const tag = Array.isArray(row.student_tags)
+      ? row.student_tags[0]
+      : row.student_tags
+    if (!tag || tag.category !== '学年') continue
+    if (isKisotsuGradeTag(tag.name)) return { ok: true, excluded: true }
+  }
+  return { ok: true, excluded: false }
+}
+
 /** Recheck: student still has no scheduled|completed booking this week. */
 export async function studentStillUnbookedThisWeek(
   admin: AdminClient,
@@ -199,6 +226,73 @@ export async function loadSessionReminderCandidates(params?: {
   }
 
   return { ok: true, tomorrowKey, candidates }
+}
+
+/**
+ * Tomorrow bookings for one student only (inspect/send). Includes non-scheduled
+ * for cancel visibility; send path filters to scheduled.
+ */
+export async function loadTomorrowBookingsForStudent(params: {
+  studentId: string
+  now?: Date
+  admin?: AdminClient
+}): Promise<
+  | {
+      ok: true
+      tomorrowKey: string
+      bookings: Array<{
+        bookingId: string
+        startsAt: string
+        slotDate: string
+        status: string
+      }>
+    }
+  | { ok: false }
+> {
+  const admin = params.admin ?? createAdminClient()
+  if (!admin) return { ok: false }
+
+  const tomorrowKey = getJstTomorrowDateKey(params.now)
+
+  const { data: bookings, error } = await admin
+    .from('coaching_bookings')
+    .select('id, status, coaching_slots!inner(slot_date, starts_at)')
+    .eq('student_id', params.studentId)
+    .eq('coaching_slots.slot_date', tomorrowKey)
+
+  if (error) return { ok: false }
+
+  const rows: Array<{
+    bookingId: string
+    startsAt: string
+    slotDate: string
+    status: string
+  }> = []
+  const seen = new Set<string>()
+
+  for (const row of (bookings ?? []) as Array<{
+    id: string
+    status: string
+    coaching_slots:
+      | { slot_date: string; starts_at: string }
+      | Array<{ slot_date: string; starts_at: string }>
+  }>) {
+    if (seen.has(row.id)) continue
+    seen.add(row.id)
+    const slot = Array.isArray(row.coaching_slots)
+      ? row.coaching_slots[0]
+      : row.coaching_slots
+    if (!slot?.starts_at || !slot.slot_date) continue
+    rows.push({
+      bookingId: row.id,
+      startsAt: slot.starts_at,
+      slotDate: slot.slot_date,
+      status: row.status,
+    })
+  }
+
+  rows.sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+  return { ok: true, tomorrowKey, bookings: rows }
 }
 
 /** Recheck scheduled booking still on tomorrowKey with same starts_at. */

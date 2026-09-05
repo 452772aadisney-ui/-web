@@ -79,11 +79,17 @@ async function getOrCreateEvent(
     title: string
     body: string
     kind: CoachingReminderKind
+    eventMetadata?: Record<string, unknown>
   },
 ): Promise<{ ok: true; eventId: string } | { ok: false }> {
   const existing = await findEvent(admin, params.userId, params.idempotencyKey)
   if (!existing.ok) return { ok: false }
   if (existing.eventId) return { ok: true, eventId: existing.eventId }
+
+  const metadata = {
+    kind: params.kind,
+    ...(params.eventMetadata ?? {}),
+  }
 
   const { data: inserted, error: insertError } = await admin
     .from('notification_events')
@@ -94,7 +100,7 @@ async function getOrCreateEvent(
       title: params.title,
       body: params.body,
       target_path: COACHING_REMINDER_PUSH_PATH,
-      metadata: { kind: params.kind },
+      metadata,
     })
     .select('id')
     .single<{ id: string }>()
@@ -192,6 +198,7 @@ async function tryEmailFallback(params: {
   email: string | null
   hm?: string
   deadlineMs?: number
+  eventMetadata?: Record<string, unknown>
 }): Promise<CoachingReminderNewPathOutcome> {
   if (params.deadlineMs != null && Date.now() >= params.deadlineMs) {
     return 'timed_out'
@@ -203,6 +210,7 @@ async function tryEmailFallback(params: {
     title: params.title,
     body: params.body,
     kind: params.kind,
+    eventMetadata: params.eventMetadata,
   })
   if (!event.ok) return 'failed'
 
@@ -268,6 +276,7 @@ async function tryEmailFallback(params: {
 
 /**
  * Push-first coaching_reminder path. Never logs PII / booking ids / emails.
+ * Cron passes weekly/session keys; admin integration tests pass distinct keys + eventMetadata.
  */
 export async function processCoachingReminderNewPath(params: {
   studentUserId: string
@@ -278,6 +287,8 @@ export async function processCoachingReminderNewPath(params: {
   /** For session email body time; omit for booking prompt. */
   hm?: string
   tag: string
+  /** Merged into event metadata (admin tests override `kind` for ops distinction). */
+  eventMetadata?: Record<string, unknown>
   nowMs?: number
   deadlineMs?: number
   env?: NodeJS.ProcessEnv | Record<string, string | undefined>
@@ -287,6 +298,7 @@ export async function processCoachingReminderNewPath(params: {
 
   const nowMs = params.nowMs ?? Date.now()
   const env = params.env ?? process.env
+  const eventMetadata = params.eventMetadata ?? {}
 
   if (params.deadlineMs != null && Date.now() >= params.deadlineMs) {
     return 'timed_out'
@@ -337,6 +349,7 @@ export async function processCoachingReminderNewPath(params: {
         email: params.email,
         hm: params.hm,
         deadlineMs: params.deadlineMs,
+        eventMetadata,
       })
     }
   }
@@ -353,6 +366,17 @@ export async function processCoachingReminderNewPath(params: {
     })
 
     if (pushResult.ok) {
+      if (Object.keys(eventMetadata).length > 0) {
+        await admin
+          .from('notification_events')
+          .update({
+            metadata: {
+              kind: params.kind,
+              ...eventMetadata,
+            },
+          })
+          .eq('id', pushResult.eventId)
+      }
       if (pushResult.sent > 0) return 'push_sent'
     } else if (pushResult.code === 'preference_disabled') {
       return 'preference_disabled'
@@ -375,5 +399,6 @@ export async function processCoachingReminderNewPath(params: {
     email: params.email,
     hm: params.hm,
     deadlineMs: params.deadlineMs,
+    eventMetadata,
   })
 }

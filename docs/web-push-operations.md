@@ -115,6 +115,18 @@ NOTIFICATION_TEST_USER_IDS=<試験用UUIDのみ>
 - 緊急停止: Push全停止（`PUSH_SENDING_ENABLED`≠true）＋管理者テストOFF＋必要なら `STUDY_REMINDER_DELIVERY_MODE=legacy`
 - Cron時刻起動そのものは別途 Vercel Logs で確認
 
+### コーチング通知 実経路テスト
+
+`/admin/notifications` の「コーチング通知 実経路テスト」:
+
+- 許可されたテストアカウント1人専用。通常Cronは起動しない
+- **予約催促**: 判定のみ / 実経路送信。実送信時はチャットに `coaching_booking_reminder` が追加される場合あり
+- **前日案内**: 明日の `scheduled` 予約が必要。予約の作成・変更はしない
+- idempotency は `admin-coaching-*-test:…`（通常の `booking-prompt:` / `session-previous-day:` と分離）
+- 本番利用後は `ADMIN_NOTIFICATION_TEST_ENABLED` を OFF に戻す
+- 緊急停止: `COACHING_REMINDER_DELIVERY_MODE=legacy` ＋管理者テストOFF
+- Cron時刻起動は別途 Vercel Logs で確認
+
 ### 固定文面カテゴリテスト（notification_type=test）
 
 5種（いずれも `notification_type=test`）:

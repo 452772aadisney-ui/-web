@@ -11,6 +11,9 @@ export const ADMIN_FULL_DRY_RUN_COOLDOWN_MS = 60_000
 /** Study-reminder integration test cooldown (DB idempotency bucket). */
 export const ADMIN_STUDY_REMINDER_INTEGRATION_TEST_COOLDOWN_MS = 30_000
 
+/** Coaching reminder integration test cooldown (DB idempotency bucket). */
+export const ADMIN_COACHING_INTEGRATION_TEST_COOLDOWN_MS = 60_000
+
 export const ADMIN_TEST_PUSH_TITLE = '受験生web'
 export const ADMIN_TEST_PUSH_BODY = '学習記録リマインダーのテスト通知です。'
 export const ADMIN_TEST_PUSH_PATH = '/dashboard/study'
@@ -217,4 +220,25 @@ export function buildAdminStudyReminderIntegrationIdempotencyKey(params: {
     nowMs / ADMIN_STUDY_REMINDER_INTEGRATION_TEST_COOLDOWN_MS,
   )
   return `admin-study-reminder-test:${params.targetUserId.toLowerCase()}:${bucket}`
+}
+
+/** Distinct from Cron `booking-prompt:YYYY-MM-DD`. Never return to clients. */
+export function buildAdminCoachingBookingPromptIntegrationIdempotencyKey(params: {
+  targetUserId: string
+  nowMs?: number
+}): string {
+  const nowMs = params.nowMs ?? Date.now()
+  const bucket = Math.floor(nowMs / ADMIN_COACHING_INTEGRATION_TEST_COOLDOWN_MS)
+  return `admin-coaching-booking-prompt-test:${params.targetUserId.toLowerCase()}:${bucket}`
+}
+
+/** Distinct from Cron `session-previous-day:{bookingId}:{startsAt}`. Never return to clients. */
+export function buildAdminCoachingSessionPreviousDayIntegrationIdempotencyKey(params: {
+  bookingId: string
+  normalizedStartAt: string
+  nowMs?: number
+}): string {
+  const nowMs = params.nowMs ?? Date.now()
+  const bucket = Math.floor(nowMs / ADMIN_COACHING_INTEGRATION_TEST_COOLDOWN_MS)
+  return `admin-coaching-session-previous-day-test:${params.bookingId}:${params.normalizedStartAt}:${bucket}`
 }
