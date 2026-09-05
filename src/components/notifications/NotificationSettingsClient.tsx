@@ -1,0 +1,394 @@
+'use client'
+
+import { useCallback, useEffect, useId, useRef, useState, useTransition } from 'react'
+import {
+  getNotificationPreferences,
+  updateNotificationPreference,
+} from '@/app/notifications/actions'
+import {
+  deriveDeviceNotificationStatus,
+  deviceStatusDetail,
+  deviceStatusHeadline,
+  type DeviceNotificationStatus,
+} from '@/lib/push/device-status'
+import {
+  disablePushSubscriptionFromUser,
+  enablePushSubscriptionFromUser,
+  fetchPushServerStatus,
+  getCurrentPushSubscription,
+  getLocalPushState,
+  isStandaloneDisplayMode,
+  likelyRequiresStandaloneForPush,
+} from '@/lib/push/client'
+import { getVapidPublicKey } from '@/lib/push/env'
+import {
+  NOTIFICATION_PREFERENCE_CATEGORIES,
+  NOTIFICATION_PREFERENCE_COPY,
+  defaultNotificationPreferences,
+  type NotificationPreferencesView,
+} from '@/lib/push/preferences'
+import { createToastSession } from '@/lib/toast/app-toast'
+import type { NotificationPreferenceCategory } from '@/types/push'
+import { cn } from '@/lib/utils'
+
+type PrefsLoadState = 'loading' | 'ready' | 'error'
+
+function PreferenceSwitch({
+  id,
+  checked,
+  disabled,
+  onCheckedChange,
+  label,
+}: {
+  id: string
+  checked: boolean
+  disabled: boolean
+  onCheckedChange: (next: boolean) => void
+  label: string
+}) {
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onCheckedChange(!checked)}
+      className={cn(
+        'relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition',
+        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
+        checked ? 'border-primary bg-primary' : 'border-border bg-border',
+        disabled && 'cursor-not-allowed opacity-60',
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          'inline-block h-5 w-5 rounded-full bg-white shadow transition',
+          checked ? 'translate-x-6' : 'translate-x-1',
+        )}
+      />
+      <span className="sr-only">{checked ? 'オン' : 'オフ'}</span>
+    </button>
+  )
+}
+
+export function NotificationSettingsClient({
+  initialPreferences,
+  initialPrefsFromDatabase,
+  initialPrefsError,
+}: {
+  initialPreferences: NotificationPreferencesView
+  initialPrefsFromDatabase: boolean
+  initialPrefsError: boolean
+}) {
+  const [deviceStatus, setDeviceStatus] = useState<DeviceNotificationStatus>('loading')
+  const [prefs, setPrefs] = useState<NotificationPreferencesView>(initialPreferences)
+  const [prefsState, setPrefsState] = useState<PrefsLoadState>(
+    initialPrefsError ? 'error' : 'ready',
+  )
+  const [prefsFromDatabase, setPrefsFromDatabase] = useState(initialPrefsFromDatabase)
+  const [deviceBusy, setDeviceBusy] = useState(false)
+  const [savingCategory, setSavingCategory] = useState<NotificationPreferenceCategory | null>(
+    null,
+  )
+  const [showIosGuide, setShowIosGuide] = useState(false)
+  const [, startTransition] = useTransition()
+  const busyRef = useRef(false)
+  const baseId = useId()
+
+  const refreshDeviceStatus = useCallback(async () => {
+    const local = getLocalPushState()
+    const configured = Boolean(getVapidPublicKey()) || local.configured
+    const requiresStandalone = likelyRequiresStandaloneForPush()
+    setShowIosGuide(requiresStandalone)
+
+    let hasBrowserSubscription = false
+    try {
+      const sub = await getCurrentPushSubscription()
+      hasBrowserSubscription = Boolean(sub)
+    } catch {
+      hasBrowserSubscription = false
+    }
+
+    let serverSubscribed = false
+    let serverStatusFailed = false
+    const server = await fetchPushServerStatus()
+    if (server.ok) {
+      serverSubscribed = server.value.subscribed
+    } else if (server.code === 'network' || server.code === 'unknown') {
+      serverStatusFailed = true
+    } else if (server.code === 'not_configured') {
+      // fall through — configured flag handles messaging
+    }
+
+    const permission =
+      local.permission === 'granted' ||
+      local.permission === 'denied' ||
+      local.permission === 'default'
+        ? local.permission
+        : 'unsupported'
+
+    setDeviceStatus(
+      deriveDeviceNotificationStatus({
+        supported: local.supported,
+        requiresStandalone,
+        configured,
+        permission,
+        hasBrowserSubscription,
+        serverSubscribed,
+        serverStatusFailed,
+      }),
+    )
+  }, [])
+
+  const refreshPreferences = useCallback(async () => {
+    const result = await getNotificationPreferences()
+    if (!result.ok) {
+      setPrefsState('error')
+      return
+    }
+    setPrefs(result.preferences)
+    setPrefsFromDatabase(result.fromDatabase)
+    setPrefsState('ready')
+  }, [])
+
+  useEffect(() => {
+    void refreshDeviceStatus()
+  }, [refreshDeviceStatus])
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshDeviceStatus()
+      }
+    }
+    const onFocus = () => {
+      void refreshDeviceStatus()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onFocus)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [refreshDeviceStatus])
+
+  const handleEnable = async () => {
+    if (busyRef.current) return
+    if (deviceStatus === 'permission_denied') return
+
+    busyRef.current = true
+    setDeviceBusy(true)
+    const toastSession = createToastSession()
+
+    try {
+      const result = await enablePushSubscriptionFromUser()
+      if (!result.ok) {
+        toastSession.error(result.message)
+        await refreshDeviceStatus()
+        return
+      }
+      toastSession.success('この端末の通知を有効にしました')
+      await refreshDeviceStatus()
+    } finally {
+      busyRef.current = false
+      setDeviceBusy(false)
+    }
+  }
+
+  const handleDisable = async () => {
+    if (busyRef.current) return
+    busyRef.current = true
+    setDeviceBusy(true)
+    const toastSession = createToastSession()
+
+    try {
+      const result = await disablePushSubscriptionFromUser()
+      if (!result.ok) {
+        toastSession.error(result.message)
+        await refreshDeviceStatus()
+        return
+      }
+      toastSession.success('この端末の通知を停止しました')
+      await refreshDeviceStatus()
+    } finally {
+      busyRef.current = false
+      setDeviceBusy(false)
+    }
+  }
+
+  const handleTogglePreference = (category: NotificationPreferenceCategory, enabled: boolean) => {
+    if (prefsState !== 'ready' || savingCategory) return
+
+    const previous = prefs
+    setPrefs((current) => ({ ...current, [category]: enabled }))
+    setSavingCategory(category)
+    const toastSession = createToastSession()
+
+    startTransition(async () => {
+      const result = await updateNotificationPreference({ category, enabled })
+      if (!result.ok) {
+        setPrefs(previous)
+        toastSession.error('通知設定を更新できませんでした。もう一度お試しください')
+        setSavingCategory(null)
+        return
+      }
+      setPrefs(result.preferences)
+      setPrefsFromDatabase(true)
+      toastSession.success('通知設定を更新しました', 'notification-prefs-toast')
+      setSavingCategory(null)
+    })
+  }
+
+  const headline = deviceStatusHeadline(deviceStatus)
+  const detail = deviceStatusDetail(deviceStatus)
+  const canEnable =
+    !deviceBusy &&
+    (deviceStatus === 'permission_default' ||
+      deviceStatus === 'ready_to_enable' ||
+      deviceStatus === 'needs_sync')
+  const canDisable = !deviceBusy && deviceStatus === 'subscribed'
+  const showDeniedRetry = deviceStatus === 'permission_denied'
+
+  return (
+    <div className="space-y-6">
+      <p className="text-sm text-muted">
+        学習記録のリマインダーや、新しいお知らせをこの端末で受け取れます。
+      </p>
+
+      <section
+        className="rounded-2xl border border-border bg-card p-5 shadow-sm"
+        aria-labelledby={`${baseId}-device-heading`}
+        aria-busy={deviceStatus === 'loading' || deviceBusy}
+      >
+        <h2 id={`${baseId}-device-heading`} className="text-base font-bold text-foreground">
+          この端末の通知
+        </h2>
+        <p className="mt-2 text-sm font-medium text-foreground" role="status">
+          {headline}
+        </p>
+        {detail && <p className="mt-2 text-sm text-muted">{detail}</p>}
+
+        {showIosGuide && !isStandaloneDisplayMode() && (
+          <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-muted">
+            <li>Safariの共有ボタンを押す</li>
+            <li>「ホーム画面に追加」を選ぶ</li>
+            <li>追加した「受験生web」を開く</li>
+            <li>通知設定をもう一度開く</li>
+          </ol>
+        )}
+
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          {canEnable && (
+            <button
+              type="button"
+              onClick={() => void handleEnable()}
+              disabled={deviceBusy}
+              className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition hover:bg-primary-hover disabled:opacity-60"
+            >
+              {deviceBusy
+                ? '処理中…'
+                : deviceStatus === 'needs_sync'
+                  ? 'この端末の通知を同期する'
+                  : 'この端末で通知を受け取る'}
+            </button>
+          )}
+
+          {canDisable && (
+            <button
+              type="button"
+              onClick={() => void handleDisable()}
+              disabled={deviceBusy}
+              className="rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-card disabled:opacity-60"
+            >
+              {deviceBusy ? '処理中…' : 'この端末の通知を停止する'}
+            </button>
+          )}
+
+          {showDeniedRetry && (
+            <button
+              type="button"
+              onClick={() => void refreshDeviceStatus()}
+              className="rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-card"
+            >
+              状態を再確認する
+            </button>
+          )}
+
+          {(deviceStatus === 'network_error' || deviceStatus === 'loading') && (
+            <button
+              type="button"
+              onClick={() => void refreshDeviceStatus()}
+              disabled={deviceBusy}
+              className="rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-card disabled:opacity-60"
+            >
+              再読み込み
+            </button>
+          )}
+        </div>
+      </section>
+
+      <section
+        className="rounded-2xl border border-border bg-card p-5 shadow-sm"
+        aria-labelledby={`${baseId}-prefs-heading`}
+        aria-busy={prefsState === 'loading' || savingCategory !== null}
+      >
+        <h2 id={`${baseId}-prefs-heading`} className="text-base font-bold text-foreground">
+          受け取る通知の種類
+        </h2>
+        <p className="mt-2 text-sm text-muted">
+          通知内容の設定は、利用しているすべての端末に反映されます。この端末の通知がオフのときは、ここをオンにしてもこの端末には届きません。
+        </p>
+
+        {prefsState === 'error' ? (
+          <div className="mt-4 space-y-3">
+            <p className="text-sm text-muted" role="alert">
+              {deviceStatusDetail('prefs_load_error')}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setPrefsState('loading')
+                void refreshPreferences()
+              }}
+              className="rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium"
+            >
+              設定を再読み込み
+            </button>
+          </div>
+        ) : (
+          <ul className="mt-4 divide-y divide-border">
+            {NOTIFICATION_PREFERENCE_CATEGORIES.map((category) => {
+              const copy = NOTIFICATION_PREFERENCE_COPY[category]
+              const switchId = `${baseId}-${category}`
+              const checked = prefs[category]
+              const disabled = prefsState !== 'ready' || savingCategory !== null
+
+              return (
+                <li key={category} className="flex items-start justify-between gap-4 py-4 first:pt-2">
+                  <label htmlFor={switchId} className="min-w-0 flex-1 cursor-pointer">
+                    <span className="block text-sm font-medium text-foreground">{copy.title}</span>
+                    <span className="mt-1 block text-sm text-muted">{copy.description}</span>
+                  </label>
+                  <PreferenceSwitch
+                    id={switchId}
+                    checked={checked}
+                    disabled={disabled}
+                    label={`${copy.title}（${checked ? 'オン' : 'オフ'}）`}
+                    onCheckedChange={(next) => handleTogglePreference(category, next)}
+                  />
+                </li>
+              )
+            })}
+          </ul>
+        )}
+
+        {!prefsFromDatabase && prefsState === 'ready' && (
+          <p className="mt-2 text-xs text-muted">まだ保存前の初期設定です。変更するとアカウントに保存されます。</p>
+        )}
+      </section>
+    </div>
+  )
+}

@@ -18,6 +18,7 @@ export const STUDENT_HAMBURGER_ITEMS = [
   { href: '/dashboard/announcements', label: 'お知らせ' },
   { href: '/dashboard/chat', label: 'メッセージ' },
   { href: '/dashboard/faq', label: 'よくある質問' },
+  { href: '/dashboard/notifications', label: '通知設定' },
   { href: '/dashboard/info', label: '生徒情報' },
 ] as const
 

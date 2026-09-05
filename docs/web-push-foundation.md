@@ -158,6 +158,18 @@ rollback は上記テーブル4つと enum 3つのみ削除する（既存シス
 
 ---
 
+## 通知設定画面（1-6）
+
+- URL: `/dashboard/notifications`
+- 導線: 生徒ハンバーガー「通知設定」（管理者メニューには無し）
+- 端末ON/OFF: 1-5 の `enablePushSubscriptionFromUser` / `disablePushSubscriptionFromUser`
+- カテゴリ: RLS 経由の Server Action（`getNotificationPreferences` / `updateNotificationPreference`）
+- DB列名: `study_reminder` / `announcement` / `message` / `coaching_reminder`（`*_enabled` ではない）
+- `test` は設定UIに出さない
+- ページ表示では通知許可を要求しない
+
+---
+
 ## フェーズ
 
 | 工程 | 内容 |
@@ -165,7 +177,8 @@ rollback は上記テーブル4つと enum 3つのみ削除する（既存シス
 | 1-3 | DB・RLS・型（migration `050`、本番適用済み） |
 | 1-4 | Manifest・Service Worker |
 | 1-5 | 購読 API・クライアント基盤 |
-| 1-6 以降 | 通知設定画面・送信・既存メール接続 |
+| 1-6 | 生徒向け通知設定画面 |
+| 1-7 以降 | テスト通知・送信・既存メール接続 |
 
 ---
 
