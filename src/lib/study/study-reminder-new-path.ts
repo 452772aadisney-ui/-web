@@ -12,6 +12,7 @@ import {
   STUDY_REMINDER_PUSH_TITLE,
   sendMissingStudyLogEmail,
 } from '@/lib/study/study-reminder-email'
+import { classifyStudyReminderDryRunFinal } from '@/lib/study/study-reminder-dry-run'
 
 export type StudyReminderNewPathOutcome =
   | 'push_sent'
@@ -489,6 +490,7 @@ export async function processStudyReminderNewPath(params: {
 
 /**
  * Dry-run classification for one candidate (no sends, no event writes).
+ * Uses the same final classifier as admin full dry-run / Cron bulk dry-run.
  */
 export async function classifyStudyReminderDryRun(params: {
   candidate: StudyReminderCandidate
@@ -515,33 +517,40 @@ export async function classifyStudyReminderDryRun(params: {
     params.candidate.studentId,
     params.dateKey,
   )
-  if (!recorded.ok) return { ok: true, bucket: 'failed' }
-  if (recorded.hasLog) return { ok: true, bucket: 'recordedBeforeSend' }
-
   const pref = await getStudyReminderPreferenceEnabled(
     admin,
     params.candidate.studentId,
   )
-  if (!pref.ok) return { ok: true, bucket: 'failed' }
-  if (!pref.enabled) return { ok: true, bucket: 'preferenceDisabled' }
-
   const subs = await countActivePushSubscriptions(admin, params.candidate.studentId)
-  if (!subs.ok) return { ok: true, bucket: 'failed' }
 
-  if (subs.count > 0 && isPushSendingAvailable()) {
-    return { ok: true, bucket: 'wouldUsePushFirst' }
-  }
+  const finalBucket = classifyStudyReminderDryRunFinal({
+    recordedLookupOk: recorded.ok,
+    hasLog: recorded.ok ? recorded.hasLog : false,
+    preferenceLookupOk: pref.ok,
+    preferenceEnabled: pref.ok ? pref.enabled : true,
+    subscriptionLookupOk: subs.ok,
+    hasActivePush: subs.ok ? subs.count > 0 : false,
+    emailLookupOk: true,
+    hasEmail: Boolean(params.candidate.email),
+    pushSendingEnabled: isPushSendingAvailable(),
+  })
 
-  if (subs.count === 0) {
-    if (!params.candidate.email) {
+  switch (finalBucket) {
+    case 'already_recorded':
+      return { ok: true, bucket: 'recordedBeforeSend' }
+    case 'preference_disabled':
+      return { ok: true, bucket: 'preferenceDisabled' }
+    case 'would_use_push':
+      return { ok: true, bucket: 'wouldUsePushFirst' }
+    case 'would_fallback_email':
+      // Historical Cron counter: no-push + email vs push-disabled + email
+      if (subs.ok && subs.count === 0) {
+        return { ok: true, bucket: 'noPushSubscription' }
+      }
+      return { ok: true, bucket: 'wouldFallbackToEmail' }
+    case 'cannot_deliver':
       return { ok: true, bucket: 'noEmail' }
-    }
-    return { ok: true, bucket: 'noPushSubscription' }
+    case 'failed':
+      return { ok: true, bucket: 'failed' }
   }
-
-  // Has subs but push sending unavailable → would fallback to email
-  if (!params.candidate.email) {
-    return { ok: true, bucket: 'noEmail' }
-  }
-  return { ok: true, bucket: 'wouldFallbackToEmail' }
 }

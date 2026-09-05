@@ -5,7 +5,10 @@ import { AdminPageShell } from '@/components/layout/AdminPageShell'
 import { AdminNarrowContent } from '@/components/layout/AdminNarrowContent'
 import { AdminNotificationTestClient } from '@/components/admin/AdminNotificationTestClient'
 import { listAdminNotificationTestTargets } from '@/lib/admin/notification-test-service'
-import { resolveAdminNotificationTestAvailability } from '@/lib/admin/notification-test-config'
+import {
+  isAdminNotificationTestEnabled,
+  resolveAdminNotificationTestAvailability,
+} from '@/lib/admin/notification-test-config'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,6 +41,7 @@ export default async function AdminNotificationTestPage() {
         </p>
         <AdminNotificationTestClient
           initialFeatureAvailable={Boolean(featureAvailable)}
+          initialFlagEnabled={isAdminNotificationTestEnabled()}
           initialDisabledReason={disabledReason}
           initialTargets={targets}
         />

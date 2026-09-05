@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { isJsonContentType, verifyRequestOrigin } from '@/lib/push/origin'
-import { resolveAdminNotificationTestAvailability } from '@/lib/admin/notification-test-config'
+import {
+  isAdminNotificationTestEnabled,
+  resolveAdminNotificationTestAvailability,
+} from '@/lib/admin/notification-test-config'
 import {
   inspectAdminNotificationTestTarget,
   listAdminNotificationTestTargets,
   sendAdminNotificationTestEmail,
   sendAdminNotificationTestPush,
 } from '@/lib/admin/notification-test-service'
+import { runAdminFullStudyReminderDryRun } from '@/lib/admin/notification-test-full-dry-run'
 import type { Profile } from '@/types/database'
 
 export const runtime = 'nodejs'
@@ -64,7 +68,7 @@ export async function GET() {
   return json({
     featureAvailable: listed.featureAvailable,
     disabledReason: listed.featureAvailable ? null : listed.reason,
-    flagEnabled: availability.available || availability.reason !== 'flag_off',
+    flagEnabled: isAdminNotificationTestEnabled(),
     targets: listed.featureAvailable ? listed.targets : [],
   })
 }
@@ -75,8 +79,9 @@ type PostBody = {
 }
 
 /**
- * Actions: inspect | push | email
+ * Actions: inspect | push | email | full-dry-run
  * Never accepts title/body/path/type from the client.
+ * full-dry-run does not use NOTIFICATION_TEST_USER_IDS.
  */
 export async function POST(request: Request) {
   const origin = verifyRequestOrigin(request)
@@ -94,6 +99,32 @@ export async function POST(request: Request) {
   }
 
   const action = body.action
+
+  if (action === 'full-dry-run') {
+    const result = await runAdminFullStudyReminderDryRun({ adminUserId: auth.userId })
+    if (!result.ok) {
+      if (result.code === 'rate_limited') {
+        return jsonError(429, 'rate_limited', {
+          retryAfterSeconds: result.retryAfterSeconds,
+        })
+      }
+      if (result.code === 'in_progress') {
+        return jsonError(409, 'in_progress')
+      }
+      if (result.code === 'feature_disabled') return jsonError(503, 'feature_disabled')
+      if (result.code === 'admin_unavailable') return jsonError(503, 'unavailable')
+      return jsonError(500, 'dry_run_failed')
+    }
+
+    // Counts only — never user IDs, names, emails, or endpoints.
+    return json({
+      ok: true,
+      dryRun: result.aggregate,
+      sumConsistent: result.sumConsistent,
+      notice: 'evaluation_only_no_notifications_sent',
+    })
+  }
+
   const targetUserId =
     typeof body.targetUserId === 'string' ? body.targetUserId.trim() : ''
 

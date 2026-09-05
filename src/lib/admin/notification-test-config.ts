@@ -5,6 +5,9 @@
 
 export const ADMIN_NOTIFICATION_TEST_COOLDOWN_MS = 30_000
 
+/** Admin full dry-run cooldown (process-local; not cross-instance). */
+export const ADMIN_FULL_DRY_RUN_COOLDOWN_MS = 60_000
+
 export const ADMIN_TEST_PUSH_TITLE = '受験生web'
 export const ADMIN_TEST_PUSH_BODY = '学習記録リマインダーのテスト通知です。'
 export const ADMIN_TEST_PUSH_PATH = '/dashboard/study'

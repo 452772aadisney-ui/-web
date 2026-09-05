@@ -375,36 +375,65 @@ describe('runStudyReminderJob modes', () => {
   })
 
   it('keeps legacy email in dry-run and does not create push sends', async () => {
+    const studentIds = [
+      '11111111-1111-1111-1111-111111111111',
+      '22222222-2222-2222-2222-222222222222',
+    ]
     createAdminClient.mockReturnValue({
       from(table: string) {
+        if (table === 'profiles') {
+          return {
+            select: () => ({
+              eq: () => {
+                const chain = {
+                  in: () => chain,
+                  range: async () => ({
+                    data: studentIds.map((id) => ({ id, email: `${id}@example.com` })),
+                    error: null,
+                  }),
+                }
+                return chain
+              },
+            }),
+          }
+        }
         if (table === 'study_logs') {
           return {
             select: () => ({
-              eq: () => ({
-                eq: () => ({
-                  limit: async () => ({ data: [], error: null }),
-                }),
-              }),
+              eq: () => {
+                const chain = {
+                  in: () => chain,
+                  range: async () => ({ data: [], error: null }),
+                }
+                return chain
+              },
             }),
           }
         }
         if (table === 'notification_preferences') {
           return {
-            select: () => ({
-              eq: () => ({
-                maybeSingle: async () => ({ data: null, error: null }),
-              }),
-            }),
+            select: () => {
+              const chain = {
+                in: () => chain,
+                range: async () => ({ data: [], error: null }),
+              }
+              return chain
+            },
           }
         }
         if (table === 'push_subscriptions') {
           return {
             select: () => ({
-              eq: () => ({
-                is: () => ({
-                  limit: async () => ({ data: [{ id: 's' }], error: null }),
-                }),
-              }),
+              is: () => {
+                const chain = {
+                  in: () => chain,
+                  range: async () => ({
+                    data: studentIds.map((id) => ({ user_id: id })),
+                    error: null,
+                  }),
+                }
+                return chain
+              },
             }),
           }
         }

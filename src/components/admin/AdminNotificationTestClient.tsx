@@ -3,19 +3,30 @@
 import { useId, useRef, useState, useTransition } from 'react'
 import { createToastSession } from '@/lib/toast/app-toast'
 import type { AdminTestInspectResult, AdminTestTargetOption } from '@/lib/admin/notification-test-service'
+import type { StudyReminderDryRunAggregate } from '@/lib/study/study-reminder-dry-run'
 
 type Props = {
   initialFeatureAvailable: boolean
+  initialFlagEnabled: boolean
   initialDisabledReason: string | null
   initialTargets: AdminTestTargetOption[]
 }
 
 type ApiInspectResponse = { ok: true; inspect: AdminTestInspectResult }
 
-async function postAction(
-  action: 'inspect' | 'push' | 'email',
-  targetUserId: string,
-): Promise<{ ok: true; data: unknown } | { ok: false; status: number; error: string; retryAfterSeconds?: number }> {
+type ApiDryRunResponse = {
+  ok: true
+  dryRun: StudyReminderDryRunAggregate
+  sumConsistent: boolean
+  notice: string
+}
+
+async function postJson(
+  body: Record<string, unknown>,
+): Promise<
+  | { ok: true; data: unknown }
+  | { ok: false; status: number; error: string; retryAfterSeconds?: number }
+> {
   try {
     const response = await fetch('/api/admin/notification-test', {
       method: 'POST',
@@ -24,12 +35,20 @@ async function postAction(
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ action, targetUserId }),
+      body: JSON.stringify(body),
       cache: 'no-store',
     })
 
-    let payload: { error?: string; retryAfterSeconds?: number; ok?: boolean; inspect?: AdminTestInspectResult; sent?: number } =
-      {}
+    let payload: {
+      error?: string
+      retryAfterSeconds?: number
+      ok?: boolean
+      inspect?: AdminTestInspectResult
+      sent?: number
+      dryRun?: StudyReminderDryRunAggregate
+      sumConsistent?: boolean
+      notice?: string
+    } = {}
     try {
       payload = (await response.json()) as typeof payload
     } catch {
@@ -58,7 +77,7 @@ function disabledReasonMessage(reason: string | null): string {
       return '現在、通知テスト機能は停止しています（機能フラグOFF）。'
     case 'allowlist_empty':
     case 'allowlist_invalid':
-      return '現在、通知テスト機能は停止しています（テスト対象の設定が無効）。'
+      return '現在、テストアカウント送信は停止しています（テスト対象の設定が無効）。全体dry-runは機能フラグONなら利用できます。'
     case 'admin_unavailable':
       return '現在、通知テスト機能は利用できません。'
     default:
@@ -66,8 +85,23 @@ function disabledReasonMessage(reason: string | null): string {
   }
 }
 
+function formatEvaluatedAt(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  return new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(date)
+}
+
 export function AdminNotificationTestClient({
   initialFeatureAvailable,
+  initialFlagEnabled,
   initialDisabledReason,
   initialTargets,
 }: Props) {
@@ -76,15 +110,18 @@ export function AdminNotificationTestClient({
     initialTargets.length === 1 ? initialTargets[0]!.id : '',
   )
   const [inspect, setInspect] = useState<AdminTestInspectResult | null>(null)
-  const [busy, setBusy] = useState<'inspect' | 'push' | 'email' | null>(null)
+  const [dryRun, setDryRun] = useState<StudyReminderDryRunAggregate | null>(null)
+  const [dryRunSumOk, setDryRunSumOk] = useState<boolean | null>(null)
+  const [busy, setBusy] = useState<'inspect' | 'push' | 'email' | 'full-dry-run' | null>(null)
   const busyRef = useRef(false)
   const [, startTransition] = useTransition()
 
-  const featureAvailable = initialFeatureAvailable && initialTargets.length > 0
+  const sendFeatureAvailable = initialFeatureAvailable && initialTargets.length > 0
+  const dryRunAvailable = initialFlagEnabled
   const selectedLabel = initialTargets.find((t) => t.id === targetId)?.label ?? ''
 
-  const run = (action: 'inspect' | 'push' | 'email', confirmMessage?: string) => {
-    if (busyRef.current || !featureAvailable || !targetId) return
+  const runSendAction = (action: 'inspect' | 'push' | 'email', confirmMessage?: string) => {
+    if (busyRef.current || !sendFeatureAvailable || !targetId) return
     if (confirmMessage && !window.confirm(confirmMessage)) return
 
     busyRef.current = true
@@ -93,7 +130,7 @@ export function AdminNotificationTestClient({
 
     startTransition(async () => {
       try {
-        const result = await postAction(action, targetId)
+        const result = await postJson({ action, targetUserId: targetId })
         if (!result.ok) {
           if (result.status === 429) {
             toastSession.error(
@@ -138,13 +175,172 @@ export function AdminNotificationTestClient({
     })
   }
 
-  return (
-    <div className="space-y-6" aria-busy={busy !== null}>
-      <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-foreground">
-        この画面は、許可されたテストアカウントだけに通知を送信します。
-      </p>
+  const runFullDryRun = () => {
+    if (busyRef.current || !dryRunAvailable) return
 
-      {!featureAvailable ? (
+    busyRef.current = true
+    setBusy('full-dry-run')
+    const toastSession = createToastSession()
+
+    startTransition(async () => {
+      try {
+        const result = await postJson({ action: 'full-dry-run' })
+        if (!result.ok) {
+          if (result.status === 429) {
+            toastSession.error(
+              result.retryAfterSeconds
+                ? `短時間に何度も実行できません。約${result.retryAfterSeconds}秒後に再度お試しください`
+                : '短時間に何度も実行できません。しばらくしてから再度お試しください',
+              'admin-notification-test-toast',
+            )
+            return
+          }
+          if (result.error === 'in_progress') {
+            toastSession.error('dry-runの実行中です。完了後に再度お試しください', 'admin-notification-test-toast')
+            return
+          }
+          toastSession.error('dry-runを完了できませんでした', 'admin-notification-test-toast')
+          return
+        }
+
+        const data = result.data as ApiDryRunResponse
+        setDryRun(data.dryRun)
+        setDryRunSumOk(data.sumConsistent)
+        toastSession.success('dry-runの集計が完了しました', 'admin-notification-test-toast')
+      } finally {
+        busyRef.current = false
+        setBusy(null)
+      }
+    })
+  }
+
+  return (
+    <div className="space-y-8" aria-busy={busy !== null}>
+      <section
+        className="rounded-2xl border border-border bg-card p-5 shadow-sm"
+        aria-labelledby={`${baseId}-dry-run-heading`}
+      >
+        <h2 id={`${baseId}-dry-run-heading`} className="text-base font-bold text-foreground">
+          全体dry-run
+        </h2>
+        <p className="mt-2 text-sm text-muted">
+          現在のデータを使って、22:00の新しい通知方式なら何人が各処理の対象になるか確認します。Push・メールは送信しません。
+        </p>
+
+        {!dryRunAvailable ? (
+          <p className="mt-4 text-sm text-muted" role="status">
+            {disabledReasonMessage(initialDisabledReason ?? 'flag_off')}
+          </p>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="mt-4 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-card disabled:opacity-60"
+              disabled={busy !== null}
+              onClick={runFullDryRun}
+            >
+              {busy === 'full-dry-run' ? '集計中…' : '全体dry-runを実行'}
+            </button>
+
+            {dryRun && (
+              <div className="mt-4 space-y-3" aria-live="polite">
+                <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-foreground">
+                  これは判定結果の確認です。Push・メールは送信されていません。
+                </p>
+                <dl className="grid gap-2 text-sm text-foreground sm:grid-cols-2">
+                  <div>
+                    <dt className="text-muted">対象日（JST）</dt>
+                    <dd className="font-medium">{dryRun.dateKey}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">実行日時</dt>
+                    <dd className="font-medium">{formatEvaluatedAt(dryRun.evaluatedAt)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">通常配信モード</dt>
+                    <dd className="font-medium">{dryRun.deliveryMode}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">Push送信機能</dt>
+                    <dd className="font-medium">{dryRun.pushSendingEnabled ? 'ON' : 'OFF'}</dd>
+                  </div>
+                  {typeof dryRun.durationMs === 'number' ? (
+                    <div>
+                      <dt className="text-muted">処理時間</dt>
+                      <dd className="font-medium">{dryRun.durationMs} ms</dd>
+                    </div>
+                  ) : null}
+                </dl>
+
+                <h3 className="pt-2 text-sm font-semibold text-foreground">最終分類（重複なし）</h3>
+                <dl className="grid gap-2 text-sm text-foreground sm:grid-cols-2">
+                  <div>
+                    <dt className="text-muted">生徒数</dt>
+                    <dd className="font-medium">{dryRun.totalStudents}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">本日記録済み</dt>
+                    <dd className="font-medium">{dryRun.alreadyRecorded}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">通知設定OFF</dt>
+                    <dd className="font-medium">{dryRun.preferenceDisabled}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">Push対象</dt>
+                    <dd className="font-medium">{dryRun.wouldUsePushFirst}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">メールfallback対象</dt>
+                    <dd className="font-medium">{dryRun.wouldFallbackToEmail}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">配信手段なし</dt>
+                    <dd className="font-medium">{dryRun.cannotDeliver}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">判定エラー</dt>
+                    <dd className="font-medium">{dryRun.failedToEvaluate}</dd>
+                  </div>
+                </dl>
+                {dryRunSumOk === false ? (
+                  <p className="text-sm text-amber-800" role="status">
+                    最終分類の合計が生徒数と一致しません。再実行して確認してください。
+                  </p>
+                ) : null}
+
+                <h3 className="pt-2 text-sm font-semibold text-foreground">参考値（重複し得る）</h3>
+                <dl className="grid gap-2 text-sm text-foreground sm:grid-cols-2">
+                  <div>
+                    <dt className="text-muted">本日未記録</dt>
+                    <dd className="font-medium">{dryRun.missingStudyLog}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">通知設定ON（設定行なし含む）</dt>
+                    <dd className="font-medium">{dryRun.preferenceEnabled}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">有効Push購読あり</dt>
+                    <dd className="font-medium">{dryRun.withActivePushSubscription}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">有効Push購読なし</dt>
+                    <dd className="font-medium">{dryRun.withoutActivePushSubscription}</dd>
+                  </div>
+                </dl>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      <div className="border-t border-border pt-2">
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-foreground">
+          以下は許可されたテストアカウントだけへの実送信・個別確認です。全体dry-runとは別の操作です。
+        </p>
+      </div>
+
+      {!sendFeatureAvailable ? (
         <p className="text-sm text-muted" role="status">
           {disabledReasonMessage(initialDisabledReason)}
         </p>
@@ -193,7 +389,7 @@ export function AdminNotificationTestClient({
               type="button"
               className="mt-4 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-card disabled:opacity-60"
               disabled={!targetId || busy !== null}
-              onClick={() => run('inspect')}
+              onClick={() => runSendAction('inspect')}
             >
               {busy === 'inspect' ? '確認中…' : '判定のみ実行'}
             </button>
@@ -233,7 +429,7 @@ export function AdminNotificationTestClient({
                 className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition hover:bg-primary-hover disabled:opacity-60"
                 disabled={!targetId || busy !== null}
                 onClick={() =>
-                  run(
+                  runSendAction(
                     'push',
                     [
                       '許可されたテストアカウントに、テスト用Pushを1件送信します。',
@@ -253,7 +449,7 @@ export function AdminNotificationTestClient({
                 className="rounded-xl border border-primary/40 bg-background px-4 py-2.5 text-sm font-medium text-primary transition hover:bg-primary/10 disabled:opacity-60"
                 disabled={!targetId || busy !== null}
                 onClick={() =>
-                  run(
+                  runSendAction(
                     'email',
                     [
                       '許可されたテストアカウントに、テスト用メールを1件送信します。',

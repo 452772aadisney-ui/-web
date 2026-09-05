@@ -8,6 +8,7 @@ const {
   sendAdminNotificationTestPush,
   listAdminNotificationTestTargets,
   resolveAdminNotificationTestAvailability,
+  runAdminFullStudyReminderDryRun,
 } = vi.hoisted(() => ({
   createClient: vi.fn(),
   verifyRequestOrigin: vi.fn(),
@@ -16,6 +17,7 @@ const {
   sendAdminNotificationTestPush: vi.fn(),
   listAdminNotificationTestTargets: vi.fn(),
   resolveAdminNotificationTestAvailability: vi.fn(),
+  runAdminFullStudyReminderDryRun: vi.fn(),
 }))
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -33,6 +35,10 @@ vi.mock('@/lib/admin/notification-test-service', () => ({
   sendAdminNotificationTestPush: (...args: unknown[]) => sendAdminNotificationTestPush(...args),
   sendAdminNotificationTestEmail: vi.fn(),
   listAdminNotificationTestTargets: (...args: unknown[]) => listAdminNotificationTestTargets(...args),
+}))
+
+vi.mock('@/lib/admin/notification-test-full-dry-run', () => ({
+  runAdminFullStudyReminderDryRun: (...args: unknown[]) => runAdminFullStudyReminderDryRun(...args),
 }))
 
 vi.mock('@/lib/admin/notification-test-config', async () => {
@@ -192,6 +198,78 @@ describe('POST /api/admin/notification-test', () => {
     const body = await res.json()
     expect(body.error).toBe('rate_limited')
     expect(body.retryAfterSeconds).toBe(12)
+  })
+
+  it('rejects non-json content type', async () => {
+    isJsonContentType.mockReturnValue(false)
+    const res = await POST(
+      new Request('https://app.example/api/admin/notification-test', {
+        method: 'POST',
+        headers: { origin: 'https://app.example' },
+        body: JSON.stringify({ action: 'full-dry-run' }),
+      }),
+    )
+    expect(res.status).toBe(415)
+  })
+
+  it('runs full dry-run without targetUserId and without PII', async () => {
+    runAdminFullStudyReminderDryRun.mockResolvedValue({
+      ok: true,
+      sumConsistent: true,
+      aggregate: {
+        dateKey: '2026-09-05',
+        evaluatedAt: '2026-09-05T13:00:00.000Z',
+        durationMs: 8,
+        deliveryMode: 'legacy',
+        pushSendingEnabled: false,
+        totalStudents: 2,
+        alreadyRecorded: 1,
+        preferenceDisabled: 0,
+        wouldUsePushFirst: 0,
+        wouldFallbackToEmail: 1,
+        cannotDeliver: 0,
+        failedToEvaluate: 0,
+        missingStudyLog: 1,
+        preferenceEnabled: 2,
+        withActivePushSubscription: 0,
+        withoutActivePushSubscription: 2,
+      },
+    })
+
+    const res = await POST(
+      new Request('https://app.example/api/admin/notification-test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://app.example' },
+        body: JSON.stringify({ action: 'full-dry-run' }),
+      }),
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+    expect(body.notice).toBe('evaluation_only_no_notifications_sent')
+    expect(body.dryRun.totalStudents).toBe(2)
+    expect(JSON.stringify(body)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i)
+    expect(JSON.stringify(body)).not.toContain('@')
+    expect(inspectAdminNotificationTestTarget).not.toHaveBeenCalled()
+    expect(sendAdminNotificationTestPush).not.toHaveBeenCalled()
+  })
+
+  it('maps full dry-run rate limits', async () => {
+    runAdminFullStudyReminderDryRun.mockResolvedValue({
+      ok: false,
+      code: 'rate_limited',
+      retryAfterSeconds: 45,
+    })
+    const res = await POST(
+      new Request('https://app.example/api/admin/notification-test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://app.example' },
+        body: JSON.stringify({ action: 'full-dry-run' }),
+      }),
+    )
+    expect(res.status).toBe(429)
+    const body = await res.json()
+    expect(body.retryAfterSeconds).toBe(45)
   })
 })
 

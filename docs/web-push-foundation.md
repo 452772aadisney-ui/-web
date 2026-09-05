@@ -195,6 +195,7 @@ rollback は上記テーブル4つと enum 3つのみ削除する（既存シス
 | 2-1 | 未記録リマインダー調査・設計 |
 | 2-2 | 未記録リマインダー Push-first 実装（初期 mode=`legacy`）→ [web-push-study-reminder-integration.md](./web-push-study-reminder-integration.md) |
 | 2-3 | 管理者向け通知テスト（`/admin/notifications/test`） |
+| 2-4 | 管理者向け全体dry-run（件数集計のみ・送信なし） |
 | 第2段階（続き） | allowlist/all への段階切替、他通知接続 |
 
 ---

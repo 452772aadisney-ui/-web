@@ -11,11 +11,11 @@ import {
   type StudyReminderDeliveryMode,
 } from '@/lib/study/study-reminder-mode'
 import {
-  classifyStudyReminderDryRun,
   processStudyReminderNewPath,
   type StudyReminderCandidate,
   type StudyReminderNewPathOutcome,
 } from '@/lib/study/study-reminder-new-path'
+import { evaluateStudyReminderDryRunAggregate } from '@/lib/study/study-reminder-dry-run'
 
 export type StudyReminderRunSummary = {
   ok: boolean
@@ -197,64 +197,27 @@ export async function runStudyReminderJob(
   }
 
   if (resolved.mode === 'dry-run') {
-    const candidates = toCandidates(report)
-    const dry = {
-      wouldUsePushFirst: 0,
-      wouldFallbackToEmail: 0,
-      preferenceDisabled: 0,
-      noPushSubscription: 0,
-      noEmail: 0,
-      recordedBeforeSend: 0,
-      failed: 0,
-    }
-
-    const buckets = await mapPool(
-      candidates,
-      STUDY_REMINDER_STUDENT_CONCURRENCY,
-      async (candidate) => classifyStudyReminderDryRun({ candidate, dateKey: report.dateKey }),
-    )
-
-    for (const result of buckets) {
-      if (!result.ok) {
-        dry.failed += 1
-        continue
-      }
-      switch (result.bucket) {
-        case 'wouldUsePushFirst':
-          dry.wouldUsePushFirst += 1
-          break
-        case 'wouldFallbackToEmail':
-          dry.wouldFallbackToEmail += 1
-          break
-        case 'preferenceDisabled':
-          dry.preferenceDisabled += 1
-          break
-        case 'noPushSubscription':
-          dry.noPushSubscription += 1
-          break
-        case 'noEmail':
-          dry.noEmail += 1
-          break
-        case 'recordedBeforeSend':
-          dry.recordedBeforeSend += 1
-          break
-        case 'failed':
-          dry.failed += 1
-          break
-      }
+    const candidateIds = new Set(report.notRecorded.map((s) => s.studentId))
+    const evaluated = await evaluateStudyReminderDryRunAggregate({
+      dateKey: report.dateKey,
+      env,
+      studentIds: candidateIds,
+    })
+    if (!evaluated.ok) {
+      return { ok: false, error: 'build_failed' }
     }
 
     // Actual delivery remains legacy email.
     const legacy = await runLegacyEmail(report)
     summary.legacyEmailRecipientCount = legacy.recipientCount
     summary.legacyEmailSentCount = legacy.sentCount
-    summary.wouldUsePushFirst = dry.wouldUsePushFirst
-    summary.wouldFallbackToEmail = dry.wouldFallbackToEmail
-    summary.preferenceDisabled = dry.preferenceDisabled
-    summary.noPushSubscription = dry.noPushSubscription
-    summary.noEmail = dry.noEmail
-    summary.recordedBeforeSend = dry.recordedBeforeSend
-    summary.failed = dry.failed
+    summary.wouldUsePushFirst = evaluated.aggregate.wouldUsePushFirst
+    summary.wouldFallbackToEmail = evaluated.aggregate.wouldFallbackToEmail
+    summary.preferenceDisabled = evaluated.aggregate.preferenceDisabled
+    summary.noPushSubscription = evaluated.aggregate.wouldFallbackToEmail
+    summary.noEmail = evaluated.aggregate.cannotDeliver
+    summary.recordedBeforeSend = evaluated.aggregate.alreadyRecorded
+    summary.failed = evaluated.aggregate.failedToEvaluate
     return { ok: true, summary }
   }
 
