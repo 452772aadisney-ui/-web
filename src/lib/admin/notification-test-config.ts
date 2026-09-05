@@ -21,6 +21,107 @@ export const ADMIN_TEST_EMAIL_BODY = [
   '一般の生徒向け通知ではありません。',
 ].join('\n')
 
+/** Fixed category fixtures for comprehensive admin tests (notification_type=test only). */
+export const ADMIN_CATEGORY_TEST_KINDS = [
+  'study_reminder',
+  'announcement',
+  'message',
+  'coaching_booking_prompt',
+  'coaching_session_previous_day',
+] as const
+
+export type AdminCategoryTestKind = (typeof ADMIN_CATEGORY_TEST_KINDS)[number]
+
+export type AdminCategoryTestFixture = {
+  kind: AdminCategoryTestKind
+  label: string
+  pushBody: string
+  targetPath: string
+  emailSubject: string
+  emailBody: string
+}
+
+export const ADMIN_CATEGORY_TEST_FIXTURES: Record<
+  AdminCategoryTestKind,
+  AdminCategoryTestFixture
+> = {
+  study_reminder: {
+    kind: 'study_reminder',
+    label: '学習記録',
+    pushBody: '学習記録リマインダーのテスト通知です。',
+    targetPath: '/dashboard/study',
+    emailSubject: '【受験生web】【テスト】学習記録リマインダーの確認',
+    emailBody: [
+      'これは管理者による通知テストです。',
+      '学習記録リマインダーのメール配信経路を確認しています。',
+      '',
+      '一般の生徒向け通知ではありません。',
+    ].join('\n'),
+  },
+  announcement: {
+    kind: 'announcement',
+    label: 'お知らせ',
+    pushBody: '新しいお知らせのテスト通知です。',
+    targetPath: '/dashboard/announcements',
+    emailSubject: '【受験生web】【テスト】お知らせ通知の確認',
+    emailBody: [
+      'これは管理者による通知テストです。',
+      'お知らせ通知のメール配信経路を確認しています。',
+      '',
+      '一般の生徒向け通知ではありません。',
+    ].join('\n'),
+  },
+  message: {
+    kind: 'message',
+    label: 'メッセージ',
+    pushBody: '新しいメッセージのテスト通知です。',
+    targetPath: '/dashboard/chat/room',
+    emailSubject: '【受験生web】【テスト】メッセージ通知の確認',
+    emailBody: [
+      'これは管理者による通知テストです。',
+      'メッセージ通知のメール配信経路を確認しています。',
+      '',
+      '一般の生徒向け通知ではありません。',
+    ].join('\n'),
+  },
+  coaching_booking_prompt: {
+    kind: 'coaching_booking_prompt',
+    label: 'コーチング予約催促',
+    pushBody: '今週のコーチング予約催促のテスト通知です。',
+    targetPath: '/dashboard/coaching',
+    emailSubject: '【受験生web】【テスト】コーチング予約催促の確認',
+    emailBody: [
+      'これは管理者による通知テストです。',
+      'コーチング予約催促のメール配信経路を確認しています。',
+      '',
+      '一般の生徒向け通知ではありません。',
+    ].join('\n'),
+  },
+  coaching_session_previous_day: {
+    kind: 'coaching_session_previous_day',
+    label: 'コーチング前日案内',
+    pushBody: '明日20:30からコーチングです。（テスト）',
+    targetPath: '/dashboard/coaching',
+    emailSubject: '【受験生web】【テスト】コーチング前日案内の確認',
+    emailBody: [
+      'これは管理者による通知テストです。',
+      '明日20:30からコーチングです。（テスト）',
+      '',
+      '実予約データは作成・変更していません。',
+      '一般の生徒向け通知ではありません。',
+    ].join('\n'),
+  },
+}
+
+export function resolveAdminCategoryTestKind(
+  raw: unknown,
+): AdminCategoryTestKind | null {
+  if (typeof raw !== 'string') return null
+  return (ADMIN_CATEGORY_TEST_KINDS as readonly string[]).includes(raw)
+    ? (raw as AdminCategoryTestKind)
+    : null
+}
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -91,9 +192,12 @@ export function buildAdminTestIdempotencyKey(params: {
   kind: 'push' | 'email'
   adminUserId: string
   targetUserId: string
+  /** Category fixture key; defaults to study_reminder for legacy actions. */
+  category?: AdminCategoryTestKind
   nowMs?: number
 }): string {
   const nowMs = params.nowMs ?? Date.now()
   const bucket = Math.floor(nowMs / ADMIN_NOTIFICATION_TEST_COOLDOWN_MS)
-  return `admin-test:${params.kind}:${params.adminUserId}:${params.targetUserId}:${bucket}`
+  const category = params.category ?? 'study_reminder'
+  return `admin-test:${category}:${params.kind}:${params.adminUserId}:${params.targetUserId}:${bucket}`
 }

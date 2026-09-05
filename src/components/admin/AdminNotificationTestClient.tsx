@@ -7,6 +7,11 @@ import type { AdminFullDryRunReport } from '@/lib/study/study-reminder-dry-run'
 import type { AnnouncementAdminDryRunReport } from '@/lib/announcements/announcement-dry-run'
 import type { MessageAdminDryRunReport } from '@/lib/chat/message-dry-run'
 import type { CoachingAdminDryRunReport } from '@/lib/coaching/coaching-reminder-dry-run'
+import {
+  ADMIN_CATEGORY_TEST_FIXTURES,
+  ADMIN_CATEGORY_TEST_KINDS,
+  type AdminCategoryTestKind,
+} from '@/lib/admin/notification-test-config'
 
 type Props = {
   initialFeatureAvailable: boolean
@@ -142,6 +147,7 @@ export function AdminNotificationTestClient({
     useState<AnnouncementAdminDryRunReport | null>(null)
   const [messageDryRun, setMessageDryRun] = useState<MessageAdminDryRunReport | null>(null)
   const [coachingDryRun, setCoachingDryRun] = useState<CoachingAdminDryRunReport | null>(null)
+  const [category, setCategory] = useState<AdminCategoryTestKind>('study_reminder')
   const [busy, setBusy] = useState<
     | 'inspect'
     | 'push'
@@ -169,7 +175,11 @@ export function AdminNotificationTestClient({
 
     startTransition(async () => {
       try {
-        const result = await postJson({ action, targetUserId: targetId })
+        const result = await postJson({
+          action,
+          targetUserId: targetId,
+          category: action === 'inspect' ? undefined : category,
+        })
         if (!result.ok) {
           if (result.status === 429) {
             toastSession.error(
@@ -192,7 +202,12 @@ export function AdminNotificationTestClient({
             toastSession.error('Push送信機能が無効です', 'admin-notification-test-toast')
             return
           }
-          toastSession.error('処理に失敗しました。もう一度お試しください', 'admin-notification-test-toast')
+          toastSession.error(
+            action === 'inspect'
+              ? '処理に失敗しました。もう一度お試しください'
+              : 'テスト通知を送信できませんでした',
+            'admin-notification-test-toast',
+          )
           return
         }
 
@@ -949,6 +964,28 @@ export function AdminNotificationTestClient({
                 </option>
               ))}
             </select>
+
+            <label className="mt-4 block text-sm text-muted" htmlFor={`${baseId}-category`}>
+              固定テスト種別（文面・URLはサーバー固定。自由入力不可）
+            </label>
+            <select
+              id={`${baseId}-category`}
+              className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground"
+              value={category}
+              onChange={(event) => setCategory(event.target.value as AdminCategoryTestKind)}
+              disabled={busy !== null}
+            >
+              {ADMIN_CATEGORY_TEST_KINDS.map((kind) => (
+                <option key={kind} value={kind}>
+                  {ADMIN_CATEGORY_TEST_FIXTURES[kind].label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-xs text-muted">
+              Push本文: {ADMIN_CATEGORY_TEST_FIXTURES[category].pushBody}
+              <br />
+              遷移先: {ADMIN_CATEGORY_TEST_FIXTURES[category].targetPath}
+            </p>
           </section>
 
           <section
@@ -995,8 +1032,8 @@ export function AdminNotificationTestClient({
               実送信テスト
             </h2>
             <p className="mt-2 text-sm text-muted">
-              外部通知が実際に1件送られます。一般生徒には送られません。notification type は
-              test で、通常の22:00処理とは分離されます。
+              外部通知が実際に1件送られます。Pushとメールは同時送信しません。一般生徒には送られません。
+              notification type は test で、本番カテゴリのeventとは分離されます。お知らせ・メッセージ・予約は作成しません。
             </p>
 
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -1008,7 +1045,7 @@ export function AdminNotificationTestClient({
                   runSendAction(
                     'push',
                     [
-                      '許可されたテストアカウントに、テスト用Pushを1件送信します。',
+                      `「${ADMIN_CATEGORY_TEST_FIXTURES[category].label}」のテストPushを1件送信します。`,
                       selectedLabel ? `対象表示名: ${selectedLabel}` : '',
                       '一般生徒には送られません。よろしいですか？',
                     ]
@@ -1017,7 +1054,7 @@ export function AdminNotificationTestClient({
                   )
                 }
               >
-                {busy === 'push' ? '送信中…' : 'このテストアカウントにPushを1件送る'}
+                {busy === 'push' ? '送信中…' : 'Pushテストを送る'}
               </button>
 
               <button
@@ -1028,7 +1065,7 @@ export function AdminNotificationTestClient({
                   runSendAction(
                     'email',
                     [
-                      '許可されたテストアカウントに、テスト用メールを1件送信します。',
+                      `「${ADMIN_CATEGORY_TEST_FIXTURES[category].label}」のテストメールを1件送信します。`,
                       selectedLabel ? `対象表示名: ${selectedLabel}` : '',
                       '一般生徒には送られません。よろしいですか？',
                     ]
@@ -1037,7 +1074,7 @@ export function AdminNotificationTestClient({
                   )
                 }
               >
-                {busy === 'email' ? '送信中…' : 'このテストアカウントにテストメールを1件送る'}
+                {busy === 'email' ? '送信中…' : 'メールテストを送る'}
               </button>
             </div>
           </section>

@@ -215,6 +215,7 @@ rollback は上記テーブル4つと enum 3つのみ削除する（既存シス
 | お知らせ Push-first（3-1） | `docs/web-push-announcement-integration.md`。mode 既定 `legacy`。本番 env 変更は別作業 |
 | メッセージ Push-first（4-1） | `docs/web-push-message-integration.md`。`message_kind` migration 052（**本番適用済み**）。mode 既定 `legacy` |
 | コーチング Push-first（5-1） | `docs/web-push-coaching-reminder-integration.md`。週次＋前日。mode 既定 `legacy`。新規 migration なし |
+| 通知運用ダッシュボード（6-1） | `/admin/notifications`。状態・mode・集計・dry-run・test固定文面。手順は `docs/web-push-operations.md` |
 
 ---
 

@@ -5,7 +5,7 @@ import {
 } from '@/components/layout/menu-items'
 
 describe('notification settings menu wiring', () => {
-  it('adds student notification settings and admin notification test entry', () => {
+  it('adds student notification settings and admin notification ops entry', () => {
     expect(STUDENT_HAMBURGER_ITEMS.some((item) => item.href === '/dashboard/notifications')).toBe(
       true,
     )
@@ -13,9 +13,7 @@ describe('notification settings menu wiring', () => {
     expect(STUDENT_HAMBURGER_ITEMS.some((item) => item.href.includes('/admin/notifications'))).toBe(
       false,
     )
-    expect(
-      ADMIN_HAMBURGER_ITEMS.some((item) => item.href === '/admin/notifications/test'),
-    ).toBe(true)
-    expect(ADMIN_HAMBURGER_ITEMS.some((item) => item.label === '通知テスト')).toBe(true)
+    expect(ADMIN_HAMBURGER_ITEMS.some((item) => item.href === '/admin/notifications')).toBe(true)
+    expect(ADMIN_HAMBURGER_ITEMS.some((item) => item.label === '通知運用')).toBe(true)
   })
 })

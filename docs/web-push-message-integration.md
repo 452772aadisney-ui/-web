@@ -117,6 +117,14 @@ idempotencyKey: message:{messageId}
 
 ## 導入手順
 
+1. migration 052 適用済みを確認
+2. `MESSAGE_DELIVERY_MODE=dry-run` で挙動確認（実配信は legacy メール）
+3. allowlist で試験アカウントのみ
+4. `all` へ切替
+5. 問題時は `legacy` rollback
+
+運用画面: `/admin/notifications`（[web-push-operations.md](./web-push-operations.md)）
+
 1. **migration 052 を本番適用**
 2. デプロイ（mode=`legacy`）
 3. `dry-run` → `allowlist` → `all`

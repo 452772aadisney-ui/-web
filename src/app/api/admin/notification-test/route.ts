@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { isJsonContentType, verifyRequestOrigin } from '@/lib/push/origin'
 import {
   isAdminNotificationTestEnabled,
+  resolveAdminCategoryTestKind,
   resolveAdminNotificationTestAvailability,
 } from '@/lib/admin/notification-test-config'
 import {
@@ -15,6 +16,7 @@ import { runAdminFullStudyReminderDryRun } from '@/lib/admin/notification-test-f
 import { runAdminAnnouncementDeliveryDryRun } from '@/lib/admin/notification-test-announcement-dry-run'
 import { runAdminMessageDeliveryDryRun } from '@/lib/admin/notification-test-message-dry-run'
 import { runAdminCoachingReminderDryRun } from '@/lib/admin/notification-test-coaching-dry-run'
+import { loadNotificationOpsSnapshot } from '@/lib/admin/notification-ops-snapshot'
 import type { Profile } from '@/types/database'
 
 export const runtime = 'nodejs'
@@ -79,12 +81,14 @@ export async function GET() {
 type PostBody = {
   action?: unknown
   targetUserId?: unknown
+  category?: unknown
 }
 
 /**
- * Actions: inspect | push | email | full-dry-run | announcement-dry-run | message-dry-run | coaching-dry-run
- * Never accepts title/body/path/type from the client.
- * Dry-run actions do not use NOTIFICATION_TEST_USER_IDS.
+ * Actions: ops-snapshot | inspect | push | email | full-dry-run |
+ * announcement-dry-run | message-dry-run | coaching-dry-run
+ * Never accepts title/body/path/notificationType from the client.
+ * Dry-run / ops-snapshot do not use NOTIFICATION_TEST_USER_IDS.
  */
 export async function POST(request: Request) {
   const origin = verifyRequestOrigin(request)
@@ -102,6 +106,19 @@ export async function POST(request: Request) {
   }
 
   const action = body.action
+
+  if (action === 'ops-snapshot') {
+    const result = await loadNotificationOpsSnapshot()
+    if (!result.ok) {
+      if (result.code === 'admin_unavailable') return jsonError(503, 'unavailable')
+      return jsonError(500, 'ops_snapshot_failed')
+    }
+    return json({
+      ok: true,
+      snapshot: result.snapshot,
+      notice: 'read_only_no_notifications_sent',
+    })
+  }
 
   if (action === 'full-dry-run') {
     const result = await runAdminFullStudyReminderDryRun({ adminUserId: auth.userId })
@@ -207,6 +224,14 @@ export async function POST(request: Request) {
     return jsonError(400, 'invalid_target')
   }
 
+  const category =
+    body.category === undefined || body.category === null
+      ? 'study_reminder'
+      : resolveAdminCategoryTestKind(body.category)
+  if (!category) {
+    return jsonError(400, 'invalid_category')
+  }
+
   if (action === 'inspect') {
     const result = await inspectAdminNotificationTestTarget({ targetUserId })
     if (!result.ok) {
@@ -222,6 +247,7 @@ export async function POST(request: Request) {
     const result = await sendAdminNotificationTestPush({
       adminUserId: auth.userId,
       targetUserId,
+      category,
     })
     if (!result.ok) {
       if (result.code === 'rate_limited') {
@@ -236,12 +262,13 @@ export async function POST(request: Request) {
       if (result.code === 'admin_unavailable') return jsonError(503, 'unavailable')
       return jsonError(502, 'send_failed')
     }
-    return json({ ok: true, sent: result.sent })
+    return json({ ok: true, sent: result.sent, category })
   }
 
   const result = await sendAdminNotificationTestEmail({
     adminUserId: auth.userId,
     targetUserId,
+    category,
   })
   if (!result.ok) {
     if (result.code === 'rate_limited') {
@@ -256,5 +283,5 @@ export async function POST(request: Request) {
     if (result.code === 'admin_unavailable') return jsonError(503, 'unavailable')
     return jsonError(502, 'send_failed')
   }
-  return json({ ok: true })
+  return json({ ok: true, category })
 }

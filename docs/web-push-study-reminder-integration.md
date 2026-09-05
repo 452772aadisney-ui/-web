@@ -122,7 +122,7 @@ Preview（`VERCEL_ENV` があり production 以外）: 新方式の外部送信�
 
 ## 管理者向け通知テスト（2-3）
 
-- URL: `/admin/notifications/test`（ハンバーガー「通知テスト」）
+- URL: `/admin/notifications`（ハンバーガー「通知運用」。旧 `/admin/notifications/test` はリダイレクト）
 - `ADMIN_NOTIFICATION_TEST_ENABLED=true` かつ妥当な `NOTIFICATION_TEST_USER_IDS` のみ有効
 - allowlist 外の生徒は選択・送信不可（API でも再検証）
 - 状態確認は送信なし / Push・メールは `notification_type=test` で通常 `study_reminder` と分離
@@ -196,7 +196,7 @@ Preview（`VERCEL_ENV` があり production 以外）: 新方式の外部送信�
 ### 検証手順
 
 1. Preview/ローカルで `ADMIN_NOTIFICATION_TEST_ENABLED=true`
-2. 管理者で `/admin/notifications/test` を開く
+2. 管理者で `/admin/notifications` を開く
 3. 「全体dry-runを実行」→ Toast「dry-runの集計が完了しました」
 4. 結果カードに「Push・メールは送信されていません」と件数が出ること
 5. 60 秒以内の再実行が 429 になること

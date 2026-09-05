@@ -132,6 +132,8 @@ Rollback: `COACHING_REMINDER_DELIVERY_MODE=legacy`（または削除）。コー
 
 ## allowlist 実機確認手順（本番作業は別途）
 
+運用画面: `/admin/notifications`（[web-push-operations.md](./web-push-operations.md)）
+
 1. `COACHING_REMINDER_DELIVERY_MODE=dry-run` で Cron/管理画面の集計のみ確認
 2. `PUSH_SENDING_ENABLED=true` + VAPID 設定済みを確認
 3. `COACHING_REMINDER_PUSH_ALLOWLIST=<試験用UUID>` + `allowlist`

@@ -13,13 +13,11 @@ import {
 import { resolveEffectiveStudyReminderMode } from '@/lib/study/study-reminder-mode'
 import {
   ADMIN_NOTIFICATION_TEST_COOLDOWN_MS,
-  ADMIN_TEST_EMAIL_BODY,
-  ADMIN_TEST_EMAIL_SUBJECT,
-  ADMIN_TEST_PUSH_BODY,
-  ADMIN_TEST_PUSH_PATH,
+  ADMIN_CATEGORY_TEST_FIXTURES,
   ADMIN_TEST_PUSH_TITLE,
   buildAdminTestIdempotencyKey,
   resolveAdminNotificationTestAvailability,
+  type AdminCategoryTestKind,
 } from '@/lib/admin/notification-test-config'
 
 export type AdminTestTargetOption = {
@@ -266,6 +264,7 @@ export async function sendAdminNotificationTestPush(params: {
   adminUserId: string
   targetUserId: string
   nowMs?: number
+  category?: AdminCategoryTestKind
 }): Promise<
   | { ok: true; sent: number; eventCreated: boolean }
   | {
@@ -296,11 +295,14 @@ export async function sendAdminNotificationTestPush(params: {
   )
   if (!allowed.ok) return { ok: false, code: allowed.code }
 
+  const category = params.category ?? 'study_reminder'
+  const fixture = ADMIN_CATEGORY_TEST_FIXTURES[category]
   const nowMs = params.nowMs ?? Date.now()
   const idempotencyKey = buildAdminTestIdempotencyKey({
     kind: 'push',
     adminUserId: params.adminUserId,
     targetUserId: params.targetUserId,
+    category,
     nowMs,
   })
 
@@ -325,9 +327,9 @@ export async function sendAdminNotificationTestPush(params: {
     notificationType: 'test',
     idempotencyKey,
     title: ADMIN_TEST_PUSH_TITLE,
-    body: ADMIN_TEST_PUSH_BODY,
-    targetPath: ADMIN_TEST_PUSH_PATH,
-    tag: 'admin-notification-test',
+    body: fixture.pushBody,
+    targetPath: fixture.targetPath,
+    tag: `admin-notification-test-${category}`,
   })
 
   // Attach metadata after create when possible (best-effort; never fail the send).
@@ -338,6 +340,7 @@ export async function sendAdminNotificationTestPush(params: {
         metadata: {
           source: 'admin_notification_test',
           kind: 'push',
+          category,
           adminUserId: params.adminUserId,
         },
       })
@@ -360,6 +363,7 @@ export async function sendAdminNotificationTestEmail(params: {
   adminUserId: string
   targetUserId: string
   nowMs?: number
+  category?: AdminCategoryTestKind
 }): Promise<
   | { ok: true }
   | {
@@ -389,11 +393,14 @@ export async function sendAdminNotificationTestEmail(params: {
   )
   if (!allowed.ok) return { ok: false, code: allowed.code }
 
+  const category = params.category ?? 'study_reminder'
+  const fixture = ADMIN_CATEGORY_TEST_FIXTURES[category]
   const nowMs = params.nowMs ?? Date.now()
   const idempotencyKey = buildAdminTestIdempotencyKey({
     kind: 'email',
     adminUserId: params.adminUserId,
     targetUserId: params.targetUserId,
+    category,
     nowMs,
   })
 
@@ -430,11 +437,12 @@ export async function sendAdminNotificationTestEmail(params: {
       notification_type: 'test',
       idempotency_key: idempotencyKey,
       title: ADMIN_TEST_PUSH_TITLE,
-      body: ADMIN_TEST_EMAIL_SUBJECT,
-      target_path: ADMIN_TEST_PUSH_PATH,
+      body: fixture.emailSubject,
+      target_path: fixture.targetPath,
       metadata: {
         source: 'admin_notification_test',
         kind: 'email',
+        category,
         adminUserId: params.adminUserId,
       },
     })
@@ -477,11 +485,11 @@ export async function sendAdminNotificationTestEmail(params: {
     return { ok: false, code: 'db_error' }
   }
 
-  const studyUrl = `${getAppBaseUrl()}/dashboard/study`
+  const ctaUrl = `${getAppBaseUrl()}${fixture.targetPath}`
   const sendResult = await sendEmail({
     to,
-    subject: ADMIN_TEST_EMAIL_SUBJECT,
-    text: `${ADMIN_TEST_EMAIL_BODY}\n\n確認する: ${studyUrl}`,
+    subject: fixture.emailSubject,
+    text: `${fixture.emailBody}\n\n確認する: ${ctaUrl}`,
     omitRecipientFromLogs: true,
     pace: true,
   })
@@ -505,7 +513,9 @@ export async function sendAdminNotificationTestEmail(params: {
     .update({
       status: 'failed',
       http_status: sendResult.httpStatus ?? null,
-      error_code: sendResult.errorClass ?? (sendResult.skipped ? 'email_not_configured' : 'email_send_failed'),
+      error_code:
+        sendResult.errorClass ??
+        (sendResult.skipped ? 'email_not_configured' : 'email_send_failed'),
       succeeded_at: null,
     })
     .eq('event_id', inserted.id)

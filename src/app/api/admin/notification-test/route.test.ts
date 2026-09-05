@@ -361,6 +361,21 @@ describe('POST /api/admin/notification-test', () => {
     expect(JSON.stringify(body)).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i)
     expect(JSON.stringify(body)).not.toContain('@')
   })
+
+  it('rejects invalid category for push', async () => {
+    const res = await POST(
+      new Request('https://app.example/api/admin/notification-test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://app.example' },
+        body: JSON.stringify({
+          action: 'push',
+          targetUserId: '11111111-1111-1111-1111-111111111111',
+          category: 'not-real',
+        }),
+      }),
+    )
+    expect(res.status).toBe(400)
+  })
 })
 
 describe('GET /api/admin/notification-test', () => {

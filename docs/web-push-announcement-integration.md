@@ -112,6 +112,8 @@ idempotencyKey: announcement:{announcementId}
 
 ## 導入手順
 
+運用画面: `/admin/notifications`（[web-push-operations.md](./web-push-operations.md)）
+
 1. デプロイ（mode 未設定 or `legacy`）
 2. `dry-run` で件数確認（従来メールは継続）
 3. `allowlist` + 少数 UUID で Push-first 確認
