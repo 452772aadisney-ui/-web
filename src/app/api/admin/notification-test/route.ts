@@ -12,6 +12,7 @@ import {
   sendAdminNotificationTestPush,
 } from '@/lib/admin/notification-test-service'
 import { runAdminFullStudyReminderDryRun } from '@/lib/admin/notification-test-full-dry-run'
+import { runAdminAnnouncementDeliveryDryRun } from '@/lib/admin/notification-test-announcement-dry-run'
 import type { Profile } from '@/types/database'
 
 export const runtime = 'nodejs'
@@ -79,9 +80,9 @@ type PostBody = {
 }
 
 /**
- * Actions: inspect | push | email | full-dry-run
+ * Actions: inspect | push | email | full-dry-run | announcement-dry-run
  * Never accepts title/body/path/type from the client.
- * full-dry-run does not use NOTIFICATION_TEST_USER_IDS.
+ * Dry-run actions do not use NOTIFICATION_TEST_USER_IDS.
  */
 export async function POST(request: Request) {
   const origin = verifyRequestOrigin(request)
@@ -121,6 +122,29 @@ export async function POST(request: Request) {
       ok: true,
       dryRun: result.report,
       sumConsistent: result.sumConsistent,
+      notice: 'evaluation_only_no_notifications_sent',
+    })
+  }
+
+  if (action === 'announcement-dry-run') {
+    const result = await runAdminAnnouncementDeliveryDryRun({ adminUserId: auth.userId })
+    if (!result.ok) {
+      if (result.code === 'rate_limited') {
+        return jsonError(429, 'rate_limited', {
+          retryAfterSeconds: result.retryAfterSeconds,
+        })
+      }
+      if (result.code === 'in_progress') {
+        return jsonError(409, 'in_progress')
+      }
+      if (result.code === 'feature_disabled') return jsonError(503, 'feature_disabled')
+      if (result.code === 'admin_unavailable') return jsonError(503, 'unavailable')
+      return jsonError(500, 'dry_run_failed')
+    }
+
+    return json({
+      ok: true,
+      announcementDryRun: result.report,
       notice: 'evaluation_only_no_notifications_sent',
     })
   }

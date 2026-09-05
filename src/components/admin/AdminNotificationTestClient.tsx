@@ -4,6 +4,7 @@ import { useId, useRef, useState, useTransition } from 'react'
 import { createToastSession } from '@/lib/toast/app-toast'
 import type { AdminTestInspectResult, AdminTestTargetOption } from '@/lib/admin/notification-test-service'
 import type { AdminFullDryRunReport } from '@/lib/study/study-reminder-dry-run'
+import type { AnnouncementAdminDryRunReport } from '@/lib/announcements/announcement-dry-run'
 
 type Props = {
   initialFeatureAvailable: boolean
@@ -18,6 +19,12 @@ type ApiDryRunResponse = {
   ok: true
   dryRun: AdminFullDryRunReport
   sumConsistent: { readiness: boolean; current: boolean }
+  notice: string
+}
+
+type ApiAnnouncementDryRunResponse = {
+  ok: true
+  announcementDryRun: AnnouncementAdminDryRunReport
   notice: string
 }
 
@@ -46,6 +53,7 @@ async function postJson(
       inspect?: AdminTestInspectResult
       sent?: number
       dryRun?: AdminFullDryRunReport
+      announcementDryRun?: AnnouncementAdminDryRunReport
       sumConsistent?: { readiness: boolean; current: boolean }
       notice?: string
     } = {}
@@ -115,7 +123,11 @@ export function AdminNotificationTestClient({
     readiness: boolean
     current: boolean
   } | null>(null)
-  const [busy, setBusy] = useState<'inspect' | 'push' | 'email' | 'full-dry-run' | null>(null)
+  const [announcementDryRun, setAnnouncementDryRun] =
+    useState<AnnouncementAdminDryRunReport | null>(null)
+  const [busy, setBusy] = useState<
+    'inspect' | 'push' | 'email' | 'full-dry-run' | 'announcement-dry-run' | null
+  >(null)
   const busyRef = useRef(false)
   const [, startTransition] = useTransition()
 
@@ -210,6 +222,44 @@ export function AdminNotificationTestClient({
         setDryRun(data.dryRun)
         setDryRunSumOk(data.sumConsistent)
         toastSession.success('dry-runの集計が完了しました', 'admin-notification-test-toast')
+      } finally {
+        busyRef.current = false
+        setBusy(null)
+      }
+    })
+  }
+
+  const runAnnouncementDryRun = () => {
+    if (busyRef.current || !dryRunAvailable) return
+
+    busyRef.current = true
+    setBusy('announcement-dry-run')
+    const toastSession = createToastSession()
+
+    startTransition(async () => {
+      try {
+        const result = await postJson({ action: 'announcement-dry-run' })
+        if (!result.ok) {
+          if (result.status === 429) {
+            toastSession.error(
+              result.retryAfterSeconds
+                ? `短時間に何度も実行できません。約${result.retryAfterSeconds}秒後に再度お試しください`
+                : '短時間に何度も実行できません。しばらくしてから再度お試しください',
+              'admin-notification-test-toast',
+            )
+            return
+          }
+          if (result.error === 'in_progress') {
+            toastSession.error('dry-runの実行中です。完了後に再度お試しください', 'admin-notification-test-toast')
+            return
+          }
+          toastSession.error('お知らせ通知の準備状況を取得できませんでした', 'admin-notification-test-toast')
+          return
+        }
+
+        const data = result.data as ApiAnnouncementDryRunResponse
+        setAnnouncementDryRun(data.announcementDryRun)
+        toastSession.success('お知らせ通知の準備状況を集計しました', 'admin-notification-test-toast')
       } finally {
         busyRef.current = false
         setBusy(null)
@@ -405,6 +455,113 @@ export function AdminNotificationTestClient({
                       現在設定の最終分類合計が生徒数と一致しません。
                     </p>
                   ) : null}
+                </section>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      <section
+        className="rounded-2xl border border-border bg-card p-5 shadow-sm"
+        aria-labelledby={`${baseId}-announcement-dry-run-heading`}
+      >
+        <h2
+          id={`${baseId}-announcement-dry-run-heading`}
+          className="text-base font-bold text-foreground"
+        >
+          お知らせ通知の準備状況
+        </h2>
+        <p className="mt-2 text-sm text-muted">
+          全員配信を想定した準備状況です。お知らせの作成・Push・メールは行いません。
+        </p>
+
+        {!dryRunAvailable ? (
+          <p className="mt-4 text-sm text-muted" role="status">
+            {disabledReasonMessage(initialDisabledReason ?? 'flag_off')}
+          </p>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="mt-4 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-card disabled:opacity-60"
+              disabled={busy !== null}
+              onClick={runAnnouncementDryRun}
+            >
+              {busy === 'announcement-dry-run' ? '集計中…' : '準備状況を集計'}
+            </button>
+
+            {announcementDryRun && (
+              <div className="mt-4 space-y-4" aria-live="polite">
+                <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-foreground">
+                  これは判定結果の確認です。お知らせ作成・通知送信は行われていません。
+                </p>
+                <section aria-labelledby={`${baseId}-announcement-readiness-heading`}>
+                  <h3
+                    id={`${baseId}-announcement-readiness-heading`}
+                    className="text-sm font-semibold text-foreground"
+                  >
+                    Push準備状況（送信フラグに依存しない）
+                  </h3>
+                  <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="text-muted">対象生徒数</dt>
+                      <dd className="font-medium">{announcementDryRun.readiness.recipients}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">管理者により停止</dt>
+                      <dd className="font-medium">
+                        {announcementDryRun.readiness.preferenceDisabled}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">Push準備済み</dt>
+                      <dd className="font-medium">{announcementDryRun.readiness.pushReady}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">メールfallback候補</dt>
+                      <dd className="font-medium">{announcementDryRun.readiness.emailFallback}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">配信手段なし</dt>
+                      <dd className="font-medium">{announcementDryRun.readiness.cannotDeliver}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">判定エラー</dt>
+                      <dd className="font-medium">{announcementDryRun.readiness.failed}</dd>
+                    </div>
+                  </dl>
+                </section>
+                <section aria-labelledby={`${baseId}-announcement-current-heading`}>
+                  <h3
+                    id={`${baseId}-announcement-current-heading`}
+                    className="text-sm font-semibold text-foreground"
+                  >
+                    現在設定での有効経路（mode={announcementDryRun.current.mode} / Push送信=
+                    {announcementDryRun.current.pushSendingEnabled ? 'ON' : 'OFF'}）
+                  </h3>
+                  <dl className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="text-muted">Push対象</dt>
+                      <dd className="font-medium">{announcementDryRun.current.wouldUsePush}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">メール経路</dt>
+                      <dd className="font-medium">
+                        {announcementDryRun.current.wouldFallbackEmail}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">管理者により停止</dt>
+                      <dd className="font-medium">
+                        {announcementDryRun.current.preferenceDisabled}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted">配信手段なし</dt>
+                      <dd className="font-medium">{announcementDryRun.current.cannotDeliver}</dd>
+                    </div>
+                  </dl>
                 </section>
               </div>
             )}

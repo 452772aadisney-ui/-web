@@ -2,12 +2,17 @@
 
 import { revalidatePath } from 'next/cache'
 import { evaluateAndUnlockAchievements, type UnlockedAchievement } from '@/lib/achievements/unlock'
-import { notifyStudentsOfNewAnnouncement } from '@/lib/email/notifications'
+import {
+  announcementPublishSuccessMessage,
+  deliverAnnouncementNotifications,
+} from '@/lib/announcements/announcement-orchestrator'
 import { createClient } from '@/lib/supabase/server'
 
 export type AnnouncementActionState = {
   error?: string
   success?: boolean
+  /** Safe toast copy when success (announcement already saved). */
+  successMessage?: string
 }
 
 async function assertAdmin(): Promise<string | null> {
@@ -118,20 +123,36 @@ export async function createAnnouncement(
 
   await saveAnnouncementTargets(supabase, created.id, targetAll, tagIds, studentIds)
 
+  let successMessage = 'お知らせを公開しました'
   try {
-    await notifyStudentsOfNewAnnouncement({
+    const summary = await deliverAnnouncementNotifications({
       announcementId: created.id,
       title,
       targetAll,
       tagIds,
       studentIds,
     })
-  } catch (error) {
-    console.error('[announcements] email notification failed:', error)
+    successMessage = announcementPublishSuccessMessage(summary)
+    console.info('[announcements] notification summary:', {
+      mode: summary.mode,
+      recipients: summary.recipients,
+      pushSucceeded: summary.pushSucceeded,
+      emailFallbackSucceeded: summary.emailFallbackSucceeded,
+      preferenceDisabled: summary.preferenceDisabled,
+      cannotDeliver: summary.cannotDeliver,
+      failed: summary.failed,
+      legacyEmailSentCount: summary.legacyEmailSentCount,
+      timedOut: summary.timedOut,
+      durationMs: summary.durationMs,
+    })
+  } catch {
+    console.error('[announcements] notification failed after save')
+    successMessage =
+      'お知らせは公開しましたが、通知を送信できませんでした'
   }
 
   revalidateAnnouncementPaths()
-  return { success: true }
+  return { success: true, successMessage }
 }
 
 export async function updateAnnouncement(

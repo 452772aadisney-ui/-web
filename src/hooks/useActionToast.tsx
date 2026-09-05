@@ -10,6 +10,8 @@ import {
 interface ActionToastState {
   success?: boolean
   error?: string
+  /** When set on success, overrides the hook's successMessage option. */
+  successMessage?: string
 }
 
 interface UseActionToastOptions {
@@ -53,12 +55,20 @@ export function useActionToast(
     const session = sessionRef.current
 
     if (state.success) {
-      session.success(successMessage, `${idPrefix}-success`)
+      session.success(state.successMessage ?? successMessage, `${idPrefix}-success`)
       return
     }
 
     if (state.error) {
       session.error(errorMessage, `${idPrefix}-error`)
     }
-  }, [pending, state.success, state.error, successMessage, errorMessage, idPrefix])
+  }, [
+    pending,
+    state.success,
+    state.successMessage,
+    state.error,
+    successMessage,
+    errorMessage,
+    idPrefix,
+  ])
 }

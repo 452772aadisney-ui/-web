@@ -49,7 +49,7 @@ function AnnouncementForm({
   const [state, formAction, pending] = useActionState(action, initialState)
 
   useActionToast(state, {
-    successMessage: announcement ? 'お知らせを更新しました' : 'お知らせを投稿しました',
+    successMessage: announcement ? 'お知らせを更新しました' : 'お知らせを公開しました',
     pending,
   })
 

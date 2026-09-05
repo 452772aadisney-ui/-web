@@ -66,6 +66,8 @@ migration: `051_notification_preferences_admin_control.sql`（**本番未適用*
 - rollback: `supabase/rollbacks/051_notification_preferences_admin_control_rollback.sql`
 - false 件数確認: `supabase/queries/051_notification_preferences_false_counts.sql`
 
+お知らせ通知への接続は [web-push-announcement-integration.md](./web-push-announcement-integration.md)（3-1）。メッセージ・コーチングは後工程。
+
 ---
 
 ## 対象判定

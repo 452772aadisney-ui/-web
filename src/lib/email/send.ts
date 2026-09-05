@@ -218,7 +218,7 @@ export async function sendEmailToMany(
       results.push(result)
     }
   } else {
-    // Non-paced callers (announcements etc.) keep previous parallel behavior.
+    // Non-paced callers keep previous parallel behavior (prefer pace:true for Resend).
     const parallel = await Promise.all(
       uniqueRecipients.map((to) =>
         sendEmail({

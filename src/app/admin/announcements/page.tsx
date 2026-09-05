@@ -12,6 +12,9 @@ import {
 import { fetchAllProfileTagAssignments, fetchStudentTags } from '@/lib/tags/queries'
 import { fetchStudentList } from '@/lib/study/queries'
 
+/** Soft budget for createAnnouncement notification fan-out (paced email). */
+export const maxDuration = 60
+
 export default async function AdminAnnouncementsPage({
   searchParams,
 }: {
