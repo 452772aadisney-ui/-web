@@ -106,6 +106,10 @@ export type RecentFailureRow = {
   notificationType: string
   channel: 'push' | 'email'
   errorCode: string
+  /** Safe metadata.source only (e.g. admin_notification_ops). Never PII. */
+  source: string | null
+  /** Safe metadata.kind only. */
+  kind: string | null
 }
 
 export type NotificationOpsSnapshot = {
@@ -514,7 +518,7 @@ async function loadRecentFailures(admin: AdminClient): Promise<RecentFailureRow[
   const { data, error } = await admin
     .from('notification_deliveries')
     .select(
-      'channel, error_code, created_at, notification_events!inner(notification_type)',
+      'channel, error_code, created_at, notification_events!inner(notification_type, metadata)',
     )
     .eq('status', 'failed')
     .order('created_at', { ascending: false })
@@ -526,15 +530,27 @@ async function loadRecentFailures(admin: AdminClient): Promise<RecentFailureRow[
     channel: 'push' | 'email'
     error_code: string | null
     created_at: string
-    notification_events: { notification_type: string } | { notification_type: string }[] | null
+    notification_events:
+      | { notification_type: string; metadata: Record<string, unknown> | null }
+      | Array<{ notification_type: string; metadata: Record<string, unknown> | null }>
+      | null
   }>).map((row) => {
     const ev = row.notification_events
     const obj = Array.isArray(ev) ? ev[0] : ev
+    const meta = obj?.metadata
+    const source =
+      meta && typeof meta === 'object' && typeof meta.source === 'string'
+        ? meta.source
+        : null
+    const kind =
+      meta && typeof meta === 'object' && typeof meta.kind === 'string' ? meta.kind : null
     return {
       occurredAt: row.created_at,
       notificationType: obj?.notification_type ?? 'unknown',
       channel: row.channel === 'email' ? 'email' : 'push',
       errorCode: sanitizeErrorCodeForDisplay(row.error_code),
+      source,
+      kind,
     }
   })
 }

@@ -17,6 +17,10 @@ import { runAdminAnnouncementDeliveryDryRun } from '@/lib/admin/notification-tes
 import { runAdminMessageDeliveryDryRun } from '@/lib/admin/notification-test-message-dry-run'
 import { runAdminCoachingReminderDryRun } from '@/lib/admin/notification-test-coaching-dry-run'
 import { loadNotificationOpsSnapshot } from '@/lib/admin/notification-ops-snapshot'
+import {
+  inspectAdminStudyReminderIntegration,
+  sendAdminStudyReminderIntegrationTest,
+} from '@/lib/admin/notification-test-study-reminder-integration'
 import type { Profile } from '@/types/database'
 
 export const runtime = 'nodejs'
@@ -117,6 +121,66 @@ export async function POST(request: Request) {
       ok: true,
       snapshot: result.snapshot,
       notice: 'read_only_no_notifications_sent',
+    })
+  }
+
+  if (action === 'study-reminder-inspect') {
+    const targetUserId =
+      typeof body.targetUserId === 'string' ? body.targetUserId.trim() : ''
+    if (!targetUserId) return jsonError(400, 'invalid_target')
+
+    const result = await inspectAdminStudyReminderIntegration({ targetUserId })
+    if (!result.ok) {
+      if (result.code === 'feature_disabled') return jsonError(503, 'feature_disabled')
+      if (result.code === 'forbidden_target') return jsonError(403, 'forbidden')
+      if (result.code === 'invalid_target') return jsonError(400, 'invalid_target')
+      if (result.code === 'admin_unavailable') return jsonError(503, 'unavailable')
+      return jsonError(500, 'internal_error')
+    }
+    return json({ ok: true, studyReminderInspect: result.inspect })
+  }
+
+  if (action === 'study-reminder-send') {
+    const targetUserId =
+      typeof body.targetUserId === 'string' ? body.targetUserId.trim() : ''
+    if (!targetUserId) return jsonError(400, 'invalid_target')
+
+    const result = await sendAdminStudyReminderIntegrationTest({
+      adminUserId: auth.userId,
+      targetUserId,
+    })
+    if (!result.ok) {
+      if (result.code === 'rate_limited') {
+        return jsonError(429, 'rate_limited', {
+          retryAfterSeconds: result.retryAfterSeconds,
+          sent: false,
+          pushSent: false,
+          emailSent: false,
+          skippedReason: result.skippedReason ?? null,
+          failed: Boolean(result.failed),
+        })
+      }
+      if (result.code === 'in_progress') return jsonError(409, 'in_progress')
+      if (result.code === 'feature_disabled') return jsonError(503, 'feature_disabled')
+      if (result.code === 'forbidden_target') return jsonError(403, 'forbidden')
+      if (result.code === 'invalid_target') return jsonError(400, 'invalid_target')
+      if (result.code === 'admin_unavailable') return jsonError(503, 'unavailable')
+      return jsonError(502, 'send_failed', {
+        sent: false,
+        pushSent: false,
+        emailSent: false,
+        skippedReason: null,
+        failed: true,
+      })
+    }
+
+    return json({
+      ok: true,
+      sent: result.sent,
+      pushSent: result.pushSent,
+      emailSent: result.emailSent,
+      skippedReason: result.skippedReason,
+      failed: result.failed,
     })
   }
 

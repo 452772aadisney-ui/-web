@@ -10,6 +10,8 @@ const {
   resolveAdminNotificationTestAvailability,
   runAdminFullStudyReminderDryRun,
   runAdminCoachingReminderDryRun,
+  inspectAdminStudyReminderIntegration,
+  sendAdminStudyReminderIntegrationTest,
 } = vi.hoisted(() => ({
   createClient: vi.fn(),
   verifyRequestOrigin: vi.fn(),
@@ -20,6 +22,8 @@ const {
   resolveAdminNotificationTestAvailability: vi.fn(),
   runAdminFullStudyReminderDryRun: vi.fn(),
   runAdminCoachingReminderDryRun: vi.fn(),
+  inspectAdminStudyReminderIntegration: vi.fn(),
+  sendAdminStudyReminderIntegrationTest: vi.fn(),
 }))
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -53,6 +57,13 @@ vi.mock('@/lib/admin/notification-test-announcement-dry-run', () => ({
 
 vi.mock('@/lib/admin/notification-test-message-dry-run', () => ({
   runAdminMessageDeliveryDryRun: vi.fn(),
+}))
+
+vi.mock('@/lib/admin/notification-test-study-reminder-integration', () => ({
+  inspectAdminStudyReminderIntegration: (...args: unknown[]) =>
+    inspectAdminStudyReminderIntegration(...args),
+  sendAdminStudyReminderIntegrationTest: (...args: unknown[]) =>
+    sendAdminStudyReminderIntegrationTest(...args),
 }))
 
 vi.mock('@/lib/admin/notification-test-config', async () => {
@@ -375,6 +386,119 @@ describe('POST /api/admin/notification-test', () => {
       }),
     )
     expect(res.status).toBe(400)
+  })
+
+  it('rejects study-reminder-send for non-admin', async () => {
+    createClient.mockResolvedValue({
+      auth: { getUser: async () => ({ data: { user: { id: 'stu' } } }) },
+      from() {
+        return {
+          select() {
+            return {
+              eq() {
+                return {
+                  maybeSingle: async () => ({ data: { role: 'student' }, error: null }),
+                }
+              },
+            }
+          },
+        }
+      },
+    })
+    const res = await POST(
+      new Request('https://app.example/api/admin/notification-test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://app.example' },
+        body: JSON.stringify({
+          action: 'study-reminder-send',
+          targetUserId: '11111111-1111-1111-1111-111111111111',
+        }),
+      }),
+    )
+    expect(res.status).toBe(403)
+  })
+
+  it('returns study-reminder-inspect without sending', async () => {
+    inspectAdminStudyReminderIntegration.mockResolvedValue({
+      ok: true,
+      inspect: {
+        dateKey: '2026-09-06',
+        recordedToday: false,
+        preferenceEnabled: true,
+        preferenceRowExists: false,
+        hasActivePushSubscription: true,
+        canEmailFallback: true,
+        pushSendingEnabled: true,
+        deliveryMode: 'all',
+        projectedOutcome: 'would_use_push',
+        projectedOutcomeLabel: 'Push対象',
+      },
+    })
+    const res = await POST(
+      new Request('https://app.example/api/admin/notification-test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://app.example' },
+        body: JSON.stringify({
+          action: 'study-reminder-inspect',
+          targetUserId: '11111111-1111-1111-1111-111111111111',
+        }),
+      }),
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+    expect(body.studyReminderInspect.projectedOutcome).toBe('would_use_push')
+    expect(sendAdminStudyReminderIntegrationTest).not.toHaveBeenCalled()
+  })
+
+  it('rejects study-reminder-send for forbidden allowlist target', async () => {
+    sendAdminStudyReminderIntegrationTest.mockResolvedValue({
+      ok: false,
+      code: 'forbidden_target',
+    })
+    const res = await POST(
+      new Request('https://app.example/api/admin/notification-test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://app.example' },
+        body: JSON.stringify({
+          action: 'study-reminder-send',
+          targetUserId: '22222222-2222-2222-2222-222222222222',
+        }),
+      }),
+    )
+    expect(res.status).toBe(403)
+  })
+
+  it('returns safe study-reminder-send payload without secrets', async () => {
+    sendAdminStudyReminderIntegrationTest.mockResolvedValue({
+      ok: true,
+      sent: true,
+      pushSent: true,
+      emailSent: false,
+      skippedReason: null,
+      failed: false,
+    })
+    const res = await POST(
+      new Request('https://app.example/api/admin/notification-test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://app.example' },
+        body: JSON.stringify({
+          action: 'study-reminder-send',
+          targetUserId: '11111111-1111-1111-1111-111111111111',
+        }),
+      }),
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toEqual({
+      ok: true,
+      sent: true,
+      pushSent: true,
+      emailSent: false,
+      skippedReason: null,
+      failed: false,
+    })
+    expect(JSON.stringify(body)).not.toMatch(/@|endpoint|p256dh|vapid|allowlist/i)
   })
 })
 

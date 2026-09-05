@@ -8,6 +8,9 @@ export const ADMIN_NOTIFICATION_TEST_COOLDOWN_MS = 30_000
 /** Admin full dry-run cooldown (process-local; not cross-instance). */
 export const ADMIN_FULL_DRY_RUN_COOLDOWN_MS = 60_000
 
+/** Study-reminder integration test cooldown (DB idempotency bucket). */
+export const ADMIN_STUDY_REMINDER_INTEGRATION_TEST_COOLDOWN_MS = 30_000
+
 export const ADMIN_TEST_PUSH_TITLE = '受験生web'
 export const ADMIN_TEST_PUSH_BODY = '学習記録リマインダーのテスト通知です。'
 export const ADMIN_TEST_PUSH_PATH = '/dashboard/study'
@@ -200,4 +203,18 @@ export function buildAdminTestIdempotencyKey(params: {
   const bucket = Math.floor(nowMs / ADMIN_NOTIFICATION_TEST_COOLDOWN_MS)
   const category = params.category ?? 'study_reminder'
   return `admin-test:${category}:${params.kind}:${params.adminUserId}:${params.targetUserId}:${bucket}`
+}
+
+/**
+ * Distinct from Cron daily key (JST date). Never log / return the target id to clients.
+ */
+export function buildAdminStudyReminderIntegrationIdempotencyKey(params: {
+  targetUserId: string
+  nowMs?: number
+}): string {
+  const nowMs = params.nowMs ?? Date.now()
+  const bucket = Math.floor(
+    nowMs / ADMIN_STUDY_REMINDER_INTEGRATION_TEST_COOLDOWN_MS,
+  )
+  return `admin-study-reminder-test:${params.targetUserId.toLowerCase()}:${bucket}`
 }

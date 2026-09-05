@@ -2,7 +2,11 @@
 
 import { useId, useRef, useState, useTransition } from 'react'
 import { createToastSession } from '@/lib/toast/app-toast'
-import type { AdminTestInspectResult, AdminTestTargetOption } from '@/lib/admin/notification-test-service'
+import type {
+  AdminTestInspectResult,
+  AdminTestTargetOption,
+} from '@/lib/admin/notification-test-service'
+import type { StudyReminderIntegrationInspect } from '@/lib/admin/notification-test-study-reminder-integration'
 import type { AdminFullDryRunReport } from '@/lib/study/study-reminder-dry-run'
 import type { AnnouncementAdminDryRunReport } from '@/lib/announcements/announcement-dry-run'
 import type { MessageAdminDryRunReport } from '@/lib/chat/message-dry-run'
@@ -21,6 +25,20 @@ type Props = {
 }
 
 type ApiInspectResponse = { ok: true; inspect: AdminTestInspectResult }
+
+type ApiStudyReminderInspectResponse = {
+  ok: true
+  studyReminderInspect: StudyReminderIntegrationInspect
+}
+
+type ApiStudyReminderSendResponse = {
+  ok: true
+  sent: boolean
+  pushSent: boolean
+  emailSent: boolean
+  skippedReason: string | null
+  failed: boolean
+}
 
 type ApiDryRunResponse = {
   ok: true
@@ -138,6 +156,8 @@ export function AdminNotificationTestClient({
     initialTargets.length === 1 ? initialTargets[0]!.id : '',
   )
   const [inspect, setInspect] = useState<AdminTestInspectResult | null>(null)
+  const [studyInspect, setStudyInspect] =
+    useState<StudyReminderIntegrationInspect | null>(null)
   const [dryRun, setDryRun] = useState<AdminFullDryRunReport | null>(null)
   const [dryRunSumOk, setDryRunSumOk] = useState<{
     readiness: boolean
@@ -152,6 +172,8 @@ export function AdminNotificationTestClient({
     | 'inspect'
     | 'push'
     | 'email'
+    | 'study-reminder-inspect'
+    | 'study-reminder-send'
     | 'full-dry-run'
     | 'announcement-dry-run'
     | 'message-dry-run'
@@ -164,6 +186,117 @@ export function AdminNotificationTestClient({
   const sendFeatureAvailable = initialFeatureAvailable && initialTargets.length > 0
   const dryRunAvailable = initialFlagEnabled
   const selectedLabel = initialTargets.find((t) => t.id === targetId)?.label ?? ''
+
+  const runStudyReminderInspect = () => {
+    if (busyRef.current || !sendFeatureAvailable || !targetId) return
+
+    busyRef.current = true
+    setBusy('study-reminder-inspect')
+    const toastSession = createToastSession()
+
+    startTransition(async () => {
+      try {
+        const result = await postJson({
+          action: 'study-reminder-inspect',
+          targetUserId: targetId,
+        })
+        if (!result.ok) {
+          if (result.error === 'forbidden') {
+            toastSession.error('対象を確認できませんでした', 'admin-notification-test-toast')
+            return
+          }
+          toastSession.error(
+            '学習記録リマインダーの判定を完了できませんでした',
+            'admin-notification-test-toast',
+          )
+          return
+        }
+        const data = result.data as ApiStudyReminderInspectResponse
+        setStudyInspect(data.studyReminderInspect)
+        toastSession.success('判定のみ完了しました（送信していません）', 'admin-notification-test-toast')
+      } finally {
+        busyRef.current = false
+        setBusy(null)
+      }
+    })
+  }
+
+  const runStudyReminderSend = () => {
+    if (busyRef.current || !sendFeatureAvailable || !targetId) return
+    if (
+      !window.confirm(
+        [
+          '選択したテストアカウント1人だけに、学習記録リマインダーの実経路テストを実行します。',
+          selectedLabel ? `対象表示名: ${selectedLabel}` : '',
+          '通常の22時Cronは起動しません。一般生徒には送られません。よろしいですか？',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      )
+    ) {
+      return
+    }
+
+    busyRef.current = true
+    setBusy('study-reminder-send')
+    const toastSession = createToastSession()
+
+    startTransition(async () => {
+      try {
+        const result = await postJson({
+          action: 'study-reminder-send',
+          targetUserId: targetId,
+        })
+        if (!result.ok) {
+          if (result.status === 429) {
+            toastSession.error(
+              result.retryAfterSeconds
+                ? `短時間に何度も実行できません。約${result.retryAfterSeconds}秒後に再度お試しください`
+                : '短時間に何度も実行できません。しばらくしてから再度お試しください',
+              'admin-notification-test-toast',
+            )
+            return
+          }
+          if (result.error === 'in_progress') {
+            toastSession.error('別の処理が実行中です', 'admin-notification-test-toast')
+            return
+          }
+          toastSession.error('テスト通知を送信できませんでした', 'admin-notification-test-toast')
+          return
+        }
+
+        const data = result.data as ApiStudyReminderSendResponse
+        if (data.skippedReason === 'already_recorded') {
+          toastSession.success('記録済みのため対象外です（送信していません）', 'admin-notification-test-toast')
+          return
+        }
+        if (data.skippedReason === 'preference_disabled') {
+          toastSession.success('管理者により停止中です（送信していません）', 'admin-notification-test-toast')
+          return
+        }
+        if (data.skippedReason === 'preview') {
+          toastSession.success('Previewのため非送信です', 'admin-notification-test-toast')
+          return
+        }
+        if (data.skippedReason === 'undeliverable') {
+          toastSession.success('配信手段なしです（送信していません）', 'admin-notification-test-toast')
+          return
+        }
+        if (data.pushSent) {
+          toastSession.success('Pushで送信しました（メールなし）', 'admin-notification-test-toast')
+          return
+        }
+        if (data.emailSent) {
+          toastSession.success('メールfallbackで送信しました', 'admin-notification-test-toast')
+          return
+        }
+        toastSession.success('実経路テストが完了しました', 'admin-notification-test-toast')
+      } finally {
+        busyRef.current = false
+        setBusy(null)
+      }
+    })
+  }
 
   const runSendAction = (action: 'inspect' | 'push' | 'email', confirmMessage?: string) => {
     if (busyRef.current || !sendFeatureAvailable || !targetId) return
@@ -954,6 +1087,7 @@ export function AdminNotificationTestClient({
               onChange={(event) => {
                 setTargetId(event.target.value)
                 setInspect(null)
+                setStudyInspect(null)
               }}
               disabled={busy !== null}
             >
@@ -990,13 +1124,66 @@ export function AdminNotificationTestClient({
 
           <section
             className="rounded-2xl border border-border bg-card p-5 shadow-sm"
+            aria-labelledby={`${baseId}-study-path-heading`}
+          >
+            <h2 id={`${baseId}-study-path-heading`} className="text-base font-bold text-foreground">
+              学習記録リマインダー実経路テスト
+            </h2>
+            <p className="mt-2 text-sm text-muted">
+              通常の22時Cronを起動せず、選択したテストアカウント1人だけを現在の学習記録リマインダー経路で判定・送信します。
+              通常の日次冪等性キーは使いません。
+            </p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <button
+                type="button"
+                className="rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-card disabled:opacity-60"
+                disabled={!targetId || busy !== null}
+                onClick={runStudyReminderInspect}
+              >
+                {busy === 'study-reminder-inspect' ? '判定中…' : '判定のみ'}
+              </button>
+              <button
+                type="button"
+                className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white transition hover:bg-primary-hover disabled:opacity-60"
+                disabled={!targetId || busy !== null}
+                onClick={runStudyReminderSend}
+              >
+                {busy === 'study-reminder-send'
+                  ? '送信中…'
+                  : 'このテストアカウントで学習リマインダーを実経路テスト'}
+              </button>
+            </div>
+
+            {studyInspect && (
+              <dl className="mt-4 space-y-2 text-sm text-foreground" aria-live="polite">
+                <div className="font-medium">想定結果：{studyInspect.projectedOutcomeLabel}</div>
+                <div>本日の日付（JST）: {studyInspect.dateKey}</div>
+                <div>本日の学習記録: {studyInspect.recordedToday ? 'あり' : 'なし'}</div>
+                <div>
+                  管理者設定:{' '}
+                  {studyInspect.preferenceEnabled ? '有効' : '停止中'}
+                  {studyInspect.preferenceRowExists ? '' : '（設定行なし＝既定ON）'}
+                </div>
+                <div>
+                  有効Push購読: {studyInspect.hasActivePushSubscription ? 'あり' : 'なし'}
+                </div>
+                <div>メールfallback: {studyInspect.canEmailFallback ? '可能' : '不可'}</div>
+                <div>Push送信機能: {studyInspect.pushSendingEnabled ? 'ON' : 'OFF'}</div>
+                <div>現在の学習リマインダー実効モード: {studyInspect.deliveryMode}</div>
+                <p className="text-xs text-muted">判定のみでは送信・event／delivery作成は行いません。</p>
+              </dl>
+            )}
+          </section>
+
+          <section
+            className="rounded-2xl border border-border bg-card p-5 shadow-sm"
             aria-labelledby={`${baseId}-inspect-heading`}
           >
             <h2 id={`${baseId}-inspect-heading`} className="text-base font-bold text-foreground">
-              状態確認（送信なし）
+              状態確認（固定文面テスト用・送信なし）
             </h2>
             <p className="mt-2 text-sm text-muted">
-              Push・メールは送りません。event / delivery も作成しません。
+              下の固定文面テスト向けの簡易確認です。学習記録リマインダー実経路は上のセクションを使ってください。
             </p>
             <button
               type="button"
@@ -1004,7 +1191,7 @@ export function AdminNotificationTestClient({
               disabled={!targetId || busy !== null}
               onClick={() => runSendAction('inspect')}
             >
-              {busy === 'inspect' ? '確認中…' : '判定のみ実行'}
+              {busy === 'inspect' ? '確認中…' : '簡易判定を実行'}
             </button>
 
             {inspect && (

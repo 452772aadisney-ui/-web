@@ -100,6 +100,23 @@ ADMIN_NOTIFICATION_TEST_ENABLED=true
 NOTIFICATION_TEST_USER_IDS=<試験用UUIDのみ>
 ```
 
+### 学習記録リマインダー実経路テスト（推奨）
+
+`/admin/notifications` の「学習記録リマインダー実経路テスト」:
+
+- **判定のみ**: 送信・event／deliveryなし。JST当日の記録有無・設定・購読・想定結果を表示
+- **実経路で1件送信**: 通常の `processStudyReminderNewPath` を1人だけ実行
+  - `notification_type=study_reminder`（固定文面・`/dashboard/study`）
+  - idempotency は `admin-study-reminder-test:{userId}:{30s bucket}`（**通常のJST日付キーではない**）
+  - metadata: `source=admin_notification_ops` / `kind=study_reminder_integration_test`
+  - 同日22時Cronを妨げない
+  - 通常Cron APIは呼ばない
+- 本番利用後は `ADMIN_NOTIFICATION_TEST_ENABLED` を OFF に戻す
+- 緊急停止: Push全停止（`PUSH_SENDING_ENABLED`≠true）＋管理者テストOFF＋必要なら `STUDY_REMINDER_DELIVERY_MODE=legacy`
+- Cron時刻起動そのものは別途 Vercel Logs で確認
+
+### 固定文面カテゴリテスト（notification_type=test）
+
 5種（いずれも `notification_type=test`）:
 
 1. 学習記録 → `/dashboard/study`

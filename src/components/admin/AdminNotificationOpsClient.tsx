@@ -426,6 +426,8 @@ export function AdminNotificationOpsClient({
                       <p>{formatTime(row.occurredAt)}</p>
                       <p className="text-muted">
                         {row.notificationType} / {row.channel} / {row.errorCode}
+                        {row.source ? ` / source=${row.source}` : ''}
+                        {row.kind ? ` / kind=${row.kind}` : ''}
                       </p>
                     </li>
                   ))}

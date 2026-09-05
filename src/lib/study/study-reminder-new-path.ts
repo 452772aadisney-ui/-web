@@ -92,14 +92,14 @@ export async function countActivePushSubscriptions(
 async function findStudyReminderEvent(
   admin: AdminClient,
   userId: string,
-  dateKey: string,
+  idempotencyKey: string,
 ): Promise<{ ok: true; eventId: string | null } | { ok: false }> {
   const { data, error } = await admin
     .from('notification_events')
     .select('id')
     .eq('user_id', userId)
     .eq('notification_type', 'study_reminder')
-    .eq('idempotency_key', dateKey)
+    .eq('idempotency_key', idempotencyKey)
     .maybeSingle<{ id: string }>()
 
   if (error) return { ok: false }
@@ -109,9 +109,10 @@ async function findStudyReminderEvent(
 async function getOrCreateStudyReminderEvent(
   admin: AdminClient,
   userId: string,
-  dateKey: string,
+  idempotencyKey: string,
+  metadata: Record<string, unknown> = {},
 ): Promise<{ ok: true; eventId: string } | { ok: false }> {
-  const existing = await findStudyReminderEvent(admin, userId, dateKey)
+  const existing = await findStudyReminderEvent(admin, userId, idempotencyKey)
   if (!existing.ok) return { ok: false }
   if (existing.eventId) return { ok: true, eventId: existing.eventId }
 
@@ -120,18 +121,18 @@ async function getOrCreateStudyReminderEvent(
     .insert({
       user_id: userId,
       notification_type: 'study_reminder',
-      idempotency_key: dateKey,
+      idempotency_key: idempotencyKey,
       title: STUDY_REMINDER_PUSH_TITLE,
       body: STUDY_REMINDER_PUSH_BODY,
       target_path: STUDY_REMINDER_PUSH_PATH,
-      metadata: {},
+      metadata,
     })
     .select('id')
     .single<{ id: string }>()
 
   if (insertError) {
     if (insertError.code === '23505') {
-      const raced = await findStudyReminderEvent(admin, userId, dateKey)
+      const raced = await findStudyReminderEvent(admin, userId, idempotencyKey)
       if (!raced.ok || !raced.eventId) return { ok: false }
       return { ok: true, eventId: raced.eventId }
     }
@@ -306,9 +307,10 @@ async function finalizeEmailDelivery(
 async function tryEmailFallback(params: {
   admin: AdminClient
   userId: string
-  dateKey: string
+  idempotencyKey: string
   dateLabel: string
   email: string | null
+  eventMetadata?: Record<string, unknown>
   deadlineMs?: number
 }): Promise<StudyReminderNewPathOutcome> {
   if (params.deadlineMs != null && Date.now() >= params.deadlineMs) {
@@ -318,7 +320,8 @@ async function tryEmailFallback(params: {
   const event = await getOrCreateStudyReminderEvent(
     params.admin,
     params.userId,
-    params.dateKey,
+    params.idempotencyKey,
+    params.eventMetadata ?? {},
   )
   if (!event.ok) return 'failed'
 
@@ -388,22 +391,28 @@ async function tryEmailFallback(params: {
     return 'email_failed'
   }
 
-    await finalizeEmailDelivery(params.admin, event.eventId, {
-      status: 'failed',
-      http_status: sendResult.httpStatus ?? null,
-      error_code: sendResult.errorClass ?? 'email_send_failed',
-      succeeded_at: null,
-    })
-    return 'email_failed'
+  await finalizeEmailDelivery(params.admin, event.eventId, {
+    status: 'failed',
+    http_status: sendResult.httpStatus ?? null,
+    error_code: sendResult.errorClass ?? 'email_send_failed',
+    succeeded_at: null,
+  })
+  return 'email_failed'
 }
 
 /**
  * Push-first path for one student. Never logs PII / endpoints / keys.
+ * Cron uses dateKey as idempotencyKey; admin integration tests pass a distinct key.
  */
 export async function processStudyReminderNewPath(params: {
   candidate: StudyReminderCandidate
   dateKey: string
   dateLabel: string
+  /** Defaults to dateKey (Cron daily key). */
+  idempotencyKey?: string
+  /** Defaults to study-reminder-{dateKey}. */
+  tag?: string
+  eventMetadata?: Record<string, unknown>
   nowMs?: number
   deadlineMs?: number
   env?: NodeJS.ProcessEnv | Record<string, string | undefined>
@@ -413,6 +422,9 @@ export async function processStudyReminderNewPath(params: {
 
   const nowMs = params.nowMs ?? Date.now()
   const env = params.env ?? process.env
+  const idempotencyKey = params.idempotencyKey ?? params.dateKey
+  const tag = params.tag ?? `study-reminder-${params.dateKey}`
+  const eventMetadata = params.eventMetadata ?? {}
 
   if (params.deadlineMs != null && Date.now() >= params.deadlineMs) {
     return 'timed_out'
@@ -440,7 +452,7 @@ export async function processStudyReminderNewPath(params: {
   const existingEvent = await findStudyReminderEvent(
     admin,
     params.candidate.studentId,
-    params.dateKey,
+    idempotencyKey,
   )
   if (!existingEvent.ok) return 'failed'
 
@@ -469,9 +481,10 @@ export async function processStudyReminderNewPath(params: {
       return tryEmailFallback({
         admin,
         userId: params.candidate.studentId,
-        dateKey: params.dateKey,
+        idempotencyKey,
         dateLabel: params.dateLabel,
         email: params.candidate.email,
+        eventMetadata,
         deadlineMs: params.deadlineMs,
       })
     }
@@ -482,14 +495,20 @@ export async function processStudyReminderNewPath(params: {
     const pushResult = await sendPushNotification({
       userId: params.candidate.studentId,
       notificationType: 'study_reminder',
-      idempotencyKey: params.dateKey,
+      idempotencyKey,
       title: STUDY_REMINDER_PUSH_TITLE,
       body: STUDY_REMINDER_PUSH_BODY,
       targetPath: STUDY_REMINDER_PUSH_PATH,
-      tag: `study-reminder-${params.dateKey}`,
+      tag,
     })
 
     if (pushResult.ok) {
+      if (Object.keys(eventMetadata).length > 0) {
+        await admin
+          .from('notification_events')
+          .update({ metadata: eventMetadata })
+          .eq('id', pushResult.eventId)
+      }
       if (pushResult.sent > 0) return 'push_sent'
       // sent === 0: all failed or skipped without success → email fallback
     } else if (pushResult.code === 'preference_disabled') {
@@ -505,9 +524,10 @@ export async function processStudyReminderNewPath(params: {
   return tryEmailFallback({
     admin,
     userId: params.candidate.studentId,
-    dateKey: params.dateKey,
+    idempotencyKey,
     dateLabel: params.dateLabel,
     email: params.candidate.email,
+    eventMetadata,
     deadlineMs: params.deadlineMs,
   })
 }

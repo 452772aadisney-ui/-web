@@ -129,6 +129,21 @@ Preview（`VERCEL_ENV` があり production 以外）: 新方式の外部送信�
 - メールは必ず `withResendSendPace` 経由
 - 管理者＋対象＋種別で 30 秒クールダウン
 
+### 学習記録リマインダー実経路テスト（7-5）
+
+通常Cronを起動せず、allowlist内の生徒1人だけを `processStudyReminderNewPath` で確認する。
+
+| 項目 | 内容 |
+|------|------|
+| 判定のみ | 送信・event／deliveryなし |
+| 実送信 | Push-first（成功時メールなし）／fallbackメール |
+| type | `study_reminder`（本番と同じ文面・遷移先） |
+| idempotency | `admin-study-reminder-test:…`（日次キーと分離） |
+| metadata | `source=admin_notification_ops`, `kind=study_reminder_integration_test` |
+| 通常22時 | 妨げない。時刻起動は Vercel Logs で別確認 |
+
+本番利用後は管理者テスト機能を OFF に戻す。緊急停止: Push全停止＋管理者テストOFF＋必要なら `STUDY_REMINDER_DELIVERY_MODE=legacy`。
+
 ---
 
 ## 管理者向け・全体dry-run（2-4）
