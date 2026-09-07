@@ -1,9 +1,29 @@
--- 053_class_schedule 適用前の読み取り専用 preflight
+-- 053/055 共通: 授業予定 部分適用状態の読み取り専用 preflight
 -- Supabase Dashboard > SQL Editor で一括実行。DB を変更しません。
--- 用途: 失敗した 053 実行のあと、全体rollbackか部分適用かを把握する。
--- 本番データの DELETE/UPDATE/DROP は行わない。
+--
+-- 判定は pg_proc.pronargs + oidvectortypes(proargtypes) を使い、
+-- 引数名（例: p_uid）に依存しない。identity_args は表示用のみ。
 
 with
+fn_base as (
+  select
+    p.oid,
+    p.proname,
+    p.pronargs,
+    oidvectortypes(p.proargtypes) as arg_types,
+    pg_get_function_identity_arguments(p.oid) as identity_args,
+    p.prosecdef,
+    p.proconfig,
+    pg_get_userbyid(p.proowner) as owner_name
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname in (
+      'is_kisotsu_profile',
+      'create_class_schedule_day_with_sessions',
+      'bump_class_schedule_notify_revision'
+    )
+),
 days_exists as (
   select to_regclass('public.class_schedule_days') is not null as ok
 ),
@@ -33,130 +53,192 @@ sessions_rls as (
   ) as ok
 ),
 policies as (
-  select
-    coalesce(
-      (
-        select jsonb_agg(
-          jsonb_build_object(
-            'table', tablename,
-            'policy', policyname,
-            'cmd', cmd,
-            'qual', qual,
-            'with_check', with_check
-          )
-          order by tablename, policyname
+  select coalesce(
+    (
+      select jsonb_agg(
+        jsonb_build_object(
+          'table', tablename,
+          'policy', policyname,
+          'cmd', cmd,
+          'qual', qual,
+          'with_check', with_check
         )
-        from pg_policies
-        where schemaname = 'public'
-          and tablename in ('class_schedule_days', 'class_schedule_sessions')
-      ),
-      '[]'::jsonb
-    ) as rows
+        order by tablename, policyname
+      )
+      from pg_policies
+      where schemaname = 'public'
+        and tablename in ('class_schedule_days', 'class_schedule_sessions')
+    ),
+    '[]'::jsonb
+  ) as rows
 ),
-kisotsu_overloads as (
+kisotsu as (
   select
     coalesce(
       (
         select jsonb_agg(
           jsonb_build_object(
-            'identity_args', pg_get_function_identity_arguments(p.oid),
-            'oid', p.oid,
-            'prosecdef', p.prosecdef,
-            'proconfig', p.proconfig
+            'identity_args', identity_args,
+            'arg_types', arg_types,
+            'pronargs', pronargs,
+            'prosecdef', prosecdef,
+            'proconfig', proconfig,
+            'owner', owner_name
           )
-          order by pg_get_function_identity_arguments(p.oid)
+          order by arg_types
         )
-        from pg_proc p
-        join pg_namespace n on n.oid = p.pronamespace
-        where n.nspname = 'public' and p.proname = 'is_kisotsu_profile'
+        from fn_base
+        where proname = 'is_kisotsu_profile'
       ),
       '[]'::jsonb
-    ) as rows,
+    ) as overloads,
     exists (
-      select 1
-      from pg_proc p
-      join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public'
-        and p.proname = 'is_kisotsu_profile'
-        and pg_get_function_identity_arguments(p.oid) = 'uuid'
+      select 1 from fn_base
+      where proname = 'is_kisotsu_profile' and pronargs = 0
+    ) as has_noarg,
+    exists (
+      select 1 from fn_base
+      where proname = 'is_kisotsu_profile'
+        and pronargs = 1
+        and arg_types = 'uuid'
     ) as has_uuid,
-    exists (
-      select 1
-      from pg_proc p
-      join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public'
-        and p.proname = 'is_kisotsu_profile'
-        and pg_get_function_identity_arguments(p.oid) = ''
-    ) as has_noarg
+    (
+      select count(*)::int from fn_base where proname = 'is_kisotsu_profile'
+    ) as overload_count
 ),
 create_rpc as (
-  select coalesce(
-    (
-      select jsonb_agg(
-        jsonb_build_object(
-          'identity_args', pg_get_function_identity_arguments(p.oid),
-          'prosecdef', p.prosecdef
+  select
+    coalesce(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'identity_args', identity_args,
+            'arg_types', arg_types,
+            'pronargs', pronargs,
+            'prosecdef', prosecdef,
+            'proconfig', proconfig,
+            'owner', owner_name
+          )
+          order by arg_types
         )
-        order by pg_get_function_identity_arguments(p.oid)
-      )
-      from pg_proc p
-      join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public'
-        and p.proname = 'create_class_schedule_day_with_sessions'
-    ),
-    '[]'::jsonb
-  ) as rows
+        from fn_base
+        where proname = 'create_class_schedule_day_with_sessions'
+      ),
+      '[]'::jsonb
+    ) as overloads,
+    exists (
+      select 1 from fn_base
+      where proname = 'create_class_schedule_day_with_sessions'
+        and arg_types = 'date, text, text, text, text, jsonb'
+    ) as has_old_6arg,
+    exists (
+      select 1 from fn_base
+      where proname = 'create_class_schedule_day_with_sessions'
+        and arg_types = 'date, text, text, text, text, jsonb, uuid'
+    ) as has_new_7arg,
+    (
+      select count(*)::int
+      from fn_base
+      where proname = 'create_class_schedule_day_with_sessions'
+    ) as overload_count
 ),
 bump_rpc as (
-  select coalesce(
-    (
-      select jsonb_agg(
-        jsonb_build_object(
-          'identity_args', pg_get_function_identity_arguments(p.oid),
-          'prosecdef', p.prosecdef
+  select
+    coalesce(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'identity_args', identity_args,
+            'arg_types', arg_types,
+            'pronargs', pronargs,
+            'prosecdef', prosecdef,
+            'proconfig', proconfig,
+            'owner', owner_name
+          )
+          order by arg_types
         )
-        order by pg_get_function_identity_arguments(p.oid)
-      )
-      from pg_proc p
-      join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public'
-        and p.proname = 'bump_class_schedule_notify_revision'
-    ),
-    '[]'::jsonb
-  ) as rows
+        from fn_base
+        where proname = 'bump_class_schedule_notify_revision'
+      ),
+      '[]'::jsonb
+    ) as overloads,
+    exists (
+      select 1 from fn_base
+      where proname = 'bump_class_schedule_notify_revision'
+        and arg_types = 'uuid, uuid'
+    ) as has_expected,
+    (
+      select count(*)::int
+      from fn_base
+      where proname = 'bump_class_schedule_notify_revision'
+    ) as overload_count
 ),
 rpc_exec as (
   select
     case
-      when to_regprocedure(
-        'public.create_class_schedule_day_with_sessions(date,text,text,text,text,jsonb,uuid)'
-      ) is null then null
+      when not exists (
+        select 1 from fn_base
+        where proname = 'create_class_schedule_day_with_sessions'
+          and arg_types = 'date, text, text, text, text, jsonb'
+      ) then null
       else jsonb_build_object(
         'public', has_function_privilege(
           'public',
-          'public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid)',
+          'public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb)',
           'EXECUTE'
         ),
         'anon', has_function_privilege(
           'anon',
-          'public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid)',
+          'public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb)',
           'EXECUTE'
         ),
         'authenticated', has_function_privilege(
           'authenticated',
-          'public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid)',
+          'public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb)',
           'EXECUTE'
         ),
         'service_role', has_function_privilege(
           'service_role',
-          'public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid)',
+          'public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb)',
           'EXECUTE'
         )
       )
-    end as create_exec,
+    end as create_old_6arg_execute,
     case
-      when to_regprocedure('public.bump_class_schedule_notify_revision(uuid,uuid)') is null
-        then null
+      when not exists (
+        select 1 from fn_base
+        where proname = 'create_class_schedule_day_with_sessions'
+          and arg_types = 'date, text, text, text, text, jsonb, uuid'
+      ) then null
+      else jsonb_build_object(
+        'public', has_function_privilege(
+          'public',
+          'public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid)',
+          'EXECUTE'
+        ),
+        'anon', has_function_privilege(
+          'anon',
+          'public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid)',
+          'EXECUTE'
+        ),
+        'authenticated', has_function_privilege(
+          'authenticated',
+          'public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid)',
+          'EXECUTE'
+        ),
+        'service_role', has_function_privilege(
+          'service_role',
+          'public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid)',
+          'EXECUTE'
+        )
+      )
+    end as create_new_7arg_execute,
+    case
+      when not exists (
+        select 1 from fn_base
+        where proname = 'bump_class_schedule_notify_revision'
+          and arg_types = 'uuid, uuid'
+      ) then null
       else jsonb_build_object(
         'public', has_function_privilege(
           'public',
@@ -179,7 +261,7 @@ rpc_exec as (
           'EXECUTE'
         )
       )
-    end as bump_exec
+    end as bump_execute
 ),
 triggers as (
   select coalesce(
@@ -243,18 +325,23 @@ interpretation as (
     case
       when not (select ok from days_exists)
        and not (select ok from sessions_exists)
-       and not (select has_uuid from kisotsu_overloads)
-       and not (select has_noarg from kisotsu_overloads)
-       and jsonb_array_length((select rows from create_rpc)) = 0
-       and jsonb_array_length((select rows from bump_rpc)) = 0
-      then 'likely_full_rollback_or_never_applied'
+       and (select overload_count from kisotsu) = 0
+       and (select overload_count from create_rpc) = 0
+       and (select overload_count from bump_rpc) = 0
+      then 'likely_empty_or_never_applied'
       when (select ok from days_exists)
-       and (select has_uuid from kisotsu_overloads)
-      then 'partial_or_old_053_uuid_helper_still_present'
+       and (select has_uuid from kisotsu)
+       and (select has_old_6arg from create_rpc)
+      then 'partial_old_053_uuid_helper_and_old_create_rpc'
       when (select ok from days_exists)
-       and (select has_noarg from kisotsu_overloads)
-       and not (select has_uuid from kisotsu_overloads)
-      then 'tables_present_helper_looks_new_verify_needed'
+       and (select has_uuid from kisotsu)
+      then 'partial_old_053_uuid_helper_still_present'
+      when (select ok from days_exists)
+       and (select has_noarg from kisotsu)
+       and not (select has_uuid from kisotsu)
+       and (select has_new_7arg from create_rpc)
+       and not (select has_old_6arg from create_rpc)
+      then 'looks_repaired_or_latest_053_run_verify_needed'
       else 'inspect_details'
     end as guess
 )
@@ -265,13 +352,20 @@ select
   (select ok from days_rls) as days_rls_enabled,
   (select ok from sessions_rls) as sessions_rls_enabled,
   (select rows from policies) as policies,
-  (select rows from kisotsu_overloads) as is_kisotsu_profile_overloads,
-  (select has_uuid from kisotsu_overloads) as has_is_kisotsu_profile_uuid,
-  (select has_noarg from kisotsu_overloads) as has_is_kisotsu_profile_noarg,
-  (select rows from create_rpc) as create_rpc_overloads,
-  (select rows from bump_rpc) as bump_rpc_overloads,
-  (select create_exec from rpc_exec) as create_rpc_execute,
-  (select bump_exec from rpc_exec) as bump_rpc_execute,
+  (select overloads from kisotsu) as is_kisotsu_profile_overloads,
+  (select has_uuid from kisotsu) as has_is_kisotsu_profile_uuid,
+  (select has_noarg from kisotsu) as has_is_kisotsu_profile_noarg,
+  (select overload_count from kisotsu) as is_kisotsu_profile_overload_count,
+  (select overloads from create_rpc) as create_rpc_overloads,
+  (select has_old_6arg from create_rpc) as has_create_rpc_old_6arg,
+  (select has_new_7arg from create_rpc) as has_create_rpc_new_7arg,
+  (select overload_count from create_rpc) as create_rpc_overload_count,
+  (select overloads from bump_rpc) as bump_rpc_overloads,
+  (select has_expected from bump_rpc) as has_bump_rpc_expected,
+  (select overload_count from bump_rpc) as bump_rpc_overload_count,
+  (select create_old_6arg_execute from rpc_exec) as create_old_6arg_execute,
+  (select create_new_7arg_execute from rpc_exec) as create_new_7arg_execute,
+  (select bump_execute from rpc_exec) as bump_execute,
   (select names from triggers) as triggers,
   (select names from indexes) as indexes,
   (select names from constraints) as constraints,
@@ -280,6 +374,9 @@ select
   case
     when not (select enum_class_schedule from notif_054)
      and not (select prefs_class_schedule_col from notif_054)
-    then '054_not_applied_ok'
-    else '054_partial_or_applied_investigate'
+    then '054_not_applied'
+    when (select enum_class_schedule from notif_054)
+     and (select prefs_class_schedule_col from notif_054)
+    then '054_objects_present'
+    else '054_partial'
   end as migration_054_status;
