@@ -158,41 +158,36 @@ export function createClassScheduleRpcDiagnostic(input: {
   }
 }
 
+/**
+ * User-facing copy — keep parity with pre-diagnostic mapping.
+ * Classification for logs is separate (classifyClassScheduleRpcError).
+ */
 export function mapClassScheduleDbError(error: ClassScheduleRpcErrorLike): string {
-  const errorClass = classifyClassScheduleRpcError(error)
+  const code = error.code ?? ''
   const message = error.message ?? ''
-
-  switch (errorClass) {
-    case 'unique_violation':
-      return '同じ日付の授業予定が既にあります'
-    case 'overlap_violation':
-      return '既存のコマと時間が重複しています'
-    case 'permission_denied':
-      return '管理者権限が必要です'
-    case 'rpc_not_found':
-      // Ops: PostgREST schema cache often needs NOTIFY pgrst, 'reload schema'
-      return '授業予定の保存に失敗しました'
-    case 'invalid_input':
-      if (/too many/i.test(message)) {
-        return `コマは1日あたり最大${CLASS_SCHEDULE_MAX_SESSIONS_PER_DAY}件までです`
-      }
-      if (/at least one session|sessions must be/i.test(message)) {
-        return 'コマを1つ以上追加してください'
-      }
-      if (
-        /end_time must be after|invalid session time|subject is required/i.test(
-          message,
-        )
-      ) {
-        return 'コマの内容が不正です'
-      }
-      return '入力内容を確認してください'
-    case 'check_violation':
-    case 'foreign_key_violation':
-    case 'admin_client_missing':
-    case 'empty_result':
-    case 'unknown':
-    default:
-      return '授業予定の保存に失敗しました'
+  if (code === '23505' || /duplicate key|unique/i.test(message)) {
+    return '同じ日付の授業予定が既にあります'
   }
+  if (code === '23P01' || /overlap/i.test(message)) {
+    return '既存のコマと時間が重複しています'
+  }
+  if (
+    code === '22023' ||
+    /at least one session|sessions must be|too many sessions/i.test(message)
+  ) {
+    return /too many/i.test(message)
+      ? `コマは1日あたり最大${CLASS_SCHEDULE_MAX_SESSIONS_PER_DAY}件までです`
+      : 'コマを1つ以上追加してください'
+  }
+  if (
+    /end_time must be after|invalid session time|subject is required/i.test(
+      message,
+    )
+  ) {
+    return 'コマの内容が不正です'
+  }
+  if (code === '42501' || /permission denied/i.test(message)) {
+    return '管理者権限が必要です'
+  }
+  return '授業予定の保存に失敗しました'
 }

@@ -144,19 +144,26 @@ describe('classifyClassScheduleRpcError', () => {
     ).toBe('管理者権限が必要です')
   })
 
-  it('does not treat every 22023 as missing sessions', () => {
+  it('keeps pre-diagnostic user-facing copy for 22023', () => {
+    // Historical mapping treated any 22023 as session-count messaging.
     expect(
       mapClassScheduleDbError({
         code: '22023',
         message: 'invalid venue_name',
       }),
-    ).toBe('入力内容を確認してください')
+    ).toBe('コマを1つ以上追加してください')
     expect(
       mapClassScheduleDbError({
         code: '22023',
         message: 'at least one session is required',
       }),
     ).toBe('コマを1つ以上追加してください')
+    expect(
+      mapClassScheduleDbError({
+        code: 'PGRST202',
+        message: 'Could not find the function',
+      }),
+    ).toBe('授業予定の保存に失敗しました')
   })
 
   it('diagnostic payload stays free of PII and venue fields', () => {
