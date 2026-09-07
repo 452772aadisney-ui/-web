@@ -14,15 +14,17 @@ Do **not** apply 057 and 058 in the same change window. Do **not** drop the
 
 ## Order
 
-1. **Optional precheck** (read-only):  
-   `supabase/rollbacks/057_class_schedule_location_details_precheck.sql`  
-   Expect `time_out_of_range_or_off_grid = 0` and `subject_invalid = 0`.  
-   Record `days_total`, `sessions_total`, `notify_revision_sum` (no PII).
+1. **Optional precheck** (read-only; works **before or after** 057):
+   `supabase/rollbacks/057_class_schedule_location_details_precheck.sql`
+   Expect `ready_for_057 = 1` (all time/subject invalid counts = 0).
+   `location_details_column_present` is `0` pre-057 and `1` post-057.
+   Record `days_total`, `sessions_total`, `notify_revision_sum`,
+   `days_backfill_candidates` (no PII).
 
 2. **Apply 057** (migration only — no app deploy yet).
 
-3. **Verify 057**:  
-   `supabase/rollbacks/057_class_schedule_location_details_verify.sql`  
+3. **Verify 057**:
+   `supabase/rollbacks/057_class_schedule_location_details_verify.sql`
    Expect dual overloads (5-arg + 7-arg), both `service_role` only, backfill PASS,
    time/subject CHECKs PASS. Compare row counts / `notify_revision_sum` to precheck
    (migration must not bump revisions or delete rows).
