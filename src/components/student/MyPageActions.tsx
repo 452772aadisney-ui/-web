@@ -8,6 +8,8 @@ import { FaqIntroDialog } from '@/components/faq/FaqIntroDialog'
 import { StudyLogModeDialog } from '@/components/study/StudyLogModeDialog'
 import { TextbookRegisterModeDialog } from '@/components/textbooks/TextbookRegisterModeDialog'
 import { CoachingAlertBanner } from '@/components/coaching/CoachingAlertBanner'
+import { StudentPushRecommendedItem } from '@/components/notifications/StudentPushRecommendedItem'
+import { StudentPushSetupPrompt } from '@/components/notifications/StudentPushSetupPrompt'
 import { OnboardingChecklist } from '@/components/student/OnboardingChecklist'
 import {
   MYPAGE_MENU_ICONS,
@@ -16,6 +18,7 @@ import {
 } from '@/components/student/MyPageMenuButtons'
 import { StarRankingBanner } from '@/components/student/StarRankingBanner'
 import { CommonTestCountdownBanner } from '@/components/student/CommonTestCountdownBanner'
+import { useDeviceNotificationStatus } from '@/hooks/useDeviceNotificationStatus'
 import type { StudentStarRanking } from '@/lib/achievements/ranking'
 import type { OnboardingChecklistItem } from '@/lib/student/onboarding-checklist'
 import { formatTodayStudyButtonSubtitle } from '@/lib/study/today-status'
@@ -108,6 +111,8 @@ interface MyPageActionsProps {
   hideClassSchedule?: boolean
   hideCoaching?: boolean
   showFaqIntro?: boolean
+  /** False when admin disabled all 4 categories — hide push promo. */
+  anyNotificationCategoryEnabled?: boolean
 }
 
 export function MyPageActions({
@@ -126,9 +131,11 @@ export function MyPageActions({
   hideClassSchedule = false,
   hideCoaching = false,
   showFaqIntro = false,
+  anyNotificationCategoryEnabled = true,
 }: MyPageActionsProps) {
   const [studyDialogOpen, setStudyDialogOpen] = useState(false)
   const [textbookRegisterDialogOpen, setTextbookRegisterDialogOpen] = useState(false)
+  const pushDevice = useDeviceNotificationStatus()
   const badgeCounts: Record<MenuBadgeKey, number> = {
     studyHistory: unreadStudyFeedbackCount,
     announcements: unreadAnnouncementCount,
@@ -213,7 +220,22 @@ export function MyPageActions({
           ))}
       </div>
 
-      {showOnboarding && <OnboardingChecklist items={onboardingItems} />}
+      <StudentPushSetupPrompt
+        anyCategoryEnabled={anyNotificationCategoryEnabled}
+        device={pushDevice}
+      />
+
+      {showOnboarding && (
+        <OnboardingChecklist
+          items={onboardingItems}
+          recommended={
+            <StudentPushRecommendedItem
+              anyCategoryEnabled={anyNotificationCategoryEnabled}
+              device={pushDevice}
+            />
+          }
+        />
+      )}
 
       <MyPagePrimaryActionButton
         label="学習を記録する"

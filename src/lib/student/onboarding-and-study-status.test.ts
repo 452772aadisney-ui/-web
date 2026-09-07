@@ -82,4 +82,22 @@ describe('onboarding checklist', () => {
     expect(shouldShowOnboardingChecklist(complete)).toBe(false)
     expect(buildOnboardingChecklist(complete).every((item) => item.completed)).toBe(true)
   })
+
+  it('keeps required checklist free of device notification items', () => {
+    const items = buildOnboardingChecklist({
+      subjects: [],
+      birthday: null,
+      targetSchools: [],
+      textbookCount: 0,
+      hasPositiveStudyLog: false,
+    })
+    expect(items.map((item) => item.id)).toEqual([
+      'subjects',
+      'birthday',
+      'targetSchools',
+      'textbooks',
+      'studyLog',
+    ])
+    expect(items.some((item) => item.label.includes('通知'))).toBe(false)
+  })
 })

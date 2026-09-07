@@ -20,6 +20,11 @@ import { getJstDateKey } from '@/lib/study/dates'
 import { buildOnboardingChecklist } from '@/lib/student/onboarding-checklist'
 import { isKisotsuGradeTag, showsCommonTestCountdown } from '@/lib/tags/grade-order'
 import { fetchGradeTagNameForProfile } from '@/lib/tags/queries'
+import { getNotificationPreferences } from '@/app/notifications/actions'
+import {
+  defaultNotificationPreferences,
+  hasAnyNotificationCategoryEnabled,
+} from '@/lib/push/preferences'
 
 export default async function StudentDashboardPage() {
   const supabase = await createClient()
@@ -119,6 +124,16 @@ export default async function StudentDashboardPage() {
         })
       : []
 
+  const notificationPrefsResult =
+    profile.role === 'student' ? await getNotificationPreferences() : null
+  const anyNotificationCategoryEnabled =
+    profile.role !== 'student'
+      ? false
+      : notificationPrefsResult?.ok
+        ? hasAnyNotificationCategoryEnabled(notificationPrefsResult.preferences)
+        : // Prefer showing the promo over assuming admin stopped all categories.
+          hasAnyNotificationCategoryEnabled(defaultNotificationPreferences())
+
   const showFaqIntro =
     profile.role === 'student' && profile.faq_intro_seen_at == null
   const commonTestDaysRemaining = showsCommonTestCountdown(gradeTagName)
@@ -146,6 +161,7 @@ export default async function StudentDashboardPage() {
           hideClassSchedule={isKisotsuStudent}
           hideCoaching={isKisotsuStudent}
           showFaqIntro={showFaqIntro}
+          anyNotificationCategoryEnabled={anyNotificationCategoryEnabled}
         />
 
         {profile.role === 'student' && profile.student_code && !isKisotsuStudent && (

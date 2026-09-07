@@ -1,24 +1,18 @@
 'use client'
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useId, useRef, useState } from 'react'
 import { getNotificationPreferences } from '@/app/notifications/actions'
+import { PushSetupGuidance } from '@/components/notifications/PushSetupGuidance'
+import { useDeviceNotificationStatus } from '@/hooks/useDeviceNotificationStatus'
 import {
-  deriveDeviceNotificationStatus,
   deviceStatusDetail,
   deviceStatusHeadline,
-  type DeviceNotificationStatus,
 } from '@/lib/push/device-status'
 import {
   disablePushSubscriptionFromUser,
   enablePushSubscriptionFromUser,
-  fetchPushServerStatus,
-  getCurrentPushSubscription,
-  getLocalPushState,
-  isStandaloneDisplayMode,
-  likelyRequiresStandaloneForPush,
   sendTestPushNotificationFromUser,
 } from '@/lib/push/client'
-import { getVapidPublicKey } from '@/lib/push/env'
 import {
   NOTIFICATION_PREFERENCE_CATEGORIES,
   NOTIFICATION_PREFERENCE_COPY,
@@ -39,67 +33,17 @@ export function NotificationSettingsClient({
   initialPrefsFromDatabase: boolean
   initialPrefsError: boolean
 }) {
-  const [deviceStatus, setDeviceStatus] = useState<DeviceNotificationStatus>('loading')
+  const device = useDeviceNotificationStatus()
   const [prefs, setPrefs] = useState<NotificationPreferencesView>(initialPreferences)
   const [prefsState, setPrefsState] = useState<PrefsLoadState>(
     initialPrefsError ? 'error' : 'ready',
   )
   const [prefsFromDatabase, setPrefsFromDatabase] = useState(initialPrefsFromDatabase)
   const [deviceBusy, setDeviceBusy] = useState(false)
-  const [showIosGuide, setShowIosGuide] = useState(false)
-  const [sendingEnabled, setSendingEnabled] = useState(false)
-  const [hasBrowserSubscription, setHasBrowserSubscription] = useState(false)
   const [testBusy, setTestBusy] = useState(false)
   const busyRef = useRef(false)
   const testBusyRef = useRef(false)
   const baseId = useId()
-
-  const refreshDeviceStatus = useCallback(async () => {
-    const local = getLocalPushState()
-    const configured = Boolean(getVapidPublicKey()) || local.configured
-    const requiresStandalone = likelyRequiresStandaloneForPush()
-    setShowIosGuide(requiresStandalone)
-
-    let browserSubscription = false
-    try {
-      const sub = await getCurrentPushSubscription()
-      browserSubscription = Boolean(sub)
-    } catch {
-      browserSubscription = false
-    }
-    setHasBrowserSubscription(browserSubscription)
-
-    let serverSubscribed = false
-    let serverStatusFailed = false
-    let nextSendingEnabled = false
-    const server = await fetchPushServerStatus()
-    if (server.ok) {
-      serverSubscribed = server.value.subscribed
-      nextSendingEnabled = server.value.sendingEnabled
-    } else if (server.code === 'network' || server.code === 'unknown') {
-      serverStatusFailed = true
-    }
-    setSendingEnabled(nextSendingEnabled)
-
-    const permission =
-      local.permission === 'granted' ||
-      local.permission === 'denied' ||
-      local.permission === 'default'
-        ? local.permission
-        : 'unsupported'
-
-    setDeviceStatus(
-      deriveDeviceNotificationStatus({
-        supported: local.supported,
-        requiresStandalone,
-        configured,
-        permission,
-        hasBrowserSubscription: browserSubscription,
-        serverSubscribed,
-        serverStatusFailed,
-      }),
-    )
-  }, [])
 
   const refreshPreferences = useCallback(async () => {
     const result = await getNotificationPreferences()
@@ -112,30 +56,9 @@ export function NotificationSettingsClient({
     setPrefsState('ready')
   }, [])
 
-  useEffect(() => {
-    void refreshDeviceStatus()
-  }, [refreshDeviceStatus])
-
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        void refreshDeviceStatus()
-      }
-    }
-    const onFocus = () => {
-      void refreshDeviceStatus()
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    window.addEventListener('focus', onFocus)
-    return () => {
-      document.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('focus', onFocus)
-    }
-  }, [refreshDeviceStatus])
-
   const handleEnable = async () => {
     if (busyRef.current) return
-    if (deviceStatus === 'permission_denied') return
+    if (device.status === 'permission_denied') return
 
     busyRef.current = true
     setDeviceBusy(true)
@@ -145,11 +68,11 @@ export function NotificationSettingsClient({
       const result = await enablePushSubscriptionFromUser()
       if (!result.ok) {
         toastSession.error(result.message)
-        await refreshDeviceStatus()
+        await device.refresh()
         return
       }
       toastSession.success('この端末の通知を有効にしました')
-      await refreshDeviceStatus()
+      await device.refresh()
     } finally {
       busyRef.current = false
       setDeviceBusy(false)
@@ -174,11 +97,11 @@ export function NotificationSettingsClient({
       const result = await disablePushSubscriptionFromUser()
       if (!result.ok) {
         toastSession.error(result.message)
-        await refreshDeviceStatus()
+        await device.refresh()
         return
       }
       toastSession.success('この端末の通知を停止しました')
-      await refreshDeviceStatus()
+      await device.refresh()
     } finally {
       busyRef.current = false
       setDeviceBusy(false)
@@ -195,17 +118,18 @@ export function NotificationSettingsClient({
       const result = await sendTestPushNotificationFromUser()
       if (!result.ok) {
         toastSession.error(result.message, 'notification-test-toast')
-        await refreshDeviceStatus()
+        await device.refresh()
         return
       }
       toastSession.success('テスト通知を送信しました', 'notification-test-toast')
-      await refreshDeviceStatus()
+      await device.refresh()
     } finally {
       testBusyRef.current = false
       setTestBusy(false)
     }
   }
 
+  const deviceStatus = device.status
   const headline = deviceStatusHeadline(deviceStatus)
   const detail = deviceStatusDetail(deviceStatus)
   const canEnable =
@@ -217,12 +141,14 @@ export function NotificationSettingsClient({
   const showDeniedRetry = deviceStatus === 'permission_denied'
   const canSendTest =
     deviceStatus === 'subscribed' &&
-    hasBrowserSubscription &&
-    sendingEnabled &&
+    device.hasBrowserSubscription &&
+    device.sendingEnabled &&
     !deviceBusy &&
     !testBusy
   const showTestUnavailableHint =
-    deviceStatus === 'subscribed' && hasBrowserSubscription && !sendingEnabled
+    deviceStatus === 'subscribed' &&
+    device.hasBrowserSubscription &&
+    !device.sendingEnabled
   const needsPushPrompt =
     deviceStatus === 'permission_default' ||
     deviceStatus === 'ready_to_enable' ||
@@ -254,14 +180,7 @@ export function NotificationSettingsClient({
         </p>
         {detail && <p className="mt-2 text-sm text-muted">{detail}</p>}
 
-        {showIosGuide && !isStandaloneDisplayMode() && (
-          <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-muted">
-            <li>Safariの共有ボタンを押す</li>
-            <li>「ホーム画面に追加」を選ぶ</li>
-            <li>追加した「受験生web」を開く</li>
-            <li>通知設定をもう一度開く</li>
-          </ol>
-        )}
+        <PushSetupGuidance status={deviceStatus} showIosGuide={device.showIosGuide} />
 
         <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           {canEnable && (
@@ -316,7 +235,7 @@ export function NotificationSettingsClient({
           {showDeniedRetry && (
             <button
               type="button"
-              onClick={() => void refreshDeviceStatus()}
+              onClick={() => void device.refresh()}
               className="rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-card"
             >
               状態を再確認する
@@ -326,7 +245,7 @@ export function NotificationSettingsClient({
           {(deviceStatus === 'network_error' || deviceStatus === 'loading') && (
             <button
               type="button"
-              onClick={() => void refreshDeviceStatus()}
+              onClick={() => void device.refresh()}
               disabled={deviceBusy}
               className="rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-card disabled:opacity-60"
             >

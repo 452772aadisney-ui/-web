@@ -1,7 +1,15 @@
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 import type { OnboardingChecklistItem } from '@/lib/student/onboarding-checklist'
 
-export function OnboardingChecklist({ items }: { items: OnboardingChecklistItem[] }) {
+export function OnboardingChecklist({
+  items,
+  recommended,
+}: {
+  items: OnboardingChecklistItem[]
+  /** Device-local recommended row; never counted in required remaining. */
+  recommended?: ReactNode
+}) {
   const incompleteCount = items.filter((item) => !item.completed).length
   if (incompleteCount === 0) return null
 
@@ -60,6 +68,13 @@ export function OnboardingChecklist({ items }: { items: OnboardingChecklistItem[
           )
         })}
       </ul>
+
+      {recommended ? (
+        <div className="mt-3 border-t border-border pt-3">
+          <p className="mb-1.5 px-2 text-[11px] font-semibold text-muted">推奨設定</p>
+          <ul className="space-y-1.5">{recommended}</ul>
+        </div>
+      ) : null}
     </section>
   )
 }

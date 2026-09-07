@@ -53,3 +53,10 @@ export const NOTIFICATION_PREFERENCE_COPY: Record<
 export function notificationCategoryStatusLabel(enabled: boolean): string {
   return enabled ? '有効' : '停止中'
 }
+
+/** True when at least one admin-managed category is enabled for delivery. */
+export function hasAnyNotificationCategoryEnabled(
+  preferences: NotificationPreferencesView,
+): boolean {
+  return NOTIFICATION_PREFERENCE_CATEGORIES.some((category) => preferences[category])
+}

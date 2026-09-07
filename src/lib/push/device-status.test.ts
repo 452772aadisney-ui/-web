@@ -57,6 +57,38 @@ describe('deriveDeviceNotificationStatus', () => {
     ).toBe('permission_denied')
     expect(deriveDeviceNotificationStatus({ ...base, configured: false })).toBe('not_configured')
   })
+
+  it('treats browser-only and server-only as not fully subscribed', () => {
+    expect(
+      deriveDeviceNotificationStatus({
+        ...base,
+        permission: 'granted',
+        hasBrowserSubscription: true,
+        serverSubscribed: false,
+      }),
+    ).toBe('needs_sync')
+
+    expect(
+      deriveDeviceNotificationStatus({
+        ...base,
+        permission: 'granted',
+        hasBrowserSubscription: false,
+        serverSubscribed: true,
+      }),
+    ).toBe('ready_to_enable')
+  })
+
+  it('does not assume subscribed when server status failed', () => {
+    expect(
+      deriveDeviceNotificationStatus({
+        ...base,
+        permission: 'granted',
+        hasBrowserSubscription: false,
+        serverSubscribed: true,
+        serverStatusFailed: true,
+      }),
+    ).toBe('network_error')
+  })
 })
 
 describe('deviceStatusHeadline', () => {
