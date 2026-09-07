@@ -112,6 +112,7 @@ function SessionEditForm({
   const [actionPending, startActionTransition] = useTransition()
   const dateLabel = formatClassScheduleDateLabel(day.schedule_date)
   const timeLabel = formatSessionTimeRange(session.start_time, session.end_time)
+  const dayCancelled = day.status === 'cancelled'
 
   useActionToast(state, { successMessage: 'コマを更新しました', pending })
 
@@ -141,109 +142,126 @@ function SessionEditForm({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold">
           {timeLabel} {session.subject}
-          {session.status === 'cancelled' && (
+          {(dayCancelled || session.status === 'cancelled') && (
             <span className="ml-2 text-xs font-semibold text-red-700">中止</span>
           )}
         </p>
       </div>
-      <form action={formAction} className="grid gap-3 sm:grid-cols-2">
-        <input type="hidden" name="sessionId" value={session.id} />
-        <input type="hidden" name="dayId" value={day.id} />
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium">開始 *</span>
-          <input
-            type="time"
-            name="startTime"
-            required
-            defaultValue={session.start_time.slice(0, 5)}
-            className={classScheduleFieldClass}
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium">終了 *</span>
-          <input
-            type="time"
-            name="endTime"
-            required
-            defaultValue={session.end_time.slice(0, 5)}
-            className={classScheduleFieldClass}
-          />
-        </label>
-        <label className="block sm:col-span-2">
-          <span className="mb-1 block text-sm font-medium">科目 *</span>
-          <select
-            name="subject"
-            required
-            defaultValue={session.subject}
-            className={classScheduleFieldClass}
-          >
-            {EXAM_SUBJECTS.map((subject) => (
-              <option key={subject} value={subject}>
-                {subject}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block sm:col-span-2">
-          <span className="mb-1 block text-sm font-medium">生徒向けメモ</span>
-          <input
-            name="note"
-            defaultValue={session.note ?? ''}
-            className={classScheduleFieldClass}
-          />
-        </label>
-        {state.error && (
-          <p className="sm:col-span-2 text-sm text-error" role="alert">
-            {state.error}
+      {dayCancelled ? (
+        <div className="space-y-2">
+          <p className="text-sm text-muted">
+            この日は中止中のため、コマの編集は再開後に行えます。
           </p>
-        )}
-        <div className="sm:col-span-2 flex flex-wrap gap-2">
-          <button
-            type="submit"
-            disabled={pending || actionPending}
-            className="rounded-lg bg-primary px-3 py-2 text-sm text-white disabled:opacity-60"
-            aria-label={`${dateLabel} ${timeLabel} ${session.subject}を更新`}
-          >
-            {pending ? '保存中…' : '更新'}
-          </button>
-          {session.status === 'scheduled' ? (
-            <button
-              type="button"
-              disabled={actionPending}
-              className="rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-60"
-              onClick={() => setConfirmCancel(true)}
-              aria-label={`${dateLabel} ${timeLabel} ${session.subject}を中止`}
-            >
-              中止
-            </button>
-          ) : (
-            <button
-              type="button"
-              disabled={actionPending}
-              className="rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-60"
-              onClick={() =>
-                runConfirmAction(
-                  uncancelClassScheduleSession,
-                  { sessionId: session.id, dayId: day.id },
-                  () => undefined,
-                )
-              }
-              aria-label={`${dateLabel} ${timeLabel} ${session.subject}を再開`}
-            >
-              再開
-            </button>
-          )}
           <button
             type="button"
             disabled={actionPending}
             className="rounded-lg px-3 py-2 text-sm text-error hover:underline disabled:opacity-60"
             onClick={() => setConfirmDelete(true)}
-            aria-label={`${dateLabel} ${timeLabel} ${session.subject}を削除`}
+            aria-label={`${dateLabel} ${timeLabel} ${session.subject}の誤登録を削除`}
           >
-            削除
+            誤登録を削除
           </button>
         </div>
-      </form>
+      ) : (
+        <form action={formAction} className="grid gap-3 sm:grid-cols-2">
+          <input type="hidden" name="sessionId" value={session.id} />
+          <input type="hidden" name="dayId" value={day.id} />
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium">開始 *</span>
+            <input
+              type="time"
+              name="startTime"
+              required
+              defaultValue={session.start_time.slice(0, 5)}
+              className={classScheduleFieldClass}
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium">終了 *</span>
+            <input
+              type="time"
+              name="endTime"
+              required
+              defaultValue={session.end_time.slice(0, 5)}
+              className={classScheduleFieldClass}
+            />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-sm font-medium">科目 *</span>
+            <select
+              name="subject"
+              required
+              defaultValue={session.subject}
+              className={classScheduleFieldClass}
+            >
+              {EXAM_SUBJECTS.map((subject) => (
+                <option key={subject} value={subject}>
+                  {subject}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-sm font-medium">生徒向けメモ</span>
+            <input
+              name="note"
+              defaultValue={session.note ?? ''}
+              className={classScheduleFieldClass}
+            />
+          </label>
+          {state.error && (
+            <p className="sm:col-span-2 text-sm text-error" role="alert">
+              {state.error}
+            </p>
+          )}
+          <div className="sm:col-span-2 flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={pending || actionPending}
+              className="rounded-lg bg-primary px-3 py-2 text-sm text-white disabled:opacity-60"
+              aria-label={`${dateLabel} ${timeLabel} ${session.subject}を更新`}
+            >
+              {pending ? '保存中…' : '更新'}
+            </button>
+            {session.status === 'scheduled' ? (
+              <button
+                type="button"
+                disabled={actionPending}
+                className="rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-60"
+                onClick={() => setConfirmCancel(true)}
+                aria-label={`${dateLabel} ${timeLabel} ${session.subject}を中止`}
+              >
+                中止
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={actionPending}
+                className="rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-60"
+                onClick={() =>
+                  runConfirmAction(
+                    uncancelClassScheduleSession,
+                    { sessionId: session.id, dayId: day.id },
+                    () => undefined,
+                  )
+                }
+                aria-label={`${dateLabel} ${timeLabel} ${session.subject}を再開`}
+              >
+                再開
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={actionPending}
+              className="rounded-lg px-3 py-2 text-sm text-error hover:underline disabled:opacity-60"
+              onClick={() => setConfirmDelete(true)}
+              aria-label={`${dateLabel} ${timeLabel} ${session.subject}の誤登録を削除`}
+            >
+              誤登録を削除
+            </button>
+          </div>
+        </form>
+      )}
 
       <ConfirmDialog
         open={confirmCancel}
@@ -264,8 +282,8 @@ function SessionEditForm({
       />
       <ConfirmDialog
         open={confirmDelete}
-        title="このコマを削除しますか？"
-        description={`${dateLabel} ${timeLabel} ${session.subject} を削除します。この操作は取り消せません。`}
+        title="このコマを誤登録として削除しますか？"
+        description={`${dateLabel} ${timeLabel} ${session.subject} を履歴から完全に削除します。生徒へ削除通知は送られません。元に戻せません。すでに作成された通知履歴は削除されません。最後の1コマは削除できません。`}
         confirmLabel="削除する"
         busy={actionPending}
         onConfirm={() =>
@@ -417,7 +435,11 @@ export function AdminClassScheduleEditPage({ day }: { day: ClassScheduleDayWithS
             <SessionEditForm key={session.id} day={day} session={session} />
           ))}
         </ul>
-        <AddSessionForm day={day} />
+        {day.status === 'scheduled' ? (
+          <AddSessionForm day={day} />
+        ) : (
+          <p className="text-sm text-muted">この日は中止中のため、コマの追加・編集は再開後に行えます。</p>
+        )}
       </section>
 
       <ConfirmDialog
@@ -434,7 +456,7 @@ export function AdminClassScheduleEditPage({ day }: { day: ClassScheduleDayWithS
       <ConfirmDialog
         open={confirmDeleteDay}
         title="誤登録として削除しますか？"
-        description={`${dateLabel}（${day.venue_name}）と紐づくコマをすべて削除します。この操作は取り消せません。`}
+        description={`${dateLabel}（${day.venue_name}）と紐づくコマをすべて履歴から完全に削除します。生徒へ削除通知は送られません。元に戻せません。すでに作成された通知履歴は削除されません。`}
         confirmLabel="削除する"
         busy={pending}
         onConfirm={() => runDayAction(deleteClassScheduleDay, true)}

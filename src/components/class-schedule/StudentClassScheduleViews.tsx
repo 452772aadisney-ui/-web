@@ -4,6 +4,8 @@ import {
   formatClassScheduleDateLabel,
   formatSessionTimeRange,
   isHttpsMapUrl,
+  isSessionEffectivelyCancelled,
+  sessionStatusLabel,
 } from '@/lib/class-schedule/format'
 import type {
   ClassScheduleDayWithSessions,
@@ -25,27 +27,43 @@ function MapLink({ url }: { url: string }) {
   )
 }
 
-function SessionList({ sessions }: { sessions: ClassScheduleSession[] }) {
+function SessionList({
+  dayStatus,
+  sessions,
+}: {
+  dayStatus: ClassScheduleDayWithSessions['status']
+  sessions: ClassScheduleSession[]
+}) {
   if (sessions.length === 0) {
     return <p className="text-sm text-muted">コマはありません</p>
   }
   return (
     <ul className="mt-2 space-y-2">
-      {sessions.map((session) => (
-        <li
-          key={session.id}
-          className={
-            session.status === 'cancelled'
-              ? 'rounded-lg bg-muted/30 px-3 py-2 text-sm text-muted line-through'
-              : 'rounded-lg bg-background px-3 py-2 text-sm'
-          }
-        >
-          <p className="font-medium">
-            {formatSessionTimeRange(session.start_time, session.end_time)} {session.subject}
-          </p>
-          {session.note && <p className="mt-0.5 text-xs text-muted">{session.note}</p>}
-        </li>
-      ))}
+      {sessions.map((session) => {
+        const cancelled = isSessionEffectivelyCancelled(dayStatus, session.status)
+        return (
+          <li
+            key={session.id}
+            className={
+              cancelled
+                ? 'rounded-lg bg-muted/30 px-3 py-2 text-sm text-muted line-through'
+                : 'rounded-lg bg-background px-3 py-2 text-sm'
+            }
+          >
+            <p className="font-medium">
+              {formatSessionTimeRange(session.start_time, session.end_time)} {session.subject}
+              {cancelled && (
+                <span className="ml-2 text-xs font-semibold no-underline">
+                  {sessionStatusLabel({ dayStatus, sessionStatus: session.status })}
+                </span>
+              )}
+            </p>
+            {session.note && (
+              <p className="mt-0.5 text-xs text-muted no-underline">{session.note}</p>
+            )}
+          </li>
+        )
+      })}
     </ul>
   )
 }
@@ -121,7 +139,7 @@ export function StudentClassScheduleDayCards({
               <MapLink url={day.map_url} />
             </p>
           )}
-          <SessionList sessions={day.sessions} />
+          <SessionList dayStatus={day.status} sessions={day.sessions} />
         </li>
       ))}
     </ul>

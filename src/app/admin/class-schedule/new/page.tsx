@@ -5,6 +5,9 @@ import { AdminClassScheduleCreateForm } from '@/components/class-schedule/AdminC
 
 export const dynamic = 'force-dynamic'
 
+/** Soft budget for create notification fan-out. */
+export const maxDuration = 60
+
 export default async function AdminClassScheduleNewPage() {
   await requireAdminOrRedirect()
 

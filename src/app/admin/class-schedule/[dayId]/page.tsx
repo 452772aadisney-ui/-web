@@ -7,6 +7,9 @@ import { AdminClassScheduleEditPage } from '@/components/class-schedule/AdminCla
 
 export const dynamic = 'force-dynamic'
 
+/** Soft budget for edit/cancel notification fan-out. */
+export const maxDuration = 60
+
 export default async function AdminClassScheduleDayPage({
   params,
 }: {

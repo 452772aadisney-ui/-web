@@ -162,7 +162,7 @@ export async function fetchNextClassSession(
     .eq('status', 'scheduled')
     .gte('schedule_date', todayKey)
     .order('schedule_date', { ascending: true })
-    .limit(30)
+    .limit(90)
 
   const dayList = (days as ClassScheduleDay[] | null) ?? []
   if (dayList.length === 0) return null

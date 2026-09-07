@@ -11,16 +11,20 @@ select
   count(*) filter (where not message)::int as message_false,
   count(*) filter (where coaching_reminder)::int as coaching_reminder_true,
   count(*) filter (where not coaching_reminder)::int as coaching_reminder_false,
+  count(*) filter (where class_schedule)::int as class_schedule_true,
+  count(*) filter (where not class_schedule)::int as class_schedule_false,
   count(*) filter (
     where not study_reminder
        or not announcement
        or not message
        or not coaching_reminder
+       or not class_schedule
   )::int as any_false_rows,
   count(*) filter (
     where not study_reminder
       and not announcement
       and not message
       and not coaching_reminder
+      and not class_schedule
   )::int as all_false_rows
 from public.notification_preferences;

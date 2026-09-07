@@ -1,40 +1,93 @@
 -- 053_class_schedule 適用後の読み取り専用検証
 -- Supabase Dashboard > SQL Editor で一括実行。DB を変更しません。
+-- 適用順確認: 053 の後に実行。054 の前でも可。
 
 with
 days_exists as (
-  select exists (
-    select 1
-    from pg_class c
-    join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname = 'public' and c.relkind = 'r' and c.relname = 'class_schedule_days'
-  ) as ok
+  select to_regclass('public.class_schedule_days') is not null as ok
 ),
 sessions_exists as (
-  select exists (
-    select 1
-    from pg_class c
-    join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname = 'public' and c.relkind = 'r' and c.relname = 'class_schedule_sessions'
-  ) as ok
+  select to_regclass('public.class_schedule_sessions') is not null as ok
 ),
 kisotsu_fn as (
+  select
+    exists (
+      select 1
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'is_kisotsu_profile'
+    ) as exists_ok,
+    exists (
+      select 1
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = 'is_kisotsu_profile'
+        and p.prosecdef
+        and p.proconfig @> array['search_path=public']
+    ) as security_ok
+),
+create_rpc as (
   select exists (
     select 1
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'public' and p.proname = 'is_kisotsu_profile'
+    where n.nspname = 'public'
+      and p.proname = 'create_class_schedule_day_with_sessions'
+      and p.prosecdef
   ) as ok
 ),
+bump_rpc as (
+  select exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = 'bump_class_schedule_notify_revision'
+      and p.prosecdef
+  ) as ok
+),
+days_rls as (
+  select c.relrowsecurity as ok
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relname = 'class_schedule_days'
+),
+sessions_rls as (
+  select c.relrowsecurity as ok
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relname = 'class_schedule_sessions'
+),
 days_cols as (
-  select column_name
+  select column_name, column_default, is_nullable
   from information_schema.columns
   where table_schema = 'public' and table_name = 'class_schedule_days'
 ),
 sessions_cols as (
-  select column_name
+  select column_name, column_default, is_nullable
   from information_schema.columns
   where table_schema = 'public' and table_name = 'class_schedule_sessions'
+),
+days_constraints as (
+  select conname
+  from pg_constraint
+  where conrelid = 'public.class_schedule_days'::regclass
+),
+sessions_constraints as (
+  select conname
+  from pg_constraint
+  where conrelid = 'public.class_schedule_sessions'::regclass
+),
+days_indexes as (
+  select indexname
+  from pg_indexes
+  where schemaname = 'public' and tablename = 'class_schedule_days'
+),
+sessions_indexes as (
+  select indexname
+  from pg_indexes
+  where schemaname = 'public' and tablename = 'class_schedule_sessions'
 ),
 days_policies as (
   select policyname, cmd
@@ -45,13 +98,6 @@ sessions_policies as (
   select policyname, cmd
   from pg_policies
   where schemaname = 'public' and tablename = 'class_schedule_sessions'
-),
-days_unique as (
-  select exists (
-    select 1
-    from pg_constraint
-    where conname = 'class_schedule_days_schedule_date_unique'
-  ) as ok
 ),
 overlap_trigger as (
   select exists (
@@ -65,99 +111,168 @@ overlap_trigger as (
       and not t.tgisinternal
   ) as ok
 ),
+days_updated_at_trigger as (
+  select exists (
+    select 1
+    from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relname = 'class_schedule_days'
+      and t.tgname = 'class_schedule_days_updated_at'
+      and not t.tgisinternal
+  ) as ok
+),
+sessions_updated_at_trigger as (
+  select exists (
+    select 1
+    from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relname = 'class_schedule_sessions'
+      and t.tgname = 'class_schedule_sessions_updated_at'
+      and not t.tgisinternal
+  ) as ok
+),
+days_grants as (
+  select has_table_privilege('authenticated', 'public.class_schedule_days', 'SELECT') as sel,
+         has_table_privilege('authenticated', 'public.class_schedule_days', 'INSERT') as ins,
+         has_table_privilege('authenticated', 'public.class_schedule_days', 'UPDATE') as upd,
+         has_table_privilege('authenticated', 'public.class_schedule_days', 'DELETE') as del
+),
+sessions_grants as (
+  select has_table_privilege('authenticated', 'public.class_schedule_sessions', 'SELECT') as sel,
+         has_table_privilege('authenticated', 'public.class_schedule_sessions', 'INSERT') as ins,
+         has_table_privilege('authenticated', 'public.class_schedule_sessions', 'UPDATE') as upd,
+         has_table_privilege('authenticated', 'public.class_schedule_sessions', 'DELETE') as del
+),
 checks as (
-  select
-    'days_table_exists'::text as check_name,
+  select 'days_table_exists'::text as check_name,
     case when (select ok from days_exists) then 'PASS' else 'FAIL' end as status,
     '{}'::jsonb as details
-
   union all
-  select
-    'sessions_table_exists',
-    case when (select ok from sessions_exists) then 'PASS' else 'FAIL' end,
-    '{}'::jsonb
-
+  select 'sessions_table_exists',
+    case when (select ok from sessions_exists) then 'PASS' else 'FAIL' end, '{}'::jsonb
   union all
-  select
-    'is_kisotsu_profile_exists',
-    case when (select ok from kisotsu_fn) then 'PASS' else 'FAIL' end,
-    '{}'::jsonb
-
+  select 'is_kisotsu_profile_exists',
+    case when (select exists_ok from kisotsu_fn) then 'PASS' else 'FAIL' end, '{}'::jsonb
   union all
-  select
-    'days_required_columns',
-    case
-      when (
-        select count(*) from days_cols
-        where column_name in (
-          'id', 'schedule_date', 'venue_name', 'address', 'map_url', 'room_note',
-          'status', 'notify_revision', 'created_by', 'updated_by', 'created_at', 'updated_at'
-        )
-      ) = 12 then 'PASS' else 'FAIL'
-    end,
-    jsonb_build_object(
-      'columns', coalesce((select jsonb_agg(column_name order by column_name) from days_cols), '[]'::jsonb)
-    )
-
+  select 'is_kisotsu_profile_security_definer_search_path',
+    case when (select security_ok from kisotsu_fn) then 'PASS' else 'FAIL' end, '{}'::jsonb
   union all
-  select
-    'sessions_required_columns',
-    case
-      when (
-        select count(*) from sessions_cols
-        where column_name in (
-          'id', 'day_id', 'start_time', 'end_time', 'subject', 'note',
-          'status', 'created_at', 'updated_at'
-        )
-      ) = 9 then 'PASS' else 'FAIL'
-    end,
-    jsonb_build_object(
-      'columns', coalesce((select jsonb_agg(column_name order by column_name) from sessions_cols), '[]'::jsonb)
-    )
-
+  select 'create_rpc_exists',
+    case when (select ok from create_rpc) then 'PASS' else 'FAIL' end, '{}'::jsonb
   union all
-  select
-    'days_schedule_date_unique',
-    case when (select ok from days_unique) then 'PASS' else 'FAIL' end,
-    '{}'::jsonb
-
+  select 'bump_rpc_exists',
+    case when (select ok from bump_rpc) then 'PASS' else 'FAIL' end, '{}'::jsonb
   union all
-  select
-    'days_select_policy',
-    case
-      when exists (
-        select 1 from days_policies
-        where policyname = 'class_schedule_days_select' and cmd = 'SELECT'
-      ) then 'PASS' else 'FAIL'
-    end,
-    jsonb_build_object(
-      'policies', coalesce((
-        select jsonb_agg(jsonb_build_object('name', policyname, 'cmd', cmd) order by policyname)
-        from days_policies
-      ), '[]'::jsonb)
-    )
-
+  select 'days_rls_enabled',
+    case when coalesce((select ok from days_rls), false) then 'PASS' else 'FAIL' end, '{}'::jsonb
   union all
-  select
-    'sessions_select_policy',
-    case
-      when exists (
-        select 1 from sessions_policies
-        where policyname = 'class_schedule_sessions_select' and cmd = 'SELECT'
-      ) then 'PASS' else 'FAIL'
-    end,
-    jsonb_build_object(
-      'policies', coalesce((
-        select jsonb_agg(jsonb_build_object('name', policyname, 'cmd', cmd) order by policyname)
-        from sessions_policies
-      ), '[]'::jsonb)
-    )
-
+  select 'sessions_rls_enabled',
+    case when coalesce((select ok from sessions_rls), false) then 'PASS' else 'FAIL' end, '{}'::jsonb
   union all
-  select
-    'sessions_overlap_trigger',
-    case when (select ok from overlap_trigger) then 'PASS' else 'FAIL' end,
-    '{}'::jsonb
+  select 'days_required_columns',
+    case when (
+      select count(*) from days_cols
+      where column_name in (
+        'id', 'schedule_date', 'venue_name', 'address', 'map_url', 'room_note',
+        'status', 'notify_revision', 'created_by', 'updated_by', 'created_at', 'updated_at'
+      )
+    ) = 12 then 'PASS' else 'FAIL' end,
+    jsonb_build_object('columns', coalesce((select jsonb_agg(column_name order by column_name) from days_cols), '[]'::jsonb))
+  union all
+  select 'days_notify_revision_default',
+    case when exists (
+      select 1 from days_cols
+      where column_name = 'notify_revision'
+        and is_nullable = 'NO'
+        and column_default like '%0%'
+    ) then 'PASS' else 'FAIL' end, '{}'::jsonb
+  union all
+  select 'sessions_required_columns',
+    case when (
+      select count(*) from sessions_cols
+      where column_name in (
+        'id', 'day_id', 'start_time', 'end_time', 'subject', 'note',
+        'status', 'created_at', 'updated_at'
+      )
+    ) = 9 then 'PASS' else 'FAIL' end,
+    jsonb_build_object('columns', coalesce((select jsonb_agg(column_name order by column_name) from sessions_cols), '[]'::jsonb))
+  union all
+  select 'days_schedule_date_unique',
+    case when exists (
+      select 1 from days_constraints where conname = 'class_schedule_days_schedule_date_unique'
+    ) then 'PASS' else 'FAIL' end, '{}'::jsonb
+  union all
+  select 'days_map_url_https_check',
+    case when exists (
+      select 1 from days_constraints where conname = 'class_schedule_days_map_url_https'
+    ) then 'PASS' else 'FAIL' end, '{}'::jsonb
+  union all
+  select 'sessions_end_after_start_check',
+    case when exists (
+      select 1 from sessions_constraints where conname = 'class_schedule_sessions_end_after_start'
+    ) then 'PASS' else 'FAIL' end, '{}'::jsonb
+  union all
+  select 'days_indexes',
+    case when exists (
+      select 1 from days_indexes where indexname = 'class_schedule_days_schedule_date_idx'
+    ) and exists (
+      select 1 from days_indexes where indexname = 'class_schedule_days_status_date_idx'
+    ) then 'PASS' else 'FAIL' end,
+    jsonb_build_object('indexes', coalesce((select jsonb_agg(indexname order by indexname) from days_indexes), '[]'::jsonb))
+  union all
+  select 'sessions_day_id_index',
+    case when exists (
+      select 1 from sessions_indexes where indexname = 'class_schedule_sessions_day_id_idx'
+    ) then 'PASS' else 'FAIL' end, '{}'::jsonb
+  union all
+  select 'days_write_policies',
+    case when (
+      select count(*) from days_policies
+      where (policyname, cmd) in (
+        ('class_schedule_days_select', 'SELECT'),
+        ('class_schedule_days_insert_admin', 'INSERT'),
+        ('class_schedule_days_update_admin', 'UPDATE'),
+        ('class_schedule_days_delete_admin', 'DELETE')
+      )
+    ) = 4 then 'PASS' else 'FAIL' end,
+    jsonb_build_object('policies', coalesce((
+      select jsonb_agg(jsonb_build_object('name', policyname, 'cmd', cmd) order by policyname)
+      from days_policies
+    ), '[]'::jsonb))
+  union all
+  select 'sessions_write_policies',
+    case when (
+      select count(*) from sessions_policies
+      where (policyname, cmd) in (
+        ('class_schedule_sessions_select', 'SELECT'),
+        ('class_schedule_sessions_insert_admin', 'INSERT'),
+        ('class_schedule_sessions_update_admin', 'UPDATE'),
+        ('class_schedule_sessions_delete_admin', 'DELETE')
+      )
+    ) = 4 then 'PASS' else 'FAIL' end,
+    jsonb_build_object('policies', coalesce((
+      select jsonb_agg(jsonb_build_object('name', policyname, 'cmd', cmd) order by policyname)
+      from sessions_policies
+    ), '[]'::jsonb))
+  union all
+  select 'sessions_overlap_trigger',
+    case when (select ok from overlap_trigger) then 'PASS' else 'FAIL' end, '{}'::jsonb
+  union all
+  select 'days_updated_at_trigger',
+    case when (select ok from days_updated_at_trigger) then 'PASS' else 'FAIL' end, '{}'::jsonb
+  union all
+  select 'sessions_updated_at_trigger',
+    case when (select ok from sessions_updated_at_trigger) then 'PASS' else 'FAIL' end, '{}'::jsonb
+  union all
+  select 'days_authenticated_grants',
+    case when (select sel and ins and upd and del from days_grants) then 'PASS' else 'FAIL' end, '{}'::jsonb
+  union all
+  select 'sessions_authenticated_grants',
+    case when (select sel and ins and upd and del from sessions_grants) then 'PASS' else 'FAIL' end, '{}'::jsonb
 )
 select check_name, status, details
 from checks

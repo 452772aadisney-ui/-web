@@ -12,6 +12,9 @@ import { Pagination } from '@/components/ui/Pagination'
 
 export const dynamic = 'force-dynamic'
 
+/** Soft budget for class-schedule notification fan-out after mutations. */
+export const maxDuration = 60
+
 export default async function AdminClassSchedulePage({
   searchParams,
 }: {

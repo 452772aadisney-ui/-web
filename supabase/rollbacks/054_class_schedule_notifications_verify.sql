@@ -1,7 +1,11 @@
 -- 054_class_schedule_notifications 適用後の読み取り専用検証
 -- Supabase Dashboard > SQL Editor で一括実行。DB を変更しません。
+-- 前提: 053 適用済み（class_schedule_days が存在する）
 
 with
+depends_on_053 as (
+  select to_regclass('public.class_schedule_days') is not null as ok
+),
 enum_has_class_schedule as (
   select exists (
     select 1
@@ -48,9 +52,15 @@ audit_check as (
 ),
 checks as (
   select
-    'enum_has_class_schedule'::text as check_name,
-    case when (select ok from enum_has_class_schedule) then 'PASS' else 'FAIL' end as status,
-    jsonb_build_object('ok', (select ok from enum_has_class_schedule)) as details
+    'depends_on_053_class_schedule_days'::text as check_name,
+    case when (select ok from depends_on_053) then 'PASS' else 'FAIL' end as status,
+    '{}'::jsonb as details
+
+  union all
+  select
+    'enum_has_class_schedule',
+    case when (select ok from enum_has_class_schedule) then 'PASS' else 'FAIL' end,
+    jsonb_build_object('ok', (select ok from enum_has_class_schedule))
 
   union all
   select
@@ -75,6 +85,18 @@ checks as (
       then 'PASS' else 'FAIL'
     end,
     jsonb_build_object('constraint', (select def from audit_check))
+
+  union all
+  select
+    'audit_category_keeps_legacy_four',
+    case
+      when coalesce((select def from audit_check), '') like '%study_reminder%'
+       and coalesce((select def from audit_check), '') like '%announcement%'
+       and coalesce((select def from audit_check), '') like '%message%'
+       and coalesce((select def from audit_check), '') like '%coaching_reminder%'
+      then 'PASS' else 'FAIL'
+    end,
+    '{}'::jsonb
 )
 select * from checks
 order by check_name;

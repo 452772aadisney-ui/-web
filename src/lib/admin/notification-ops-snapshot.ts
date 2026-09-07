@@ -314,7 +314,7 @@ function buildModeCards(
       forcedLegacyReason: classMode.forcedLegacyReason,
       pushSending,
       description:
-        '既卒生向け授業予定の登録・変更・中止。legacyはメールのみ、allはPush-first。',
+        '既卒生向け授業予定の登録・変更・中止。legacyは保存・表示のみ（外部送信なし）、allはPush-first。',
       warning: warn(classValid, classMode.forcedLegacyReason, classRaw),
     },
   ]

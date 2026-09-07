@@ -1,6 +1,10 @@
 -- 054_class_schedule_notifications の rollback
--- 注意: Postgres は enum 値の削除が困難なため、class_schedule enum 値は残す。
--- 列と CHECK のみ戻す。
+-- 注意:
+-- 1) Postgres は enum 値の安全な削除が困難なため、push_notification_type 'class_schedule' は残す。
+-- 2) 既存4カテゴリの prefs 列・通知履歴・events/deliveries は削除しない。
+-- 3) 監査表に category='class_schedule' の行がある場合、狭い CHECK の再追加は失敗する。
+--    その場合は当該監査行を別途退避/削除してから再実行するか、CHECK 拡張を維持する。
+-- 4) rollback 順: 054 → 053。
 
 alter table public.notification_preference_changes
   drop constraint if exists notification_preference_changes_category_check;

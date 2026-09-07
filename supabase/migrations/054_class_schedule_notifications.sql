@@ -1,6 +1,25 @@
 -- 054: 授業予定通知カテゴリ class_schedule
 -- Supabase Dashboard > SQL Editor で実行してください
 -- 本番適用はこのタスクでは行わない
+--
+-- 適用順: 必ず 053 → 054。rollback は 054 → 053。
+-- 053 未適用のまま実行すると、下記ガードで明確に失敗する（部分適用なし）。
+
+-- ---------------------------------------------------------------------------
+-- 0) 053 依存チェック（テーブル未作成なら即失敗）
+-- ---------------------------------------------------------------------------
+
+do $$
+begin
+  if to_regclass('public.class_schedule_days') is null then
+    raise exception
+      '054_class_schedule_notifications requires 053_class_schedule first (public.class_schedule_days missing)';
+  end if;
+  if to_regclass('public.class_schedule_sessions') is null then
+    raise exception
+      '054_class_schedule_notifications requires 053_class_schedule first (public.class_schedule_sessions missing)';
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- 1) push_notification_type に class_schedule を追加
@@ -23,6 +42,7 @@ end $$;
 
 -- ---------------------------------------------------------------------------
 -- 2) notification_preferences に class_schedule 列（DEFAULT true → 既存行も ON）
+--    行がまだない生徒は、後から prefs 行作成時も DEFAULT true / アプリ既定5カテゴリON
 -- ---------------------------------------------------------------------------
 
 alter table public.notification_preferences
@@ -36,6 +56,7 @@ comment on table public.notification_preferences is
 
 -- ---------------------------------------------------------------------------
 -- 3) notification_preference_changes.category CHECK を拡張
+--    既存監査行は残す（DROP/ADD CHECK のみ。DELETE しない）
 -- ---------------------------------------------------------------------------
 
 alter table public.notification_preference_changes

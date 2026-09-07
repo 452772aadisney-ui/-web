@@ -20,3 +20,20 @@ export function isHttpsMapUrl(url: string | null | undefined): url is string {
 export function dayStatusLabel(status: ClassScheduleDayWithSessions['status']): string {
   return status === 'cancelled' ? '中止' : '予定'
 }
+
+/** Day-level cancel overrides individual session scheduled status for display. */
+export function isSessionEffectivelyCancelled(
+  dayStatus: ClassScheduleDayWithSessions['status'],
+  sessionStatus: ClassScheduleDayWithSessions['sessions'][number]['status'],
+): boolean {
+  return dayStatus === 'cancelled' || sessionStatus === 'cancelled'
+}
+
+export function sessionStatusLabel(params: {
+  dayStatus: ClassScheduleDayWithSessions['status']
+  sessionStatus: ClassScheduleDayWithSessions['sessions'][number]['status']
+}): string {
+  return isSessionEffectivelyCancelled(params.dayStatus, params.sessionStatus)
+    ? '中止'
+    : '予定'
+}

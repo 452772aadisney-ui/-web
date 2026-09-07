@@ -3,6 +3,8 @@ import {
   dayStatusLabel,
   formatClassScheduleDateLabel,
   formatSessionTimeRange,
+  isSessionEffectivelyCancelled,
+  sessionStatusLabel,
 } from '@/lib/class-schedule/format'
 import type { ClassScheduleDayWithSessions } from '@/types/class-schedule'
 
@@ -42,14 +44,26 @@ export function AdminClassScheduleDayList({
               {day.sessions.length === 0 ? (
                 <li className="text-muted">コマなし</li>
               ) : (
-                day.sessions.map((session) => (
-                  <li
-                    key={session.id}
-                    className={session.status === 'cancelled' ? 'text-muted line-through' : ''}
-                  >
-                    {formatSessionTimeRange(session.start_time, session.end_time)} {session.subject}
-                  </li>
-                ))
+                day.sessions.map((session) => {
+                  const cancelled = isSessionEffectivelyCancelled(day.status, session.status)
+                  return (
+                    <li
+                      key={session.id}
+                      className={cancelled ? 'text-muted line-through' : ''}
+                    >
+                      {formatSessionTimeRange(session.start_time, session.end_time)}{' '}
+                      {session.subject}
+                      {cancelled && (
+                        <span className="ml-1 text-xs font-semibold no-underline">
+                          {sessionStatusLabel({
+                            dayStatus: day.status,
+                            sessionStatus: session.status,
+                          })}
+                        </span>
+                      )}
+                    </li>
+                  )
+                })
               )}
             </ul>
           </Link>

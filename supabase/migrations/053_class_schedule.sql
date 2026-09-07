@@ -1,7 +1,10 @@
 -- 既卒生 授業予定（class_schedule_days / class_schedule_sessions）
 -- Supabase Dashboard > SQL Editor で実行してください
 --
--- 通知カテゴリ・配信は後続コミット。notify_revision は通知用の予備カラム。
+-- 依存: profiles, is_admin(), handle_updated_at(), profile_student_tags / student_tags（学年=既卒）
+-- 適用順: 必ず 053 → 054。rollback は 054 → 053。
+-- 通知カテゴリ・配信は 054。notify_revision は通知冪等用。
+-- 新規登録は create_class_schedule_day_with_sessions で日+コマを同一トランザクション保存（コマ1件以上必須）。
 
 -- ---------------------------------------------------------------------------
 -- Helper: 既卒タグを持つプロフィールか
@@ -25,7 +28,11 @@ as $$
 $$;
 
 comment on function public.is_kisotsu_profile(uuid) is
-  '指定プロフィールが学年タグ「既卒」を持つか。RLS 用（security definer）。';
+  '指定プロフィールが学年タグ「既卒」を持つか。RLS 用（security definer）。ポリシーは必ず is_kisotsu_profile(auth.uid()) で呼ぶ。';
+
+-- 任意 UUID の既卒判定プローブを防ぐ（RLS は auth.uid() 経由のみ想定）
+revoke all on function public.is_kisotsu_profile(uuid) from public;
+grant execute on function public.is_kisotsu_profile(uuid) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- class_schedule_days
@@ -133,14 +140,27 @@ create trigger class_schedule_sessions_updated_at
   before update on public.class_schedule_sessions
   for each row execute function public.handle_updated_at();
 
--- 同日の scheduled コマ同士の時間重複を禁止（端点接触は許可）
+-- 同日の scheduled コマ同士の時間重複を禁止（端点接触は許可・半開区間）
+-- 親日行を FOR UPDATE でロックし、同時 INSERT/UPDATE の競合を直列化する
 create or replace function public.class_schedule_sessions_reject_overlap()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   if new.status is distinct from 'scheduled' then
     return new;
+  end if;
+
+  -- Serialize mutations for this day (prevents SELECT-only race under READ COMMITTED)
+  perform 1
+  from public.class_schedule_days d
+  where d.id = new.day_id
+  for update;
+
+  if not found then
+    raise exception 'class_schedule_day not found for session'
+      using errcode = '23503';
   end if;
 
   if exists (
@@ -195,3 +215,159 @@ create policy "class_schedule_sessions_delete_admin"
   using (public.is_admin());
 
 grant select, insert, update, delete on table public.class_schedule_sessions to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Atomic create: 授業日 + 初期コマ（1件以上）を同一トランザクションで保存
+-- ---------------------------------------------------------------------------
+
+create or replace function public.create_class_schedule_day_with_sessions(
+  p_schedule_date date,
+  p_venue_name text,
+  p_address text,
+  p_map_url text,
+  p_room_note text,
+  p_sessions jsonb
+)
+returns table (day_id uuid, notify_revision integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_day_id uuid;
+  v_revision integer;
+  v_session jsonb;
+  v_start time;
+  v_end time;
+  v_subject text;
+  v_note text;
+  v_count integer;
+begin
+  if not public.is_admin() then
+    raise exception 'permission denied: admin only'
+      using errcode = '42501';
+  end if;
+
+  if p_sessions is null or jsonb_typeof(p_sessions) is distinct from 'array' then
+    raise exception 'sessions must be a non-empty json array'
+      using errcode = '22023';
+  end if;
+
+  v_count := jsonb_array_length(p_sessions);
+  if v_count is null or v_count < 1 then
+    raise exception 'at least one session is required'
+      using errcode = '22023';
+  end if;
+
+  insert into public.class_schedule_days (
+    schedule_date,
+    venue_name,
+    address,
+    map_url,
+    room_note,
+    status,
+    notify_revision,
+    created_by,
+    updated_by
+  )
+  values (
+    p_schedule_date,
+    p_venue_name,
+    nullif(trim(coalesce(p_address, '')), ''),
+    nullif(trim(coalesce(p_map_url, '')), ''),
+    nullif(trim(coalesce(p_room_note, '')), ''),
+    'scheduled',
+    1,
+    auth.uid(),
+    auth.uid()
+  )
+  returning id, notify_revision
+  into v_day_id, v_revision;
+
+  -- Serialize with overlap trigger locking this day
+  perform 1 from public.class_schedule_days d where d.id = v_day_id for update;
+
+  for v_session in
+    select value from jsonb_array_elements(p_sessions)
+  loop
+    begin
+      v_start := (v_session->>'start_time')::time;
+      v_end := (v_session->>'end_time')::time;
+    exception
+      when others then
+        raise exception 'invalid session time'
+          using errcode = '22023';
+    end;
+
+    v_subject := trim(coalesce(v_session->>'subject', ''));
+    if char_length(v_subject) = 0 then
+      raise exception 'session subject is required'
+        using errcode = '22023';
+    end if;
+
+    if v_end <= v_start then
+      raise exception 'session end_time must be after start_time'
+        using errcode = '22023';
+    end if;
+
+    v_note := nullif(trim(coalesce(v_session->>'note', '')), '');
+
+    insert into public.class_schedule_sessions (
+      day_id, start_time, end_time, subject, note, status
+    ) values (
+      v_day_id, v_start, v_end, v_subject, v_note, 'scheduled'
+    );
+  end loop;
+
+  day_id := v_day_id;
+  notify_revision := v_revision;
+  return next;
+end;
+$$;
+
+comment on function public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb) is
+  '管理者のみ。授業日と初期コマを同一トランザクションで作成。コマ0件は拒否。失敗時は全体ロールバック。';
+
+revoke all on function public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb) from public;
+grant execute on function public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb) to authenticated;
+
+-- Atomic notify_revision bump（同時更新でも重複 revision を避ける）
+create or replace function public.bump_class_schedule_notify_revision(
+  p_day_id uuid,
+  p_updated_by uuid
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_revision integer;
+begin
+  if not public.is_admin() then
+    raise exception 'permission denied: admin only'
+      using errcode = '42501';
+  end if;
+
+  update public.class_schedule_days
+  set
+    notify_revision = notify_revision + 1,
+    updated_by = p_updated_by,
+    updated_at = now()
+  where id = p_day_id
+  returning notify_revision into v_revision;
+
+  if v_revision is null then
+    raise exception 'class_schedule_day not found'
+      using errcode = 'P0002';
+  end if;
+
+  return v_revision;
+end;
+$$;
+
+comment on function public.bump_class_schedule_notify_revision(uuid, uuid) is
+  '管理者のみ。notify_revision を原子的に +1 して返す。';
+
+revoke all on function public.bump_class_schedule_notify_revision(uuid, uuid) from public;
+grant execute on function public.bump_class_schedule_notify_revision(uuid, uuid) to authenticated;
