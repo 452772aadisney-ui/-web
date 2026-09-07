@@ -20,24 +20,28 @@ function readMigration(name: string): string {
   )
 }
 
-function extractCreateRpcParamNames(sql: string): string[] {
-  const match = sql.match(
-    /create or replace function public\.create_class_schedule_day_with_sessions\(\s*([\s\S]*?)\)\s*returns table/i,
-  )
-  if (!match) return []
-  return [...match[1].matchAll(/\b(p_[a-z_]+)\s+/g)].map((m) => m[1])
+function extractCreateRpcParamNamesForLocationDetails(sql: string): string[] {
+  const matches = [
+    ...sql.matchAll(
+      /create or replace function public\.create_class_schedule_day_with_sessions\(\s*([\s\S]*?)\)\s*returns table/gi,
+    ),
+  ]
+  const fiveArg = matches.find((m) => m[1].includes('p_location_details'))
+  if (!fiveArg) return []
+  return [...fiveArg[1].matchAll(/\b(p_[a-z_]+)\s+/g)].map((m) => m[1])
 }
 
 describe('create class schedule RPC arg alignment', () => {
-  it('keeps app RPC name identical to migration 057 function', () => {
+  it('keeps app RPC name identical to migration 057 5-arg function', () => {
     const sql = readMigration('057_class_schedule_location_details.sql')
     expect(sql).toContain(
       `create or replace function public.${CREATE_CLASS_SCHEDULE_RPC_NAME}(`,
     )
+    expect(sql).toMatch(/p_location_details text/)
   })
 
-  it('matches 057 parameter names exactly (order and keys)', () => {
-    const from057 = extractCreateRpcParamNames(
+  it('matches 057 5-arg parameter names exactly (order and keys)', () => {
+    const from057 = extractCreateRpcParamNamesForLocationDetails(
       readMigration('057_class_schedule_location_details.sql'),
     )
     expect(from057).toEqual([...CREATE_CLASS_SCHEDULE_RPC_ARG_KEYS])

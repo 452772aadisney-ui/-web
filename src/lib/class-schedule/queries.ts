@@ -135,9 +135,10 @@ export async function fetchClassScheduleDaysPaginated(options: {
 export type NextClassDay = ClassScheduleDayWithSessions
 
 /**
- * Next upcoming *day* with at least one remaining scheduled session.
- * Skips cancelled days, days whose sessions are all cancelled, and days
- * whose scheduled sessions have all already ended (JST wall clock).
+ * Selects the nearest *day* that still has at least one remaining scheduled
+ * session (JST). Once selected, returns that day with **all** sessions
+ * (scheduled + cancelled, including already-ended ones today) so the student
+ * sees the full day plan — not only the next slot.
  */
 export function pickNextClassDay(
   days: ClassScheduleDayWithSessions[],
@@ -146,20 +147,25 @@ export function pickNextClassDay(
 ): NextClassDay | null {
   for (const day of days) {
     if (day.status !== 'scheduled') continue
-    const remaining = day.sessions.filter((session) => {
+    const hasRemaining = day.sessions.some((session) => {
       if (session.status !== 'scheduled') return false
       if (day.schedule_date > todayKey) return true
       if (day.schedule_date < todayKey) return false
-      // today: include in-progress and not-yet-ended
       return session.end_time > nowTimeHHmm
     })
-    if (remaining.length === 0) continue
-    return {
-      ...day,
-      sessions: remaining,
-    }
+    if (!hasRemaining) continue
+    return day
   }
   return null
+}
+
+export function getJstWallClockHHmm(now = new Date()): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Tokyo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(now)
 }
 
 export async function fetchNextClassDay(
@@ -167,14 +173,7 @@ export async function fetchNextClassDay(
   nowTimeHHmm?: string,
 ): Promise<NextClassDay | null> {
   const supabase = await createClient()
-  const now =
-    nowTimeHHmm ??
-    new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Tokyo',
-      hour: '2-digit',
-      minute: '2-digit',
-      hourCycle: 'h23',
-    }).format(new Date())
+  const now = nowTimeHHmm ?? getJstWallClockHHmm()
 
   const { data: days } = await supabase
     .from('class_schedule_days')

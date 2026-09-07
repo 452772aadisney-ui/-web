@@ -44,7 +44,7 @@ function session(
 }
 
 describe('pickNextClassDay', () => {
-  it('returns all remaining sessions on the nearest day', () => {
+  it('returns all sessions on the nearest eligible day', () => {
     const result = pickNextClassDay(
       [
         day({
@@ -95,7 +95,7 @@ describe('pickNextClassDay', () => {
     expect(result?.id).toBe('d2')
   })
 
-  it('on today keeps in-progress and future sessions, skips ended', () => {
+  it('on today returns ended + remaining + cancelled for the full day plan', () => {
     const result = pickNextClassDay(
       [
         day({
@@ -103,6 +103,12 @@ describe('pickNextClassDay', () => {
           schedule_date: '2026-09-08',
           sessions: [
             session({ id: 's1', start_time: '09:00', end_time: '10:00' }),
+            session({
+              id: 's1b',
+              start_time: '10:00',
+              end_time: '10:30',
+              status: 'cancelled',
+            }),
             session({ id: 's2', start_time: '10:30', end_time: '11:30' }),
             session({ id: 's3', start_time: '13:00', end_time: '14:00' }),
           ],
@@ -111,16 +117,24 @@ describe('pickNextClassDay', () => {
       '2026-09-08',
       '10:45',
     )
-    expect(result?.sessions.map((s) => s.id)).toEqual(['s2', 's3'])
+    expect(result?.sessions.map((s) => s.id)).toEqual(['s1', 's1b', 's2', 's3'])
   })
 
-  it('moves to next day when today sessions are all finished', () => {
+  it('moves to next day when today scheduled sessions are all finished', () => {
     const result = pickNextClassDay(
       [
         day({
           id: 'd1',
           schedule_date: '2026-09-08',
-          sessions: [session({ id: 's1', start_time: '09:00', end_time: '10:00' })],
+          sessions: [
+            session({ id: 's1', start_time: '09:00', end_time: '10:00' }),
+            session({
+              id: 's1c',
+              start_time: '11:00',
+              end_time: '12:00',
+              status: 'cancelled',
+            }),
+          ],
         }),
         day({
           id: 'd2',
@@ -132,5 +146,6 @@ describe('pickNextClassDay', () => {
       '12:00',
     )
     expect(result?.id).toBe('d2')
+    expect(result?.sessions.map((s) => s.id)).toEqual(['s2'])
   })
 })

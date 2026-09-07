@@ -2,6 +2,7 @@ import { requireKisotsuStudentOrRedirect } from '@/lib/class-schedule/access'
 import {
   fetchNextClassDay,
   fetchUpcomingClassScheduleDays,
+  getJstWallClockHHmm,
 } from '@/lib/class-schedule/queries'
 import { getJstDateKey } from '@/lib/study/dates'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
@@ -16,16 +17,21 @@ export const dynamic = 'force-dynamic'
 export default async function StudentClassSchedulePage() {
   await requireKisotsuStudentOrRedirect()
   const todayKey = getJstDateKey()
+  const nowTimeHHmm = getJstWallClockHHmm()
 
   const [next, upcoming] = await Promise.all([
-    fetchNextClassDay(todayKey),
+    fetchNextClassDay(todayKey, nowTimeHHmm),
     fetchUpcomingClassScheduleDays({ todayKey, limit: 30 }),
   ])
 
   return (
     <StudentPageShell title="授業予定" backHref="/dashboard" backLabel="マイページ">
       <div className="space-y-6">
-        <StudentClassScheduleNextHero next={next} />
+        <StudentClassScheduleNextHero
+          next={next}
+          todayKey={todayKey}
+          nowTimeHHmm={nowTimeHHmm}
+        />
         <section className="space-y-3">
           <h2 className="text-lg font-bold">今後の予定</h2>
           <StudentClassScheduleDayCards

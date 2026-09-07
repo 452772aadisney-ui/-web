@@ -26,13 +26,43 @@ function LocationBlock({ day }: { day: ClassScheduleDayWithSessions | NextClassD
   )
 }
 
+function nextSessionBadge(params: {
+  dayStatus: ClassScheduleDayWithSessions['status']
+  session: ClassScheduleSession
+  scheduleDate: string
+  todayKey?: string
+  nowTimeHHmm?: string
+}): string | null {
+  if (isSessionEffectivelyCancelled(params.dayStatus, params.session.status)) {
+    return sessionStatusLabel({
+      dayStatus: params.dayStatus,
+      sessionStatus: params.session.status,
+    })
+  }
+  if (
+    params.todayKey &&
+    params.nowTimeHHmm &&
+    params.scheduleDate === params.todayKey &&
+    params.session.end_time <= params.nowTimeHHmm
+  ) {
+    return '終了'
+  }
+  return null
+}
+
 function SessionList({
   dayStatus,
   sessions,
+  scheduleDate,
+  todayKey,
+  nowTimeHHmm,
   showCancelled = true,
 }: {
   dayStatus: ClassScheduleDayWithSessions['status']
   sessions: ClassScheduleSession[]
+  scheduleDate: string
+  todayKey?: string
+  nowTimeHHmm?: string
   showCancelled?: boolean
 }) {
   const visible = showCancelled
@@ -47,22 +77,29 @@ function SessionList({
     <ul className="mt-2 space-y-1.5">
       {visible.map((session) => {
         const cancelled = isSessionEffectivelyCancelled(dayStatus, session.status)
+        const badge = nextSessionBadge({
+          dayStatus,
+          session,
+          scheduleDate,
+          todayKey,
+          nowTimeHHmm,
+        })
         return (
           <li
             key={session.id}
             className={
               cancelled
                 ? 'rounded-lg bg-muted/30 px-3 py-2 text-sm text-muted line-through'
-                : 'rounded-lg bg-background px-3 py-2 text-sm'
+                : badge === '終了'
+                  ? 'rounded-lg bg-muted/20 px-3 py-2 text-sm text-muted'
+                  : 'rounded-lg bg-background px-3 py-2 text-sm'
             }
           >
             <p className="font-medium">
               {formatSessionTimeRange(session.start_time, session.end_time)}{' '}
               <span className="break-words">{session.subject}</span>
-              {cancelled && (
-                <span className="ml-2 text-xs font-semibold no-underline">
-                  {sessionStatusLabel({ dayStatus, sessionStatus: session.status })}
-                </span>
+              {badge && (
+                <span className="ml-2 text-xs font-semibold no-underline">{badge}</span>
               )}
             </p>
             {session.note && (
@@ -77,7 +114,15 @@ function SessionList({
   )
 }
 
-export function StudentClassScheduleNextHero({ next }: { next: NextClassDay | null }) {
+export function StudentClassScheduleNextHero({
+  next,
+  todayKey,
+  nowTimeHHmm,
+}: {
+  next: NextClassDay | null
+  todayKey: string
+  nowTimeHHmm: string
+}) {
   if (!next) {
     return (
       <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -95,7 +140,14 @@ export function StudentClassScheduleNextHero({ next }: { next: NextClassDay | nu
       </p>
       <p className="mt-1 text-sm font-semibold">{next.venue_name}</p>
       <LocationBlock day={next} />
-      <SessionList dayStatus={next.status} sessions={next.sessions} showCancelled={false} />
+      <SessionList
+        dayStatus={next.status}
+        sessions={next.sessions}
+        scheduleDate={next.schedule_date}
+        todayKey={todayKey}
+        nowTimeHHmm={nowTimeHHmm}
+        showCancelled
+      />
     </section>
   )
 }
@@ -132,7 +184,11 @@ export function StudentClassScheduleDayCards({
             )}
           </div>
           <LocationBlock day={day} />
-          <SessionList dayStatus={day.status} sessions={day.sessions} />
+          <SessionList
+            dayStatus={day.status}
+            sessions={day.sessions}
+            scheduleDate={day.schedule_date}
+          />
         </li>
       ))}
     </ul>

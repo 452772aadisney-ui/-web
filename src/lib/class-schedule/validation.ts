@@ -69,6 +69,10 @@ export function normalizeSubject(value: string): {
       error: `科目は${CLASS_SCHEDULE_SUBJECT_MAX_LENGTH}文字以内で入力してください`,
     }
   }
+  // Reject ASCII/Unicode control chars (matches DB subject_valid CHECK).
+  if (/[\u0000-\u001F\u007F]/.test(subject)) {
+    return { ok: false, error: '科目に使用できない文字が含まれています' }
+  }
   return { ok: true, value: subject }
 }
 
