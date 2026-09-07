@@ -13,17 +13,19 @@ describe('hasAnyNotificationCategoryEnabled', () => {
         announcement: true,
         message: false,
         coaching_reminder: false,
+        class_schedule: false,
       }),
     ).toBe(true)
   })
 
-  it('is false when all four categories are stopped', () => {
+  it('is false when all five categories are stopped', () => {
     expect(
       hasAnyNotificationCategoryEnabled({
         study_reminder: false,
         announcement: false,
         message: false,
         coaching_reminder: false,
+        class_schedule: false,
       }),
     ).toBe(false)
   })

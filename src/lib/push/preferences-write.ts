@@ -20,7 +20,7 @@ export type PreferenceWriteClient = {
 }
 
 /**
- * Persist one preference column without overwriting the other three.
+ * Persist one preference column without overwriting the other categories.
  *
  * Flow:
  * 1. If no row, INSERT defaults (all ON)

@@ -122,7 +122,7 @@ interface MyPageActionsProps {
   isKisotsuStudent?: boolean
   hideCoaching?: boolean
   showFaqIntro?: boolean
-  /** False when admin disabled all 4 categories — hide push promo. */
+  /** False when admin disabled all notification categories — hide push promo. */
   anyNotificationCategoryEnabled?: boolean
 }
 

@@ -62,6 +62,7 @@ const PREFERENCE_BY_TYPE: Partial<
   announcement: 'announcement',
   message: 'message',
   coaching_reminder: 'coaching_reminder',
+  class_schedule: 'class_schedule',
 }
 
 function buildPayload(input: SendPushNotificationInput): WebPushPayload {
@@ -86,7 +87,9 @@ async function isCategoryEnabled(
 
   const { data, error } = await admin
     .from('notification_preferences')
-    .select('study_reminder, announcement, message, coaching_reminder')
+    .select(
+      'study_reminder, announcement, message, coaching_reminder, class_schedule',
+    )
     .eq('user_id', userId)
     .maybeSingle<Record<NotificationPreferenceCategory, boolean>>()
 

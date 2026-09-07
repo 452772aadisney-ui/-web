@@ -18,6 +18,7 @@
 | `announcement` | 新規お知らせ | する |
 | `message` | 新規メッセージ（管理者→生徒） | する |
 | `coaching_reminder` | コーチング予約催促・予約前日案内 | する |
+| `class_schedule` | 既卒授業予定の登録・変更・中止 | する |
 | `test` | 設定画面からのテスト通知 | **しない** |
 
 ※ 1-2 初版の `chat_message` は **`message`** に改名。
@@ -47,7 +48,7 @@
 - 行の作成・変更は Admin Client（service role）のみ
 - 監査: `notification_preference_changes`（一般クライアント GRANT なし・RLS ON）
 
-### カテゴリ boolean の意味（4種共通）
+### カテゴリ boolean の意味（5種共通）
 
 ```text
 true  = Push-first。Push不可 / 全端末失敗ならメールfallback
@@ -116,6 +117,7 @@ rollback は上記テーブル4つと enum 3つのみ削除する（既存シス
 | announcement | announcement_id |
 | message | message_id |
 | coaching_reminder | `booking-prompt:YYYY-MM-DD`（週次） / `session-previous-day:{bookingId}:{startsAt}`（前日） |
+| class_schedule | `class_schedule:{dayId}:r{notifyRevision}:{create\|change\|cancel}` |
 | test | 操作ごとの UUID |
 
 ### `target_path` 制約
@@ -178,7 +180,7 @@ rollback は上記テーブル4つと enum 3つのみ削除する（既存シス
 - 導線: 生徒ハンバーガー「通知設定」（管理者メニューには無し）
 - 端末ON/OFF: 1-5 の `enablePushSubscriptionFromUser` / `disablePushSubscriptionFromUser`
 - カテゴリ: RLS 経由の Server Action（`getNotificationPreferences` / `updateNotificationPreference`）
-- DB列名: `study_reminder` / `announcement` / `message` / `coaching_reminder`（`*_enabled` ではない）
+- DB列名: `study_reminder` / `announcement` / `message` / `coaching_reminder` / `class_schedule`（`*_enabled` ではない）
 - `test` は設定UIに出さない
 - ページ表示では通知許可を要求しない
 

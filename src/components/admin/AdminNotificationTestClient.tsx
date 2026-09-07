@@ -15,6 +15,7 @@ import type { AdminFullDryRunReport } from '@/lib/study/study-reminder-dry-run'
 import type { AnnouncementAdminDryRunReport } from '@/lib/announcements/announcement-dry-run'
 import type { MessageAdminDryRunReport } from '@/lib/chat/message-dry-run'
 import type { CoachingAdminDryRunReport } from '@/lib/coaching/coaching-reminder-dry-run'
+import type { ClassScheduleAdminDryRunReport } from '@/lib/class-schedule/class-schedule-dry-run'
 import {
   ADMIN_CATEGORY_TEST_FIXTURES,
   ADMIN_CATEGORY_TEST_KINDS,
@@ -88,6 +89,12 @@ type ApiMessageDryRunResponse = {
 type ApiCoachingDryRunResponse = {
   ok: true
   coachingDryRun: CoachingAdminDryRunReport
+  notice: string
+}
+
+type ApiClassScheduleDryRunResponse = {
+  ok: true
+  classScheduleDryRun: ClassScheduleAdminDryRunReport
   notice: string
 }
 
@@ -197,6 +204,8 @@ export function AdminNotificationTestClient({
     useState<AnnouncementAdminDryRunReport | null>(null)
   const [messageDryRun, setMessageDryRun] = useState<MessageAdminDryRunReport | null>(null)
   const [coachingDryRun, setCoachingDryRun] = useState<CoachingAdminDryRunReport | null>(null)
+  const [classScheduleDryRun, setClassScheduleDryRun] =
+    useState<ClassScheduleAdminDryRunReport | null>(null)
   const [category, setCategory] = useState<AdminCategoryTestKind>('study_reminder')
   const [busy, setBusy] = useState<
     | 'inspect'
@@ -212,6 +221,7 @@ export function AdminNotificationTestClient({
     | 'announcement-dry-run'
     | 'message-dry-run'
     | 'coaching-dry-run'
+    | 'class-schedule-dry-run'
     | null
   >(null)
   const busyRef = useRef(false)
@@ -775,6 +785,44 @@ export function AdminNotificationTestClient({
     })
   }
 
+  const runClassScheduleDryRun = () => {
+    if (busyRef.current || !dryRunAvailable) return
+
+    busyRef.current = true
+    setBusy('class-schedule-dry-run')
+    const toastSession = createToastSession()
+
+    startTransition(async () => {
+      try {
+        const result = await postJson({ action: 'class-schedule-dry-run' })
+        if (!result.ok) {
+          if (result.status === 429) {
+            toastSession.error(
+              result.retryAfterSeconds
+                ? `短時間に何度も実行できません。約${result.retryAfterSeconds}秒後に再度お試しください`
+                : '短時間に何度も実行できません。しばらくしてから再度お試しください',
+              'admin-notification-test-toast',
+            )
+            return
+          }
+          if (result.error === 'in_progress') {
+            toastSession.error('dry-runの実行中です。完了後に再度お試しください', 'admin-notification-test-toast')
+            return
+          }
+          toastSession.error('授業予定通知の準備状況を取得できませんでした', 'admin-notification-test-toast')
+          return
+        }
+
+        const data = result.data as ApiClassScheduleDryRunResponse
+        setClassScheduleDryRun(data.classScheduleDryRun)
+        toastSession.success('授業予定通知の準備状況を集計しました', 'admin-notification-test-toast')
+      } finally {
+        busyRef.current = false
+        setBusy(null)
+      }
+    })
+  }
+
   return (
     <div className="space-y-8" aria-busy={busy !== null}>
       <section
@@ -1312,6 +1360,86 @@ export function AdminNotificationTestClient({
                     {coachingDryRun.sessionPreviousDayCurrent.cannotDeliver}
                   </p>
                 </section>
+              </div>
+            )}
+          </>
+        )}
+      </section>
+
+      <section
+        className="rounded-2xl border border-border bg-card p-5 shadow-sm"
+        aria-labelledby={`${baseId}-class-schedule-dry-run-heading`}
+      >
+        <h2
+          id={`${baseId}-class-schedule-dry-run-heading`}
+          className="text-base font-bold text-foreground"
+        >
+          授業予定通知の準備状況
+        </h2>
+        <p className="mt-2 text-sm text-muted">
+          学年=既卒の生徒向け授業予定通知の準備状況です。Push・メールは送信しません。
+        </p>
+
+        {!dryRunAvailable ? (
+          <p className="mt-4 text-sm text-muted" role="status">
+            {disabledReasonMessage(initialDisabledReason ?? 'flag_off')}
+          </p>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="mt-4 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-medium text-foreground transition hover:bg-card disabled:opacity-60"
+              disabled={busy !== null}
+              onClick={runClassScheduleDryRun}
+            >
+              {busy === 'class-schedule-dry-run' ? '集計中…' : '準備状況を集計'}
+            </button>
+
+            {classScheduleDryRun && (
+              <div className="mt-4 space-y-4" aria-live="polite">
+                <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-foreground">
+                  これは判定結果の確認です。通知は送信されていません（mode=
+                  {classScheduleDryRun.current.mode} / Push送信=
+                  {classScheduleDryRun.current.pushSendingEnabled ? 'ON' : 'OFF'}
+                  {classScheduleDryRun.current.allowlistCount != null
+                    ? ` / allowlist=${classScheduleDryRun.current.allowlistCount}`
+                    : ''}
+                  ）。
+                </p>
+                <dl className="grid gap-2 text-sm text-foreground sm:grid-cols-2">
+                  <div>
+                    <dt className="text-muted">既卒生徒数</dt>
+                    <dd className="font-medium">{classScheduleDryRun.readiness.kisotsuTotal}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">管理者により停止</dt>
+                    <dd className="font-medium">
+                      {classScheduleDryRun.readiness.preferenceDisabled}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">Push準備済み</dt>
+                    <dd className="font-medium">{classScheduleDryRun.readiness.pushReady}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">メールfallback</dt>
+                    <dd className="font-medium">{classScheduleDryRun.readiness.emailFallback}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">配信手段なし</dt>
+                    <dd className="font-medium">{classScheduleDryRun.readiness.cannotDeliver}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted">判定エラー</dt>
+                    <dd className="font-medium">{classScheduleDryRun.readiness.failed}</dd>
+                  </div>
+                </dl>
+                <p className="text-xs text-muted">
+                  現在設定: Push {classScheduleDryRun.current.wouldUsePush} / メール{' '}
+                  {classScheduleDryRun.current.wouldFallbackEmail} / 停止{' '}
+                  {classScheduleDryRun.current.preferenceDisabled} / 手段なし{' '}
+                  {classScheduleDryRun.current.cannotDeliver}
+                </p>
               </div>
             )}
           </>

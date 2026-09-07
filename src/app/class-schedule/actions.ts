@@ -8,12 +8,23 @@ import {
   hasOverlappingScheduledSession,
 } from '@/lib/class-schedule/overlap'
 import { parseDayFields, parseSessionDraft } from '@/lib/class-schedule/validation'
-import type { ClassScheduleSession } from '@/types/class-schedule'
+import {
+  classScheduleDayFieldsChanged,
+  classScheduleSessionFieldsChanged,
+} from '@/lib/class-schedule/notify-change'
+import {
+  classScheduleNotifySuccessMessage,
+  deliverClassScheduleNotifications,
+} from '@/lib/class-schedule/class-schedule-orchestrator'
+import type { ClassScheduleNotifyKind } from '@/lib/class-schedule/class-schedule-email'
+import type { ClassScheduleDay, ClassScheduleSession } from '@/types/class-schedule'
 
 export type ClassScheduleActionState = {
   error?: string
   success?: boolean
   successMessage?: string
+  /** True when the schedule row saved but notification fan-out had failures. */
+  notifyPartialFailure?: boolean
 }
 
 function revalidateClassSchedulePaths(dayId?: string) {
@@ -76,6 +87,16 @@ function parseSessionsFromFormData(formData: FormData): {
   return { ok: true, sessions }
 }
 
+async function fetchDay(dayId: string): Promise<ClassScheduleDay | null> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('class_schedule_days')
+    .select('*')
+    .eq('id', dayId)
+    .maybeSingle<ClassScheduleDay>()
+  return data ?? null
+}
+
 async function fetchSessionsForDay(
   dayId: string,
 ): Promise<ClassScheduleSession[]> {
@@ -85,6 +106,81 @@ async function fetchSessionsForDay(
     .select('*')
     .eq('day_id', dayId)
   return (data as ClassScheduleSession[] | null) ?? []
+}
+
+async function bumpNotifyRevision(
+  dayId: string,
+  updatedBy: string,
+): Promise<{ ok: true; notifyRevision: number } | { ok: false }> {
+  const day = await fetchDay(dayId)
+  if (!day) return { ok: false }
+
+  const nextRevision = day.notify_revision + 1
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('class_schedule_days')
+    .update({
+      notify_revision: nextRevision,
+      updated_by: updatedBy,
+    })
+    .eq('id', dayId)
+    .select('notify_revision')
+    .single<{ notify_revision: number }>()
+
+  if (error || !data) return { ok: false }
+  return { ok: true, notifyRevision: data.notify_revision }
+}
+
+async function notifyAfterSave(params: {
+  dayId: string
+  notifyRevision: number
+  kind: ClassScheduleNotifyKind
+  savedMessage: string
+}): Promise<ClassScheduleActionState> {
+  let successMessage = params.savedMessage
+  let notifyPartialFailure = false
+
+  try {
+    const summary = await deliverClassScheduleNotifications({
+      dayId: params.dayId,
+      notifyRevision: params.notifyRevision,
+      kind: params.kind,
+    })
+    successMessage = classScheduleNotifySuccessMessage(params.savedMessage, summary)
+    notifyPartialFailure =
+      summary.mode !== 'dry-run' &&
+      (summary.failed > 0 ||
+        summary.cannotDeliver > 0 ||
+        summary.emailUnprocessedCount > 0 ||
+        summary.stalePending > 0 ||
+        summary.timedOut ||
+        !summary.ok)
+
+    console.info('[class-schedule] notification summary:', {
+      mode: summary.mode,
+      kind: params.kind,
+      recipients: summary.recipients,
+      pushSucceeded: summary.pushSucceeded,
+      emailFallbackSucceeded: summary.emailFallbackSucceeded,
+      preferenceDisabled: summary.preferenceDisabled,
+      cannotDeliver: summary.cannotDeliver,
+      failed: summary.failed,
+      legacyEmailSentCount: summary.legacyEmailSentCount,
+      timedOut: summary.timedOut,
+      durationMs: summary.durationMs,
+    })
+  } catch {
+    console.error('[class-schedule] notification failed after save')
+    successMessage = `${params.savedMessage}（通知を送信できませんでした）`
+    notifyPartialFailure = true
+  }
+
+  revalidateClassSchedulePaths(params.dayId)
+  return {
+    success: true,
+    successMessage,
+    ...(notifyPartialFailure ? { notifyPartialFailure: true } : {}),
+  }
 }
 
 export async function createClassScheduleDay(
@@ -112,11 +208,12 @@ export async function createClassScheduleDay(
     .insert({
       ...dayFields.day,
       status: 'scheduled',
+      notify_revision: 1,
       created_by: access.profile.id,
       updated_by: access.profile.id,
     })
-    .select('id')
-    .single<{ id: string }>()
+    .select('id, notify_revision')
+    .single<{ id: string; notify_revision: number }>()
 
   if (dayError || !day) {
     if (dayError?.code === '23505') {
@@ -144,9 +241,12 @@ export async function createClassScheduleDay(
     return { error: 'コマの登録に失敗しました' }
   }
 
-  // Notifications (commit 2): optional fan-out when notify_revision increments.
-  revalidateClassSchedulePaths(day.id)
-  return { success: true, successMessage: '授業予定を登録しました' }
+  return notifyAfterSave({
+    dayId: day.id,
+    notifyRevision: day.notify_revision,
+    kind: 'create',
+    savedMessage: '授業予定を登録しました',
+  })
 }
 
 export async function updateClassScheduleDay(
@@ -168,11 +268,22 @@ export async function updateClassScheduleDay(
   })
   if (!dayFields.ok) return { error: dayFields.error }
 
+  const existing = await fetchDay(dayId)
+  if (!existing) return { error: '授業日が見つかりません' }
+
+  const changed = classScheduleDayFieldsChanged(existing, dayFields.day)
+  if (!changed) {
+    revalidateClassSchedulePaths(dayId)
+    return { success: true, successMessage: '変更はありません' }
+  }
+
   const supabase = await createClient()
+  const nextRevision = existing.notify_revision + 1
   const { error } = await supabase
     .from('class_schedule_days')
     .update({
       ...dayFields.day,
+      notify_revision: nextRevision,
       updated_by: access.profile.id,
     })
     .eq('id', dayId)
@@ -184,8 +295,12 @@ export async function updateClassScheduleDay(
     return { error: '授業日の更新に失敗しました' }
   }
 
-  revalidateClassSchedulePaths(dayId)
-  return { success: true, successMessage: '会場情報を更新しました' }
+  return notifyAfterSave({
+    dayId,
+    notifyRevision: nextRevision,
+    kind: 'change',
+    savedMessage: '会場情報を更新しました',
+  })
 }
 
 export async function addClassScheduleSession(
@@ -231,13 +346,22 @@ export async function addClassScheduleSession(
     return { error: 'コマの追加に失敗しました' }
   }
 
-  await supabase
-    .from('class_schedule_days')
-    .update({ updated_by: access.profile.id })
-    .eq('id', dayId)
+  const bumped = await bumpNotifyRevision(dayId, access.profile.id)
+  if (!bumped.ok) {
+    revalidateClassSchedulePaths(dayId)
+    return {
+      success: true,
+      successMessage: 'コマを追加しました（通知を送信できませんでした）',
+      notifyPartialFailure: true,
+    }
+  }
 
-  revalidateClassSchedulePaths(dayId)
-  return { success: true, successMessage: 'コマを追加しました' }
+  return notifyAfterSave({
+    dayId,
+    notifyRevision: bumped.notifyRevision,
+    kind: 'change',
+    savedMessage: 'コマを追加しました',
+  })
 }
 
 export async function updateClassScheduleSession(
@@ -262,6 +386,11 @@ export async function updateClassScheduleSession(
   const existing = await fetchSessionsForDay(dayId)
   const current = existing.find((s) => s.id === sessionId)
   if (!current) return { error: 'コマが見つかりません' }
+
+  if (!classScheduleSessionFieldsChanged(current, parsed.session)) {
+    revalidateClassSchedulePaths(dayId)
+    return { success: true, successMessage: '変更はありません' }
+  }
 
   if (
     current.status === 'scheduled' &&
@@ -291,13 +420,22 @@ export async function updateClassScheduleSession(
     return { error: 'コマの更新に失敗しました' }
   }
 
-  await supabase
-    .from('class_schedule_days')
-    .update({ updated_by: access.profile.id })
-    .eq('id', dayId)
+  const bumped = await bumpNotifyRevision(dayId, access.profile.id)
+  if (!bumped.ok) {
+    revalidateClassSchedulePaths(dayId)
+    return {
+      success: true,
+      successMessage: 'コマを更新しました（通知を送信できませんでした）',
+      notifyPartialFailure: true,
+    }
+  }
 
-  revalidateClassSchedulePaths(dayId)
-  return { success: true, successMessage: 'コマを更新しました' }
+  return notifyAfterSave({
+    dayId,
+    notifyRevision: bumped.notifyRevision,
+    kind: 'change',
+    savedMessage: 'コマを更新しました',
+  })
 }
 
 export async function cancelClassScheduleDay(
@@ -309,20 +447,32 @@ export async function cancelClassScheduleDay(
   const dayId = String(formData.get('dayId') ?? '').trim()
   if (!dayId) return { error: '授業日が見つかりません' }
 
+  const existing = await fetchDay(dayId)
+  if (!existing) return { error: '授業日が見つかりません' }
+  if (existing.status === 'cancelled') {
+    revalidateClassSchedulePaths(dayId)
+    return { success: true, successMessage: '変更はありません' }
+  }
+
+  const nextRevision = existing.notify_revision + 1
   const supabase = await createClient()
   const { error } = await supabase
     .from('class_schedule_days')
     .update({
       status: 'cancelled',
+      notify_revision: nextRevision,
       updated_by: access.profile.id,
     })
     .eq('id', dayId)
 
   if (error) return { error: '授業日の中止に失敗しました' }
 
-  // Notifications stub (commit 2)
-  revalidateClassSchedulePaths(dayId)
-  return { success: true, successMessage: '授業日を中止しました' }
+  return notifyAfterSave({
+    dayId,
+    notifyRevision: nextRevision,
+    kind: 'cancel',
+    savedMessage: '授業日を中止しました',
+  })
 }
 
 export async function uncancelClassScheduleDay(
@@ -334,19 +484,32 @@ export async function uncancelClassScheduleDay(
   const dayId = String(formData.get('dayId') ?? '').trim()
   if (!dayId) return { error: '授業日が見つかりません' }
 
+  const existing = await fetchDay(dayId)
+  if (!existing) return { error: '授業日が見つかりません' }
+  if (existing.status === 'scheduled') {
+    revalidateClassSchedulePaths(dayId)
+    return { success: true, successMessage: '変更はありません' }
+  }
+
+  const nextRevision = existing.notify_revision + 1
   const supabase = await createClient()
   const { error } = await supabase
     .from('class_schedule_days')
     .update({
       status: 'scheduled',
+      notify_revision: nextRevision,
       updated_by: access.profile.id,
     })
     .eq('id', dayId)
 
   if (error) return { error: '授業日の再開に失敗しました' }
 
-  revalidateClassSchedulePaths(dayId)
-  return { success: true, successMessage: '授業日を再開しました' }
+  return notifyAfterSave({
+    dayId,
+    notifyRevision: nextRevision,
+    kind: 'change',
+    savedMessage: '授業日を再開しました',
+  })
 }
 
 export async function cancelClassScheduleSession(
@@ -359,6 +522,14 @@ export async function cancelClassScheduleSession(
   const dayId = String(formData.get('dayId') ?? '').trim()
   if (!sessionId || !dayId) return { error: 'コマが見つかりません' }
 
+  const existing = await fetchSessionsForDay(dayId)
+  const current = existing.find((s) => s.id === sessionId)
+  if (!current) return { error: 'コマが見つかりません' }
+  if (current.status === 'cancelled') {
+    revalidateClassSchedulePaths(dayId)
+    return { success: true, successMessage: '変更はありません' }
+  }
+
   const supabase = await createClient()
   const { error } = await supabase
     .from('class_schedule_sessions')
@@ -368,13 +539,22 @@ export async function cancelClassScheduleSession(
 
   if (error) return { error: 'コマの中止に失敗しました' }
 
-  await supabase
-    .from('class_schedule_days')
-    .update({ updated_by: access.profile.id })
-    .eq('id', dayId)
+  const bumped = await bumpNotifyRevision(dayId, access.profile.id)
+  if (!bumped.ok) {
+    revalidateClassSchedulePaths(dayId)
+    return {
+      success: true,
+      successMessage: 'コマを中止しました（通知を送信できませんでした）',
+      notifyPartialFailure: true,
+    }
+  }
 
-  revalidateClassSchedulePaths(dayId)
-  return { success: true, successMessage: 'コマを中止しました' }
+  return notifyAfterSave({
+    dayId,
+    notifyRevision: bumped.notifyRevision,
+    kind: 'cancel',
+    savedMessage: 'コマを中止しました',
+  })
 }
 
 export async function uncancelClassScheduleSession(
@@ -390,6 +570,11 @@ export async function uncancelClassScheduleSession(
   const existing = await fetchSessionsForDay(dayId)
   const current = existing.find((s) => s.id === sessionId)
   if (!current) return { error: 'コマが見つかりません' }
+
+  if (current.status === 'scheduled') {
+    revalidateClassSchedulePaths(dayId)
+    return { success: true, successMessage: '変更はありません' }
+  }
 
   if (
     hasOverlappingScheduledSession(
@@ -415,13 +600,22 @@ export async function uncancelClassScheduleSession(
     return { error: 'コマの再開に失敗しました' }
   }
 
-  await supabase
-    .from('class_schedule_days')
-    .update({ updated_by: access.profile.id })
-    .eq('id', dayId)
+  const bumped = await bumpNotifyRevision(dayId, access.profile.id)
+  if (!bumped.ok) {
+    revalidateClassSchedulePaths(dayId)
+    return {
+      success: true,
+      successMessage: 'コマを再開しました（通知を送信できませんでした）',
+      notifyPartialFailure: true,
+    }
+  }
 
-  revalidateClassSchedulePaths(dayId)
-  return { success: true, successMessage: 'コマを再開しました' }
+  return notifyAfterSave({
+    dayId,
+    notifyRevision: bumped.notifyRevision,
+    kind: 'change',
+    savedMessage: 'コマを再開しました',
+  })
 }
 
 export async function deleteClassScheduleDay(
@@ -438,6 +632,7 @@ export async function deleteClassScheduleDay(
 
   if (error) return { error: '授業日の削除に失敗しました' }
 
+  // Misregistration delete: NO notify
   revalidateClassSchedulePaths()
   return { success: true, successMessage: '誤登録の授業日を削除しました' }
 }
@@ -461,6 +656,7 @@ export async function deleteClassScheduleSession(
 
   if (error) return { error: 'コマの削除に失敗しました' }
 
+  // Misregistration delete: NO notify
   await supabase
     .from('class_schedule_days')
     .update({ updated_by: access.profile.id })

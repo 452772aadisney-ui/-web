@@ -9,10 +9,12 @@ import { resolveEffectiveStudyReminderMode } from '@/lib/study/study-reminder-mo
 import { resolveEffectiveAnnouncementMode } from '@/lib/announcements/announcement-delivery-mode'
 import { resolveEffectiveMessageMode } from '@/lib/chat/message-delivery-mode'
 import { resolveEffectiveCoachingReminderMode } from '@/lib/coaching/coaching-reminder-mode'
+import { resolveEffectiveClassScheduleMode } from '@/lib/class-schedule/class-schedule-delivery-mode'
 import { parseStudyReminderPushAllowlist } from '@/lib/study/study-reminder-mode'
 import { parseAnnouncementPushAllowlist } from '@/lib/announcements/announcement-delivery-mode'
 import { parseMessagePushAllowlist } from '@/lib/chat/message-delivery-mode'
 import { parseCoachingReminderPushAllowlist } from '@/lib/coaching/coaching-reminder-mode'
+import { parseClassSchedulePushAllowlist } from '@/lib/class-schedule/class-schedule-delivery-mode'
 import {
   NOTIFICATION_OPS_CRONS,
   NOTIFICATION_OPS_DELIVERY_SCAN_LIMIT,
@@ -38,7 +40,12 @@ export type NotificationOpsEnvStatus = {
 }
 
 export type NotificationOpsModeCard = {
-  id: 'study_reminder' | 'announcement' | 'message' | 'coaching_reminder'
+  id:
+    | 'study_reminder'
+    | 'announcement'
+    | 'message'
+    | 'coaching_reminder'
+    | 'class_schedule'
   label: string
   configuredModeRaw: string
   configuredModeValid: boolean
@@ -64,6 +71,7 @@ export type NotificationOpsSubscriptionAggregate = {
     announcement: number
     message: number
     coaching_reminder: number
+    class_schedule: number
   }
   possiblyUndeliverable: number
   queryTruncated: boolean
@@ -207,6 +215,16 @@ function buildModeCards(
     coachRaw === 'all' ||
     coachRaw === ''
 
+  const classRaw = env.CLASS_SCHEDULE_DELIVERY_MODE ?? ''
+  const classMode = resolveEffectiveClassScheduleMode(env)
+  const classAllow = parseClassSchedulePushAllowlist(env.CLASS_SCHEDULE_PUSH_ALLOWLIST)
+  const classValid =
+    classRaw === 'legacy' ||
+    classRaw === 'dry-run' ||
+    classRaw === 'allowlist' ||
+    classRaw === 'all' ||
+    classRaw === ''
+
   function warn(
     configuredValid: boolean,
     forced: 'allowlist_empty' | 'allowlist_invalid' | null,
@@ -284,6 +302,21 @@ function buildModeCards(
         '週次予約催促と予約前日案内。legacyは週次チャットのみ・前日は送信なし。',
       warning: warn(coachValid, coach.forcedLegacyReason, coachRaw),
     },
+    {
+      id: 'class_schedule',
+      label: '授業予定',
+      configuredModeRaw: classRaw === '' ? '(未設定→legacy)' : classRaw,
+      configuredModeValid: classValid,
+      effectiveMode: classMode.mode,
+      allowlistConfigured: classAllow.ok,
+      allowlistCount: classAllow.ok ? classAllow.ids.size : null,
+      allowlistInvalid: !classAllow.ok && classAllow.reason === 'invalid',
+      forcedLegacyReason: classMode.forcedLegacyReason,
+      pushSending,
+      description:
+        '既卒生向け授業予定の登録・変更・中止。legacyはメールのみ、allはPush-first。',
+      warning: warn(classValid, classMode.forcedLegacyReason, classRaw),
+    },
   ]
 }
 
@@ -338,12 +371,15 @@ async function loadSubscriptionAggregate(
     announcement: 0,
     message: 0,
     coaching_reminder: 0,
+    class_schedule: 0,
   }
 
   if (studentIds.length > 0) {
     const { data: prefs, error: prefError } = await admin
       .from('notification_preferences')
-      .select('user_id, study_reminder, announcement, message, coaching_reminder')
+      .select(
+        'user_id, study_reminder, announcement, message, coaching_reminder, class_schedule',
+      )
       .in('user_id', studentIds)
 
     if (prefError) throw new Error('prefs')
@@ -353,11 +389,13 @@ async function loadSubscriptionAggregate(
       announcement: boolean
       message: boolean
       coaching_reminder: boolean
+      class_schedule: boolean
     }>) {
       if (!row.study_reminder) preferenceDisabled.study_reminder += 1
       if (!row.announcement) preferenceDisabled.announcement += 1
       if (!row.message) preferenceDisabled.message += 1
       if (!row.coaching_reminder) preferenceDisabled.coaching_reminder += 1
+      if (!row.class_schedule) preferenceDisabled.class_schedule += 1
     }
   }
 

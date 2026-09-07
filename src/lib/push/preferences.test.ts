@@ -7,12 +7,13 @@ import {
 } from '@/lib/push/preferences'
 
 describe('notification preferences helpers', () => {
-  it('exposes the four admin-controlled categories', () => {
+  it('exposes the five admin-controlled categories', () => {
     expect(NOTIFICATION_PREFERENCE_CATEGORIES).toEqual([
       'study_reminder',
       'announcement',
       'message',
       'coaching_reminder',
+      'class_schedule',
     ])
   })
 
@@ -22,6 +23,7 @@ describe('notification preferences helpers', () => {
       announcement: true,
       message: true,
       coaching_reminder: true,
+      class_schedule: true,
     })
   })
 

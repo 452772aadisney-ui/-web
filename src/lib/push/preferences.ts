@@ -9,6 +9,7 @@ export const NOTIFICATION_PREFERENCE_CATEGORIES = [
   'announcement',
   'message',
   'coaching_reminder',
+  'class_schedule',
 ] as const satisfies readonly NotificationPreferenceCategory[]
 
 export type NotificationPreferencesView = Pick<
@@ -46,6 +47,10 @@ export const NOTIFICATION_PREFERENCE_COPY: Record<
     title: 'コーチングのお知らせ',
     description:
       'コーチングの予約案内と、予約前日のお知らせを受け取ります。',
+  },
+  class_schedule: {
+    title: '授業予定',
+    description: '既卒予定の登録・変更・中止をお知らせします。',
   },
 }
 

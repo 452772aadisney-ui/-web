@@ -45,6 +45,7 @@ type PrefRow = {
   announcement: boolean
   message: boolean
   coaching_reminder: boolean
+  class_schedule: boolean
   updated_at?: string
 }
 
@@ -109,6 +110,7 @@ function mockAdminDb(options: {
               announcement: Boolean(payload.announcement),
               message: Boolean(payload.message),
               coaching_reminder: Boolean(payload.coaching_reminder),
+              class_schedule: Boolean(payload.class_schedule),
               updated_at: '2026-09-06T00:00:00.000Z',
             }
             return Promise.resolve({ error: null })
@@ -218,6 +220,7 @@ describe('admin notification preferences control', () => {
         announcement: true,
         message: true,
         coaching_reminder: true,
+        class_schedule: true,
       },
     })
 
@@ -262,6 +265,7 @@ describe('admin notification preferences control', () => {
         announcement: true,
         message: true,
         coaching_reminder: true,
+        class_schedule: true,
       },
     })
 
@@ -270,7 +274,7 @@ describe('admin notification preferences control', () => {
       enabled: false,
     })
     expect(result.ok).toBe(true)
-    expect(db.auditInserts).toHaveLength(4)
+    expect(db.auditInserts).toHaveLength(5)
     expect(db.auditInserts.every((row) => row.reason === null)).toBe(true)
   })
 
@@ -281,6 +285,7 @@ describe('admin notification preferences control', () => {
         announcement: true,
         message: true,
         coaching_reminder: true,
+        class_schedule: true,
       },
     })
     const result = await updateAdminStudentNotificationPreference({

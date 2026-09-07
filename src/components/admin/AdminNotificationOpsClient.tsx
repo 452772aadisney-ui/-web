@@ -351,6 +351,12 @@ export function AdminNotificationOpsClient({
                       </dd>
                     </div>
                     <div>
+                      <dt className="text-muted">授業予定停止</dt>
+                      <dd className="font-medium">
+                        {snapshot.subscriptions.preferenceDisabled.class_schedule}
+                      </dd>
+                    </div>
+                    <div>
                       <dt className="text-muted">配信手段なしの可能性</dt>
                       <dd className="font-medium">
                         {snapshot.subscriptions.possiblyUndeliverable}

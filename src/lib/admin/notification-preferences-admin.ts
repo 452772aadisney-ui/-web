@@ -77,12 +77,14 @@ function toView(row: {
   announcement: boolean
   message: boolean
   coaching_reminder: boolean
+  class_schedule: boolean
 }): NotificationPreferencesView {
   return {
     study_reminder: row.study_reminder,
     announcement: row.announcement,
     message: row.message,
     coaching_reminder: row.coaching_reminder,
+    class_schedule: row.class_schedule,
   }
 }
 
@@ -93,7 +95,7 @@ async function loadSnapshot(
   const { data: prefs } = await admin
     .from('notification_preferences')
     .select(
-      'study_reminder, announcement, message, coaching_reminder, updated_at',
+      'study_reminder, announcement, message, coaching_reminder, class_schedule, updated_at',
     )
     .eq('user_id', studentUserId)
     .maybeSingle<{
@@ -101,6 +103,7 @@ async function loadSnapshot(
       announcement: boolean
       message: boolean
       coaching_reminder: boolean
+      class_schedule: boolean
       updated_at: string
     }>()
 
@@ -177,13 +180,16 @@ function createAdminPreferenceWriteClient(
     async selectPreferences() {
       const { data, error } = await admin
         .from('notification_preferences')
-        .select('study_reminder, announcement, message, coaching_reminder')
+        .select(
+          'study_reminder, announcement, message, coaching_reminder, class_schedule',
+        )
         .eq('user_id', studentUserId)
         .maybeSingle<{
           study_reminder: boolean
           announcement: boolean
           message: boolean
           coaching_reminder: boolean
+          class_schedule: boolean
         }>()
 
       if (error) return { ok: false as const }
@@ -299,7 +305,7 @@ export async function updateAdminStudentNotificationPreference(params: {
 }
 
 /**
- * Set all four categories to the same enabled flag (per-category audit rows).
+ * Set all preference categories to the same enabled flag (per-category audit rows).
  */
 export async function updateAdminStudentNotificationPreferencesBulk(params: {
   studentUserId: string
@@ -323,6 +329,7 @@ export async function updateAdminStudentNotificationPreferencesBulk(params: {
     'announcement',
     'message',
     'coaching_reminder',
+    'class_schedule',
   ] as const satisfies readonly NotificationPreferenceCategory[]
 
   for (const category of categories) {

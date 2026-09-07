@@ -34,6 +34,7 @@ export const ADMIN_CATEGORY_TEST_KINDS = [
   'message',
   'coaching_booking_prompt',
   'coaching_session_previous_day',
+  'class_schedule',
 ] as const
 
 export type AdminCategoryTestKind = (typeof ADMIN_CATEGORY_TEST_KINDS)[number]
@@ -114,6 +115,19 @@ export const ADMIN_CATEGORY_TEST_FIXTURES: Record<
       '明日20:30からコーチングです。（テスト）',
       '',
       '実予約データは作成・変更していません。',
+      '一般の生徒向け通知ではありません。',
+    ].join('\n'),
+  },
+  class_schedule: {
+    kind: 'class_schedule',
+    label: '授業予定',
+    pushBody: '新しい授業予定が登録されました。（テスト）',
+    targetPath: '/dashboard/class-schedule',
+    emailSubject: '【受験生web】【テスト】授業予定通知の確認',
+    emailBody: [
+      'これは管理者による通知テストです。',
+      '授業予定通知のメール配信経路を確認しています。',
+      '',
       '一般の生徒向け通知ではありません。',
     ].join('\n'),
   },

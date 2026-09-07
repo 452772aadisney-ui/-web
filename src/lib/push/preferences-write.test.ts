@@ -39,6 +39,7 @@ function createMockClient(options: {
           announcement: false,
           message: true,
           coaching_reminder: true,
+          class_schedule: true,
         }
         return { ok: false as const, conflict: true }
       }
@@ -50,6 +51,7 @@ function createMockClient(options: {
         announcement: true,
         message: true,
         coaching_reminder: true,
+        class_schedule: true,
       }
       return { ok: true as const }
     },
@@ -68,12 +70,7 @@ function createMockClient(options: {
   }
 }
 
-function stateFrom(initial: {
-  study_reminder: boolean
-  announcement: boolean
-  message: boolean
-  coaching_reminder: boolean
-} | null) {
+function stateFrom(initial: PreferenceRow | null) {
   return {
     row: initial ? { ...initial } : null,
     updatedOnce: false,
@@ -87,6 +84,7 @@ describe('buildInsertDefaultsWithCategory', () => {
       announcement: true,
       message: true,
       coaching_reminder: true,
+      class_schedule: true,
     })
   })
 })
@@ -107,6 +105,7 @@ describe('ensurePreferencesRowThenUpdateCategory', () => {
         announcement: true,
         message: true,
         coaching_reminder: true,
+        class_schedule: true,
       },
     })
     expect(client.updateCalls).toEqual([{ category: 'study_reminder', enabled: false }])
@@ -133,6 +132,7 @@ describe('ensurePreferencesRowThenUpdateCategory', () => {
         announcement: false,
         message: true,
         coaching_reminder: false,
+        class_schedule: true,
       },
     })
     const insertSpy = vi.spyOn(client, 'insertDefaults')
@@ -147,6 +147,7 @@ describe('ensurePreferencesRowThenUpdateCategory', () => {
         announcement: false,
         message: false,
         coaching_reminder: false,
+        class_schedule: true,
       },
     })
     expect(client.updateCalls).toHaveLength(1)
@@ -172,6 +173,7 @@ describe('ensurePreferencesRowThenUpdateCategory', () => {
         announcement: false,
         message: true,
         coaching_reminder: true,
+        class_schedule: true,
       },
     })
   })
@@ -193,6 +195,7 @@ describe('ensurePreferencesRowThenUpdateCategory', () => {
             announcement: true,
             message: true,
             coaching_reminder: true,
+            class_schedule: true,
           },
           failUpdate: true,
         }),
@@ -209,6 +212,7 @@ describe('ensurePreferencesRowThenUpdateCategory', () => {
             announcement: true,
             message: true,
             coaching_reminder: true,
+            class_schedule: true,
           },
           failSelectAfterUpdate: true,
         }),

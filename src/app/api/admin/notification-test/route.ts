@@ -16,6 +16,7 @@ import { runAdminFullStudyReminderDryRun } from '@/lib/admin/notification-test-f
 import { runAdminAnnouncementDeliveryDryRun } from '@/lib/admin/notification-test-announcement-dry-run'
 import { runAdminMessageDeliveryDryRun } from '@/lib/admin/notification-test-message-dry-run'
 import { runAdminCoachingReminderDryRun } from '@/lib/admin/notification-test-coaching-dry-run'
+import { runAdminClassScheduleDeliveryDryRun } from '@/lib/admin/notification-test-class-schedule-dry-run'
 import { loadNotificationOpsSnapshot } from '@/lib/admin/notification-ops-snapshot'
 import {
   inspectAdminStudyReminderIntegration,
@@ -96,7 +97,8 @@ type PostBody = {
 
 /**
  * Actions: ops-snapshot | inspect | push | email | full-dry-run |
- * announcement-dry-run | message-dry-run | coaching-dry-run
+ * announcement-dry-run | message-dry-run | coaching-dry-run | class-schedule-dry-run |
+ * study-reminder-* | coaching-*-*
  * Never accepts title/body/path/notificationType from the client.
  * Dry-run / ops-snapshot do not use NOTIFICATION_TEST_USER_IDS.
  */
@@ -415,6 +417,29 @@ export async function POST(request: Request) {
     return json({
       ok: true,
       coachingDryRun: result.report,
+      notice: 'evaluation_only_no_notifications_sent',
+    })
+  }
+
+  if (action === 'class-schedule-dry-run') {
+    const result = await runAdminClassScheduleDeliveryDryRun({ adminUserId: auth.userId })
+    if (!result.ok) {
+      if (result.code === 'rate_limited') {
+        return jsonError(429, 'rate_limited', {
+          retryAfterSeconds: result.retryAfterSeconds,
+        })
+      }
+      if (result.code === 'in_progress') {
+        return jsonError(409, 'in_progress')
+      }
+      if (result.code === 'feature_disabled') return jsonError(503, 'feature_disabled')
+      if (result.code === 'admin_unavailable') return jsonError(503, 'unavailable')
+      return jsonError(500, 'dry_run_failed')
+    }
+
+    return json({
+      ok: true,
+      classScheduleDryRun: result.report,
       notice: 'evaluation_only_no_notifications_sent',
     })
   }

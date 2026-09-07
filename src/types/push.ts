@@ -7,6 +7,7 @@ export type PushNotificationType =
   | 'announcement'
   | 'message'
   | 'coaching_reminder'
+  | 'class_schedule'
   | 'test'
 
 /** User-facing preference categories (excludes test). */
@@ -37,6 +38,7 @@ export interface NotificationPreferencesRow {
   announcement: boolean
   message: boolean
   coaching_reminder: boolean
+  class_schedule: boolean
   created_at: string
   updated_at: string
 }
@@ -78,6 +80,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: Pick<
   announcement: true,
   message: true,
   coaching_reminder: true,
+  class_schedule: true,
 }
 
 /**

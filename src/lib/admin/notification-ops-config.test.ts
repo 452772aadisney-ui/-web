@@ -66,8 +66,8 @@ describe('notification-ops-config', () => {
 })
 
 describe('admin category test fixtures', () => {
-  it('defines five fixed kinds with dashboard paths only', () => {
-    expect(ADMIN_CATEGORY_TEST_KINDS).toHaveLength(5)
+  it('defines six fixed kinds with dashboard paths only', () => {
+    expect(ADMIN_CATEGORY_TEST_KINDS).toHaveLength(6)
     for (const kind of ADMIN_CATEGORY_TEST_KINDS) {
       const fixture = ADMIN_CATEGORY_TEST_FIXTURES[kind]
       expect(fixture.targetPath.startsWith('/dashboard')).toBe(true)
