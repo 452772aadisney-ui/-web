@@ -39,6 +39,7 @@ export type ClassScheduleRpcErrorClass =
   | 'check_violation'
   | 'invalid_input'
   | 'foreign_key_violation'
+  | 'ambiguous_column'
   | 'admin_client_missing'
   | 'empty_result'
   | 'unknown'
@@ -116,6 +117,12 @@ export function classifyClassScheduleRpcError(
   }
   if (code === '23503' || /foreign key|not found for session/i.test(message)) {
     return 'foreign_key_violation'
+  }
+  if (
+    code === '42702' ||
+    /ambiguous column|ambiguous_column/i.test(message)
+  ) {
+    return 'ambiguous_column'
   }
   if (
     code === '22023' ||

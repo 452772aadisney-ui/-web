@@ -55,6 +55,11 @@ describe('055 repair migration static guarantees', () => {
     expect(dropSix).toBeGreaterThan(seven)
   })
 
+  it('create RPC qualifies RETURNING to avoid 42702 with RETURNS TABLE', () => {
+    expect(sql).toMatch(/returning\s+csd\.id\s*,\s*csd\.notify_revision/i)
+    expect(sql).not.toMatch(/returning\s+id\s*,\s*notify_revision\s*\n\s*into/i)
+  })
+
   it('grants write RPCs only to service_role', () => {
     expect(sql).toMatch(
       /revoke all on function public\.create_class_schedule_day_with_sessions\(date, text, text, text, text, jsonb, uuid\) from authenticated/i,

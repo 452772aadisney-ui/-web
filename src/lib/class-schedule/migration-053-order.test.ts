@@ -37,4 +37,9 @@ describe('053_class_schedule.sql apply order', () => {
   it('does not drop class_schedule tables during apply', () => {
     expect(sql).not.toMatch(/drop table\s+if\s+exists\s+public\.class_schedule_/i)
   })
+
+  it('qualifies create RPC RETURNING columns (avoid 42702)', () => {
+    expect(sql).toMatch(/returning\s+csd\.id\s*,\s*csd\.notify_revision/i)
+    expect(sql).not.toMatch(/returning\s+id\s*,\s*notify_revision\s*\n\s*into/i)
+  })
 })

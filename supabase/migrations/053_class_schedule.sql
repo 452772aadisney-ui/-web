@@ -349,7 +349,9 @@ begin
       using errcode = '22023';
   end if;
 
-  insert into public.class_schedule_days (
+  -- Qualify RETURNING columns: RETURNS TABLE exposes notify_revision/day_id as
+  -- PL/pgSQL variables, so bare "returning ..., notify_revision" raises 42702.
+  insert into public.class_schedule_days as csd (
     schedule_date,
     venue_name,
     address,
@@ -371,13 +373,14 @@ begin
     p_actor_id,
     p_actor_id
   )
-  returning id, notify_revision
+  returning csd.id, csd.notify_revision
   into v_day_id, v_revision;
 
   perform 1 from public.class_schedule_days d where d.id = v_day_id for update;
 
   for v_session in
-    select value from jsonb_array_elements(p_sessions)
+    select je.value
+    from jsonb_array_elements(p_sessions) as je(value)
   loop
     begin
       v_start := (v_session->>'start_time')::time;
@@ -405,7 +408,7 @@ begin
         using errcode = '22023';
     end if;
 
-    insert into public.class_schedule_sessions (
+    insert into public.class_schedule_sessions as css (
       day_id, start_time, end_time, subject, note, status
     ) values (
       v_day_id, v_start, v_end, v_subject, v_note, 'scheduled'
@@ -419,7 +422,7 @@ end;
 $$;
 
 comment on function public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid) is
-  'service_role のみ EXECUTE。アプリは requireAdmin 後に Admin Client から呼ぶ。作成者は p_actor_id（admin profiles 必須）。コマ1〜24件。失敗時は全体ロールバック。';
+  'service_role のみ EXECUTE。アプリは requireAdmin 後に Admin Client から呼ぶ。作成者は p_actor_id（admin profiles 必須）。コマ1〜24件。失敗時は全体ロールバック。RETURNING は alias 修飾（42702 回避）。';
 
 revoke all on function public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid) from public;
 revoke all on function public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid) from anon;

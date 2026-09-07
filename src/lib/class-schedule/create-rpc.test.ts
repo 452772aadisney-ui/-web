@@ -144,6 +144,21 @@ describe('classifyClassScheduleRpcError', () => {
     ).toBe('管理者権限が必要です')
   })
 
+  it('maps PostgreSQL 42702 to ambiguous_column with generic UI copy', () => {
+    expect(
+      classifyClassScheduleRpcError({
+        code: '42702',
+        message: 'column reference "notify_revision" is ambiguous',
+      }),
+    ).toBe('ambiguous_column')
+    expect(
+      mapClassScheduleDbError({
+        code: '42702',
+        message: 'column reference "notify_revision" is ambiguous',
+      }),
+    ).toBe('授業予定の保存に失敗しました')
+  })
+
   it('keeps pre-diagnostic user-facing copy for 22023', () => {
     // Historical mapping treated any 22023 as session-count messaging.
     expect(
