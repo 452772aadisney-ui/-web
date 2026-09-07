@@ -41,8 +41,10 @@ import { DEFAULT_PAGE_SIZE, getTotalPages, parsePageParam } from '@/lib/paginati
 import type { StudyLog } from '@/lib/study/chart-data'
 import { AdminStudentProfileForm } from '@/components/admin/AdminStudentProfileForm'
 import { AdminStudentNotificationPrefs } from '@/components/admin/AdminStudentNotificationPrefs'
+import { AdminStudentPushRegistrationStatus } from '@/components/admin/AdminStudentPushRegistrationStatus'
 import { StudentTagAssignForm } from '@/components/tags/StudentTagAssignForm'
 import { getAdminStudentNotificationPrefs } from '@/lib/admin/notification-preferences-admin'
+import { getStudentPushRegistrationView } from '@/lib/admin/push-registration-queries'
 import { defaultNotificationPreferences } from '@/lib/push/preferences'
 
 async function fetchStudyLogsPaginated(
@@ -166,6 +168,7 @@ export default async function AdminStudentStudyPage({
         lastChangedByLabel: null,
         lastChangedAt: null,
       }
+  const pushRegistration = await getStudentPushRegistrationView(id)
 
   return (
     <AdminPageShell
@@ -209,6 +212,8 @@ export default async function AdminStudentStudyPage({
               }}
             />
           </section>
+
+          <AdminStudentPushRegistrationStatus registration={pushRegistration} />
 
           <AdminStudentNotificationPrefs
             studentId={id}

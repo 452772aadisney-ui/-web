@@ -4,6 +4,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isPushSendingAvailable } from '@/lib/push/send-config'
+import { aggregateActivePushRowsForStudents } from '@/lib/admin/push-registration'
 import { resolveEffectiveStudyReminderMode } from '@/lib/study/study-reminder-mode'
 import { resolveEffectiveAnnouncementMode } from '@/lib/announcements/announcement-delivery-mode'
 import { resolveEffectiveMessageMode } from '@/lib/chat/message-delivery-mode'
@@ -321,18 +322,16 @@ async function loadSubscriptionAggregate(
 
   const activeRows = (activeSubs ?? []) as Array<{ id: string; user_id: string }>
   const activeTruncated = activeRows.length >= NOTIFICATION_OPS_DELIVERY_SCAN_LIMIT
-  const perUser = new Map<string, number>()
-  for (const row of activeRows) {
-    perUser.set(row.user_id, (perUser.get(row.user_id) ?? 0) + 1)
-  }
-
-  let studentsWithActivePush = 0
-  let multiDeviceStudentCount = 0
-  for (const id of studentIds) {
-    const n = perUser.get(id) ?? 0
-    if (n > 0) studentsWithActivePush += 1
-    if (n > 1) multiDeviceStudentCount += 1
-  }
+  const aggregated = aggregateActivePushRowsForStudents(
+    studentIds,
+    activeRows.map((row) => ({ user_id: row.user_id })),
+  )
+  const {
+    studentsWithActivePush,
+    studentsWithoutActivePush,
+    activeSubscriptionCount,
+    multiDeviceStudentCount,
+  } = aggregated
 
   const preferenceDisabled = {
     study_reminder: 0,
@@ -364,7 +363,7 @@ async function loadSubscriptionAggregate(
 
   let possiblyUndeliverable = 0
   for (const id of studentIds) {
-    const hasPush = (perUser.get(id) ?? 0) > 0
+    const hasPush = (aggregated.countsByUserId.get(id) ?? 0) > 0
     const hasEmail = emailById.get(id) ?? false
     if (!hasPush && !hasEmail) possiblyUndeliverable += 1
   }
@@ -372,7 +371,8 @@ async function loadSubscriptionAggregate(
   return {
     studentCount: studentIds.length,
     studentsWithActivePush,
-    studentsWithoutActivePush: studentIds.length - studentsWithActivePush,
+    studentsWithoutActivePush,
+    // Row count from the (possibly truncated) active scan — same as before.
     activeSubscriptionCount: activeRows.length,
     multiDeviceStudentCount,
     disabledSubscriptionCount: disabledCount ?? 0,

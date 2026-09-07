@@ -7,13 +7,28 @@ import { AdminStudentsList } from '@/components/admin/AdminStudentsList'
 import { Pagination } from '@/components/ui/Pagination'
 import { GRADE_TAG_NAMES, groupStudentsByGrade } from '@/lib/tags/grade-order'
 import { fetchGradeTagNamesByStudentId } from '@/lib/tags/queries'
-import { fetchStudentsPaginated } from '@/lib/study/queries'
+import {
+  parsePushRegistrationFilter,
+  type PushRegistrationView,
+} from '@/lib/admin/push-registration'
+import { fetchAdminStudentsWithPushRegistration } from '@/lib/admin/push-registration-queries'
 import Link from 'next/link'
+
+const PUSH_FILTER_OPTIONS = [
+  { value: 'all', label: 'すべて' },
+  { value: 'registered', label: 'Push登録済み' },
+  { value: 'unregistered', label: 'Push未登録' },
+] as const
 
 export default async function AdminStudentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; grade?: string; studentsPage?: string }>
+  searchParams: Promise<{
+    q?: string
+    grade?: string
+    studentsPage?: string
+    push?: string
+  }>
 }) {
   const profile = await getCurrentProfile()
 
@@ -29,13 +44,15 @@ export default async function AdminStudentsPage({
   const pageNumber = params.studentsPage ? parseInt(params.studentsPage, 10) : 1
   const query = params.q?.trim() ?? ''
   const grade = params.grade?.trim() ?? ''
+  const pushFilter = parsePushRegistrationFilter(params.push)
 
   const [pageResult, lastAccessByStudentId] = await Promise.all([
-    fetchStudentsPaginated({
+    fetchAdminStudentsWithPushRegistration({
       page: Number.isFinite(pageNumber) ? pageNumber : 1,
       pageSize: 30,
       query,
       grade: grade || undefined,
+      push: pushFilter,
     }),
     fetchStudentLastAccessMap(),
   ])
@@ -49,17 +66,34 @@ export default async function AdminStudentsPage({
 
   const studentGroups = groupStudentsByGrade(studentsWithLastAccess, gradeTagByStudentId)
 
-  function buildFilterHref(next: { q?: string; grade?: string | null }) {
+  const registrationByStudentId: Record<string, PushRegistrationView> = {}
+  for (const [id, view] of pageResult.registrationByStudentId) {
+    registrationByStudentId[id] = view
+  }
+
+  function buildFilterHref(next: {
+    q?: string
+    grade?: string | null
+    push?: string | null
+  }) {
     const nextParams = new URLSearchParams()
     const nextQ = Object.prototype.hasOwnProperty.call(next, 'q') ? (next.q ?? '') : query
     const nextGrade = Object.prototype.hasOwnProperty.call(next, 'grade')
       ? (next.grade ?? '')
       : grade
+    const nextPush = Object.prototype.hasOwnProperty.call(next, 'push')
+      ? (next.push ?? 'all')
+      : pushFilter
+
     if (nextQ) nextParams.set('q', nextQ)
     if (nextGrade) nextParams.set('grade', nextGrade)
+    if (nextPush && nextPush !== 'all') nextParams.set('push', nextPush)
+    // studentsPage intentionally omitted → page 1
     const qs = nextParams.toString()
     return qs ? `/admin/students?${qs}` : '/admin/students'
   }
+
+  const hasFilters = Boolean(query || grade || pushFilter !== 'all')
 
   return (
     <AdminPageShell title="生徒一覧" backHref="/admin" backLabel="管理画面">
@@ -67,6 +101,9 @@ export default async function AdminStudentsPage({
         <h2 className="text-lg font-bold">登録生徒</h2>
         <p className="mt-1 text-sm text-muted">
           学年ごとに表示しています。見出しを押すと表示・非表示を切り替えられます。
+        </p>
+        <p className="mt-2 text-xs text-muted">
+          Push登録済みは受験生webに登録されている有効なPush購読です。端末やOS側の設定変更は即時反映されない場合があります。
         </p>
 
         <form action="/admin/students" method="get" className="mt-4 flex flex-col gap-3 sm:flex-row">
@@ -79,6 +116,7 @@ export default async function AdminStudentsPage({
             className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
           {grade && <input type="hidden" name="grade" value={grade} />}
+          {pushFilter !== 'all' && <input type="hidden" name="push" value={pushFilter} />}
           <button
             type="submit"
             className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-white"
@@ -87,7 +125,7 @@ export default async function AdminStudentsPage({
           </button>
         </form>
 
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="学年で絞り込み">
           <Link
             href={buildFilterHref({ grade: null })}
             className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
@@ -111,9 +149,33 @@ export default async function AdminStudentsPage({
           ))}
         </div>
 
+        <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Push登録状態で絞り込み">
+          {PUSH_FILTER_OPTIONS.map((option) => (
+            <Link
+              key={option.value}
+              href={buildFilterHref({
+                push: option.value === 'all' ? null : option.value,
+              })}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+                pushFilter === option.value
+                  ? 'bg-primary text-white'
+                  : 'border border-border hover:bg-background'
+              }`}
+            >
+              {option.label}
+            </Link>
+          ))}
+        </div>
+
+        {pageResult.registrationLookupFailed && (
+          <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status">
+            Push登録状況を確認できませんでした。一覧の生徒表示は続けますが、バッジは「確認不能」になります。
+          </p>
+        )}
+
         {pageResult.totalCount === 0 ? (
           <p className="mt-6 text-sm text-muted">
-            {query || grade
+            {hasFilters
               ? '条件に一致する生徒が見つかりませんでした。'
               : '生徒がまだ登録されていません。'}
           </p>
@@ -121,9 +183,12 @@ export default async function AdminStudentsPage({
           <>
             <p className="mt-4 text-xs text-muted">
               {pageResult.totalCount} 名中 {studentsWithLastAccess.length} 名を表示
-              {query || grade ? '（絞り込み中）' : ''}
+              {hasFilters ? '（絞り込み中）' : ''}
             </p>
-            <AdminStudentsList groups={studentGroups} />
+            <AdminStudentsList
+              groups={studentGroups}
+              registrationByStudentId={registrationByStudentId}
+            />
             <Pagination
               currentPage={pageResult.page}
               totalCount={pageResult.totalCount}
@@ -133,6 +198,7 @@ export default async function AdminStudentsPage({
               preserveParams={{
                 q: query || undefined,
                 grade: grade || undefined,
+                push: pushFilter === 'all' ? undefined : pushFilter,
               }}
             />
           </>
