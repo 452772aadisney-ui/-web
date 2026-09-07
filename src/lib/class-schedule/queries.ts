@@ -83,6 +83,12 @@ export async function fetchClassScheduleDaysPaginated(options: {
   pageSize?: number
   /** Inclusive "today" key; defaults to JST today. */
   todayKey?: string
+  /**
+   * For scope=upcoming only: exclude the「次の授業」day from count + page
+   * so totals/pages stay consistent (do not filter after range()).
+   */
+  excludeDayId?: string | null
+  excludeScheduleDate?: string | null
 }): Promise<ClassScheduleDaysPage> {
   const pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE
   const todayKey = options.todayKey ?? getJstDateKey()
@@ -94,6 +100,12 @@ export async function fetchClassScheduleDaysPaginated(options: {
 
   if (options.scope === 'upcoming') {
     countQuery = countQuery.gte('schedule_date', todayKey)
+    if (options.excludeDayId) {
+      countQuery = countQuery.neq('id', options.excludeDayId)
+    }
+    if (options.excludeScheduleDate) {
+      countQuery = countQuery.neq('schedule_date', options.excludeScheduleDate)
+    }
   } else if (options.scope === 'past') {
     countQuery = countQuery.lt('schedule_date', todayKey)
   }
@@ -111,6 +123,12 @@ export async function fetchClassScheduleDaysPaginated(options: {
     dataQuery = dataQuery
       .gte('schedule_date', todayKey)
       .order('schedule_date', { ascending: true })
+    if (options.excludeDayId) {
+      dataQuery = dataQuery.neq('id', options.excludeDayId)
+    }
+    if (options.excludeScheduleDate) {
+      dataQuery = dataQuery.neq('schedule_date', options.excludeScheduleDate)
+    }
   } else if (options.scope === 'past') {
     dataQuery = dataQuery
       .lt('schedule_date', todayKey)
@@ -159,6 +177,43 @@ export function pickNextClassDay(
   return null
 }
 
+/**
+ * Remove the day shown in「次の授業」from「今後の予定」(day-level).
+ * Matches by id and schedule_date so the same calendar day never appears twice.
+ * Cancelled days skipped by pickNextClassDay are kept when they are a different day.
+ */
+export function excludeNextClassDayFromUpcoming(
+  days: ClassScheduleDayWithSessions[],
+  next: Pick<NextClassDay, 'id' | 'schedule_date'> | null,
+): ClassScheduleDayWithSessions[] {
+  if (!next) return days
+  return days.filter(
+    (day) => day.id !== next.id && day.schedule_date !== next.schedule_date,
+  )
+}
+
+/** Split one upcoming list into next-hero day + remaining upcoming days. */
+export function splitNextAndUpcomingClassDays(
+  days: ClassScheduleDayWithSessions[],
+  todayKey: string,
+  nowTimeHHmm: string,
+): {
+  next: NextClassDay | null
+  upcoming: ClassScheduleDayWithSessions[]
+} {
+  const next = pickNextClassDay(days, todayKey, nowTimeHHmm)
+  return {
+    next,
+    upcoming: excludeNextClassDayFromUpcoming(days, next),
+  }
+}
+
+export function upcomingClassScheduleEmptyMessage(hasNext: boolean): string {
+  return hasNext
+    ? '次回以降の予定はありません'
+    : '今後の授業予定はありません。'
+}
+
 export function getJstWallClockHHmm(now = new Date()): string {
   return new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Tokyo',
@@ -172,23 +227,30 @@ export async function fetchNextClassDay(
   todayKey = getJstDateKey(),
   nowTimeHHmm?: string,
 ): Promise<NextClassDay | null> {
-  const supabase = await createClient()
   const now = nowTimeHHmm ?? getJstWallClockHHmm()
+  const days = await fetchUpcomingClassScheduleDays({ todayKey, limit: 90 })
+  return pickNextClassDay(days, todayKey, now)
+}
 
-  const { data: days } = await supabase
-    .from('class_schedule_days')
-    .select('*')
-    .eq('status', 'scheduled')
-    .gte('schedule_date', todayKey)
-    .order('schedule_date', { ascending: true })
-    .limit(90)
-
-  const dayList = (days as ClassScheduleDay[] | null) ?? []
-  if (dayList.length === 0) return null
-
-  const sessions = await fetchSessionsForDayIds(dayList.map((d) => d.id))
-  const withSessions = attachSessions(dayList, sessions)
-  return pickNextClassDay(withSessions, todayKey, now)
+/**
+ * Student dashboard overview: one upcoming fetch, then split so「次の授業」
+ * and「今後の予定」never share the same day (no N+1).
+ */
+export async function fetchStudentClassScheduleOverview(options?: {
+  todayKey?: string
+  nowTimeHHmm?: string
+  limit?: number
+}): Promise<{
+  next: NextClassDay | null
+  upcoming: ClassScheduleDayWithSessions[]
+}> {
+  const todayKey = options?.todayKey ?? getJstDateKey()
+  const now = options?.nowTimeHHmm ?? getJstWallClockHHmm()
+  const days = await fetchUpcomingClassScheduleDays({
+    todayKey,
+    limit: options?.limit ?? 90,
+  })
+  return splitNextAndUpcomingClassDays(days, todayKey, now)
 }
 
 /** @deprecated Prefer fetchNextClassDay — kept for transitional imports. */
@@ -210,18 +272,29 @@ export async function fetchNextClassSession(
 export async function fetchUpcomingClassScheduleDays(options?: {
   todayKey?: string
   limit?: number
+  /** Exclude the「次の授業」day at query time (id and/or JST date key). */
+  excludeDayId?: string | null
+  excludeScheduleDate?: string | null
 }): Promise<ClassScheduleDayWithSessions[]> {
   const todayKey = options?.todayKey ?? getJstDateKey()
   const limit = options?.limit ?? 20
   const supabase = await createClient()
 
-  const { data } = await supabase
+  let query = supabase
     .from('class_schedule_days')
     .select('*')
     .gte('schedule_date', todayKey)
     .order('schedule_date', { ascending: true })
     .limit(limit)
 
+  if (options?.excludeDayId) {
+    query = query.neq('id', options.excludeDayId)
+  }
+  if (options?.excludeScheduleDate) {
+    query = query.neq('schedule_date', options.excludeScheduleDate)
+  }
+
+  const { data } = await query
   const days = (data as ClassScheduleDay[] | null) ?? []
   const sessions = await fetchSessionsForDayIds(days.map((d) => d.id))
   return attachSessions(days, sessions)

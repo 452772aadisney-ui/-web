@@ -1,8 +1,8 @@
 import { requireKisotsuStudentOrRedirect } from '@/lib/class-schedule/access'
 import {
-  fetchNextClassDay,
-  fetchUpcomingClassScheduleDays,
+  fetchStudentClassScheduleOverview,
   getJstWallClockHHmm,
+  upcomingClassScheduleEmptyMessage,
 } from '@/lib/class-schedule/queries'
 import { getJstDateKey } from '@/lib/study/dates'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
@@ -19,10 +19,11 @@ export default async function StudentClassSchedulePage() {
   const todayKey = getJstDateKey()
   const nowTimeHHmm = getJstWallClockHHmm()
 
-  const [next, upcoming] = await Promise.all([
-    fetchNextClassDay(todayKey, nowTimeHHmm),
-    fetchUpcomingClassScheduleDays({ todayKey, limit: 30 }),
-  ])
+  const { next, upcoming } = await fetchStudentClassScheduleOverview({
+    todayKey,
+    nowTimeHHmm,
+    limit: 90,
+  })
 
   return (
     <StudentPageShell title="授業予定" backHref="/dashboard" backLabel="マイページ">
@@ -36,7 +37,7 @@ export default async function StudentClassSchedulePage() {
           <h2 className="text-lg font-bold">今後の予定</h2>
           <StudentClassScheduleDayCards
             days={upcoming}
-            emptyMessage="今後の授業予定はありません。"
+            emptyMessage={upcomingClassScheduleEmptyMessage(Boolean(next))}
           />
         </section>
         <StudentClassSchedulePastLink />
