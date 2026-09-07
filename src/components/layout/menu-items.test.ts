@@ -16,4 +16,9 @@ describe('notification settings menu wiring', () => {
     expect(ADMIN_HAMBURGER_ITEMS.some((item) => item.href === '/admin/notifications')).toBe(true)
     expect(ADMIN_HAMBURGER_ITEMS.some((item) => item.label === '通知運用')).toBe(true)
   })
+
+  it('adds admin class schedule entry for kisotsu', () => {
+    expect(ADMIN_HAMBURGER_ITEMS.some((item) => item.href === '/admin/class-schedule')).toBe(true)
+    expect(ADMIN_HAMBURGER_ITEMS.some((item) => item.label === '既卒生 授業予定')).toBe(true)
+  })
 })

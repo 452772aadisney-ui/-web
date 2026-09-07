@@ -48,6 +48,12 @@ const menuActions: Array<{
     iconSrc: ADMIN_MYPAGE_MENU_ICONS.schedule,
   },
   {
+    href: '/admin/class-schedule',
+    label: '既卒生 授業予定',
+    description: '会場・コマの管理',
+    iconSrc: ADMIN_MYPAGE_MENU_ICONS.schedule,
+  },
+  {
     href: '/admin/quizzes',
     label: '小テスト',
     description: '作成・点数入力',

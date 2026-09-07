@@ -65,6 +65,7 @@ export async function StudentPageShell({
       ? await fetchGradeTagNameForProfile(profile.id).catch(() => null)
       : null
   const hideCoaching = isKisotsuGradeTag(gradeTagName)
+  const isKisotsuStudent = hideCoaching
 
   const [unreadAnnouncementCount, unreadChatCount, unreadStudyFeedbackCount, unseenTextbookCount, incompleteTodoCount] =
     profile
@@ -81,9 +82,24 @@ export async function StudentPageShell({
         ])
       : [0, 0, 0, 0, 0]
 
-  const menuItems: HamburgerMenuItem[] = STUDENT_HAMBURGER_ITEMS.filter(
+  const baseItems: HamburgerMenuItem[] = STUDENT_HAMBURGER_ITEMS.filter(
     (item) => !(hideCoaching && item.href === '/dashboard/coaching'),
-  ).map((item) => ({
+  ).map((item) => ({ href: item.href, label: item.label }))
+
+  const withClassSchedule: HamburgerMenuItem[] = (() => {
+    if (!isKisotsuStudent) return baseItems
+    const items = [...baseItems]
+    const insertAt = items.findIndex((item) => item.href === '/dashboard/calendar')
+    const entry: HamburgerMenuItem = {
+      href: '/dashboard/class-schedule',
+      label: '授業予定',
+    }
+    if (insertAt >= 0) items.splice(insertAt, 0, entry)
+    else items.push(entry)
+    return items
+  })()
+
+  const menuItems: HamburgerMenuItem[] = withClassSchedule.map((item) => ({
     ...item,
     badgeCount: getHamburgerBadgeCount(
       item.href,

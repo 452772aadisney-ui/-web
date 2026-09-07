@@ -25,8 +25,7 @@ import { formatTodayStudyButtonSubtitle } from '@/lib/study/today-status'
 
 type MenuBadgeKey = 'studyHistory' | 'announcements' | 'chat' | 'bookshelf' | 'faqIntro' | 'todo'
 
-/** Daily-use menu cards first, then secondary helpers. */
-const iconMenuActions: Array<{
+type IconMenuAction = {
   href?: string
   label: string
   iconSrc: string
@@ -35,65 +34,77 @@ const iconMenuActions: Array<{
   openInNewTab?: boolean
   externalConfirmMessage?: string
   opensTextbookRegisterDialog?: boolean
-}> = [
-  {
-    href: '/dashboard/study/history',
-    label: '学習履歴',
-    iconSrc: MYPAGE_MENU_ICONS.studyHistory,
-    badgeKey: 'studyHistory',
-  },
-  {
-    href: '/dashboard/bookshelf',
-    label: 'My本棚',
-    iconSrc: MYPAGE_MENU_ICONS.bookshelf,
-    badgeKey: 'bookshelf',
-  },
-  {
-    href: '/dashboard/calendar',
-    label: 'カレンダー',
-    iconSrc: MYPAGE_MENU_ICONS.calendar,
-  },
-  {
-    href: '/dashboard/todo',
-    label: 'ToDo',
-    iconSrc: MYPAGE_MENU_ICONS.todo,
-    badgeKey: 'todo',
-  },
-  {
-    label: '教材登録',
-    iconSrc: MYPAGE_MENU_ICONS.textbookRegister,
-    opensTextbookRegisterDialog: true,
-  },
-  {
-    href: '/dashboard/announcements',
-    label: 'お知らせ',
-    iconSrc: MYPAGE_MENU_ICONS.announcements,
-    badgeKey: 'announcements',
-  },
-  {
-    href: 'https://mates.students-web.jp/sign-in',
-    label: '授業予定',
-    iconSrc: MYPAGE_MENU_ICONS.classSchedule,
-    externalConfirmMessage: '生徒web(外部リンク)を開きます',
-  },
-  {
-    href: '/dashboard/chat',
-    label: 'メッセージ',
-    iconSrc: MYPAGE_MENU_ICONS.message,
-    badgeKey: 'chat',
-  },
-  {
-    href: '/dashboard/achievements',
-    label: '実績一覧',
-    iconSrc: MYPAGE_MENU_ICONS.achievements,
-  },
-  {
-    href: '/dashboard/faq',
-    label: 'FAQ',
-    iconSrc: MYPAGE_MENU_ICONS.faq,
-    badgeKey: 'faqIntro',
-  },
-]
+}
+
+function buildIconMenuActions(isKisotsuStudent: boolean): IconMenuAction[] {
+  const classScheduleAction: IconMenuAction = isKisotsuStudent
+    ? {
+        href: '/dashboard/class-schedule',
+        label: '授業予定',
+        iconSrc: MYPAGE_MENU_ICONS.classSchedule,
+      }
+    : {
+        href: 'https://mates.students-web.jp/sign-in',
+        label: '授業予定',
+        iconSrc: MYPAGE_MENU_ICONS.classSchedule,
+        externalConfirmMessage: '生徒web(外部リンク)を開きます',
+      }
+
+  return [
+    {
+      href: '/dashboard/study/history',
+      label: '学習履歴',
+      iconSrc: MYPAGE_MENU_ICONS.studyHistory,
+      badgeKey: 'studyHistory',
+    },
+    {
+      href: '/dashboard/bookshelf',
+      label: 'My本棚',
+      iconSrc: MYPAGE_MENU_ICONS.bookshelf,
+      badgeKey: 'bookshelf',
+    },
+    {
+      href: '/dashboard/calendar',
+      label: 'カレンダー',
+      iconSrc: MYPAGE_MENU_ICONS.calendar,
+    },
+    {
+      href: '/dashboard/todo',
+      label: 'ToDo',
+      iconSrc: MYPAGE_MENU_ICONS.todo,
+      badgeKey: 'todo',
+    },
+    {
+      label: '教材登録',
+      iconSrc: MYPAGE_MENU_ICONS.textbookRegister,
+      opensTextbookRegisterDialog: true,
+    },
+    {
+      href: '/dashboard/announcements',
+      label: 'お知らせ',
+      iconSrc: MYPAGE_MENU_ICONS.announcements,
+      badgeKey: 'announcements',
+    },
+    classScheduleAction,
+    {
+      href: '/dashboard/chat',
+      label: 'メッセージ',
+      iconSrc: MYPAGE_MENU_ICONS.message,
+      badgeKey: 'chat',
+    },
+    {
+      href: '/dashboard/achievements',
+      label: '実績一覧',
+      iconSrc: MYPAGE_MENU_ICONS.achievements,
+    },
+    {
+      href: '/dashboard/faq',
+      label: 'FAQ',
+      iconSrc: MYPAGE_MENU_ICONS.faq,
+      badgeKey: 'faqIntro',
+    },
+  ]
+}
 
 interface MyPageActionsProps {
   starRanking?: StudentStarRanking | null
@@ -108,7 +119,7 @@ interface MyPageActionsProps {
   unseenTextbookCount?: number
   incompleteTodoCount?: number
   overdueTodoCount?: number
-  hideClassSchedule?: boolean
+  isKisotsuStudent?: boolean
   hideCoaching?: boolean
   showFaqIntro?: boolean
   /** False when admin disabled all 4 categories — hide push promo. */
@@ -128,7 +139,7 @@ export function MyPageActions({
   unseenTextbookCount = 0,
   incompleteTodoCount = 0,
   overdueTodoCount = 0,
-  hideClassSchedule = false,
+  isKisotsuStudent = false,
   hideCoaching = false,
   showFaqIntro = false,
   anyNotificationCategoryEnabled = true,
@@ -145,9 +156,7 @@ export function MyPageActions({
     todo: incompleteTodoCount,
   }
 
-  const visibleMenuActions = hideClassSchedule
-    ? iconMenuActions.filter((action) => action.label !== '授業予定')
-    : iconMenuActions
+  const visibleMenuActions = buildIconMenuActions(isKisotsuStudent)
 
   const todayStudyStatus = formatTodayStudyButtonSubtitle(todayStudyMinutes)
   const showCommonTestCountdown = commonTestDaysRemaining !== null

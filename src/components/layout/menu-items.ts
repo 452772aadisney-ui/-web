@@ -27,6 +27,7 @@ export const ADMIN_HAMBURGER_ITEMS = [
   { href: '/admin/students', label: '生徒一覧' },
   { href: '/admin/study-daily', label: '毎日管理' },
   { href: '/admin/schedule', label: 'スケジュール' },
+  { href: '/admin/class-schedule', label: '既卒生 授業予定' },
   { href: '/admin/quizzes', label: '小テスト' },
   { href: '/admin/coaching', label: 'コーチング' },
   { href: '/admin/bookshelf', label: '本棚' },

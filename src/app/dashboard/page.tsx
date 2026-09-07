@@ -158,7 +158,7 @@ export default async function StudentDashboardPage() {
           unseenTextbookCount={unseenTextbookCount}
           incompleteTodoCount={incompleteTodoCount}
           overdueTodoCount={overdueTodoCount}
-          hideClassSchedule={isKisotsuStudent}
+          isKisotsuStudent={isKisotsuStudent}
           hideCoaching={isKisotsuStudent}
           showFaqIntro={showFaqIntro}
           anyNotificationCategoryEnabled={anyNotificationCategoryEnabled}
