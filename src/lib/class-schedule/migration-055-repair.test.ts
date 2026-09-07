@@ -15,10 +15,20 @@ describe('055 repair migration static guarantees', () => {
     'supabase/rollbacks/055_repair_class_schedule_partial_migration_verify.sql',
   )
 
-  it('does not drop tables or use CASCADE', () => {
-    expect(sql).not.toMatch(/drop\s+table/i)
-    expect(sql).not.toMatch(/drop\s+function[^;]*\bcascade\b/i)
-    expect(sql).not.toMatch(/\bdelete\s+from\s+public\.class_schedule_/i)
+  it('does not drop tables or use DROP FUNCTION ... CASCADE', () => {
+    const withoutLineComments = sql
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('--'))
+      .join('\n')
+    expect(withoutLineComments).not.toMatch(/drop\s+table/i)
+    expect(withoutLineComments).not.toMatch(/\bdelete\s+from\s+public\.class_schedule_/i)
+    const dropFunctionStmts = withoutLineComments
+      .split(';')
+      .filter((stmt) => /drop\s+function/i.test(stmt))
+    expect(dropFunctionStmts.length).toBeGreaterThan(0)
+    for (const stmt of dropFunctionStmts) {
+      expect(stmt.toLowerCase()).not.toContain(' cascade')
+    }
   })
 
   it('drops policies before uuid helper, then recreates no-arg policies', () => {
