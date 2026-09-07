@@ -15,7 +15,9 @@ kisotsu_fn as (
       select 1
       from pg_proc p
       join pg_namespace n on n.oid = p.pronamespace
-      where n.nspname = 'public' and p.proname = 'is_kisotsu_profile'
+      where n.nspname = 'public'
+        and p.proname = 'is_kisotsu_profile'
+        and pg_get_function_identity_arguments(p.oid) = ''
     ) as exists_ok,
     exists (
       select 1
@@ -23,29 +25,145 @@ kisotsu_fn as (
       join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public'
         and p.proname = 'is_kisotsu_profile'
+        and pg_get_function_identity_arguments(p.oid) = ''
         and p.prosecdef
-        and p.proconfig @> array['search_path=public']
-    ) as security_ok
+        and coalesce(p.proconfig, array[]::text[]) @> array['search_path=public']
+    ) as security_ok,
+    (
+      select count(*)::int
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'is_kisotsu_profile'
+    ) as overload_count,
+    (
+      select pg_get_userbyid(p.proowner)
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = 'is_kisotsu_profile'
+        and pg_get_function_identity_arguments(p.oid) = ''
+      limit 1
+    ) as owner_name
 ),
 create_rpc as (
-  select exists (
-    select 1
-    from pg_proc p
-    join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'public'
-      and p.proname = 'create_class_schedule_day_with_sessions'
-      and p.prosecdef
-  ) as ok
+  select
+    exists (
+      select 1
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = 'create_class_schedule_day_with_sessions'
+        and pg_get_function_identity_arguments(p.oid) =
+          'p_schedule_date date, p_venue_name text, p_address text, p_map_url text, p_room_note text, p_sessions jsonb, p_actor_id uuid'
+        and p.prosecdef
+        and coalesce(p.proconfig, array[]::text[]) @> array['search_path=public']
+    ) as ok,
+    (
+      select count(*)::int
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'create_class_schedule_day_with_sessions'
+    ) as overload_count,
+    (
+      select pg_get_userbyid(p.proowner)
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = 'create_class_schedule_day_with_sessions'
+        and pg_get_function_identity_arguments(p.oid) like '%p_actor_id uuid'
+      limit 1
+    ) as owner_name
 ),
 bump_rpc as (
-  select exists (
-    select 1
-    from pg_proc p
-    join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'public'
-      and p.proname = 'bump_class_schedule_notify_revision'
-      and p.prosecdef
-  ) as ok
+  select
+    exists (
+      select 1
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = 'bump_class_schedule_notify_revision'
+        and pg_get_function_identity_arguments(p.oid) = 'p_day_id uuid, p_updated_by uuid'
+        and p.prosecdef
+        and coalesce(p.proconfig, array[]::text[]) @> array['search_path=public']
+    ) as ok,
+    (
+      select count(*)::int
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'bump_class_schedule_notify_revision'
+    ) as overload_count,
+    (
+      select pg_get_userbyid(p.proowner)
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = 'bump_class_schedule_notify_revision'
+        and pg_get_function_identity_arguments(p.oid) = 'p_day_id uuid, p_updated_by uuid'
+      limit 1
+    ) as owner_name
+),
+fn_privs as (
+  select
+    has_function_privilege(
+      'public',
+      'public.is_kisotsu_profile()',
+      'EXECUTE'
+    ) as kisotsu_public_exec,
+    has_function_privilege(
+      'anon',
+      'public.is_kisotsu_profile()',
+      'EXECUTE'
+    ) as kisotsu_anon_exec,
+    has_function_privilege(
+      'authenticated',
+      'public.is_kisotsu_profile()',
+      'EXECUTE'
+    ) as kisotsu_auth_exec,
+    has_function_privilege(
+      'service_role',
+      'public.is_kisotsu_profile()',
+      'EXECUTE'
+    ) as kisotsu_service_exec,
+    has_function_privilege(
+      'public',
+      'public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid)',
+      'EXECUTE'
+    ) as create_public_exec,
+    has_function_privilege(
+      'anon',
+      'public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid)',
+      'EXECUTE'
+    ) as create_anon_exec,
+    has_function_privilege(
+      'authenticated',
+      'public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid)',
+      'EXECUTE'
+    ) as create_auth_exec,
+    has_function_privilege(
+      'service_role',
+      'public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid)',
+      'EXECUTE'
+    ) as create_service_exec,
+    has_function_privilege(
+      'public',
+      'public.bump_class_schedule_notify_revision(uuid, uuid)',
+      'EXECUTE'
+    ) as bump_public_exec,
+    has_function_privilege(
+      'anon',
+      'public.bump_class_schedule_notify_revision(uuid, uuid)',
+      'EXECUTE'
+    ) as bump_anon_exec,
+    has_function_privilege(
+      'authenticated',
+      'public.bump_class_schedule_notify_revision(uuid, uuid)',
+      'EXECUTE'
+    ) as bump_auth_exec,
+    has_function_privilege(
+      'service_role',
+      'public.bump_class_schedule_notify_revision(uuid, uuid)',
+      'EXECUTE'
+    ) as bump_service_exec
 ),
 days_rls as (
   select c.relrowsecurity as ok
@@ -161,11 +279,71 @@ checks as (
   select 'is_kisotsu_profile_security_definer_search_path',
     case when (select security_ok from kisotsu_fn) then 'PASS' else 'FAIL' end, '{}'::jsonb
   union all
+  select 'is_kisotsu_profile_no_uuid_overload',
+    case when (select overload_count from kisotsu_fn) = 1 then 'PASS' else 'FAIL' end,
+    jsonb_build_object('overload_count', (select overload_count from kisotsu_fn))
+  union all
+  select 'is_kisotsu_profile_execute_grants',
+    case
+      when not (select kisotsu_public_exec from fn_privs)
+       and not (select kisotsu_anon_exec from fn_privs)
+       and (select kisotsu_auth_exec from fn_privs)
+       and (select kisotsu_service_exec from fn_privs)
+      then 'PASS' else 'FAIL'
+    end,
+    jsonb_build_object(
+      'public', (select kisotsu_public_exec from fn_privs),
+      'anon', (select kisotsu_anon_exec from fn_privs),
+      'authenticated', (select kisotsu_auth_exec from fn_privs),
+      'service_role', (select kisotsu_service_exec from fn_privs),
+      'owner', (select owner_name from kisotsu_fn)
+    )
+  union all
   select 'create_rpc_exists',
     case when (select ok from create_rpc) then 'PASS' else 'FAIL' end, '{}'::jsonb
   union all
+  select 'create_rpc_single_overload',
+    case when (select overload_count from create_rpc) = 1 then 'PASS' else 'FAIL' end,
+    jsonb_build_object('overload_count', (select overload_count from create_rpc))
+  union all
+  select 'create_rpc_execute_service_role_only',
+    case
+      when not (select create_public_exec from fn_privs)
+       and not (select create_anon_exec from fn_privs)
+       and not (select create_auth_exec from fn_privs)
+       and (select create_service_exec from fn_privs)
+      then 'PASS' else 'FAIL'
+    end,
+    jsonb_build_object(
+      'public', (select create_public_exec from fn_privs),
+      'anon', (select create_anon_exec from fn_privs),
+      'authenticated', (select create_auth_exec from fn_privs),
+      'service_role', (select create_service_exec from fn_privs),
+      'owner', (select owner_name from create_rpc)
+    )
+  union all
   select 'bump_rpc_exists',
     case when (select ok from bump_rpc) then 'PASS' else 'FAIL' end, '{}'::jsonb
+  union all
+  select 'bump_rpc_single_overload',
+    case when (select overload_count from bump_rpc) = 1 then 'PASS' else 'FAIL' end,
+    jsonb_build_object('overload_count', (select overload_count from bump_rpc))
+  union all
+  select 'bump_rpc_execute_service_role_only',
+    case
+      when not (select bump_public_exec from fn_privs)
+       and not (select bump_anon_exec from fn_privs)
+       and not (select bump_auth_exec from fn_privs)
+       and (select bump_service_exec from fn_privs)
+      then 'PASS' else 'FAIL'
+    end,
+    jsonb_build_object(
+      'public', (select bump_public_exec from fn_privs),
+      'anon', (select bump_anon_exec from fn_privs),
+      'authenticated', (select bump_auth_exec from fn_privs),
+      'service_role', (select bump_service_exec from fn_privs),
+      'owner', (select owner_name from bump_rpc)
+    )
   union all
   select 'days_rls_enabled',
     case when coalesce((select ok from days_rls), false) then 'PASS' else 'FAIL' end, '{}'::jsonb

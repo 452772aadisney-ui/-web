@@ -7,10 +7,13 @@
 -- 新規登録は create_class_schedule_day_with_sessions で日+コマを同一トランザクション保存（コマ1件以上必須）。
 
 -- ---------------------------------------------------------------------------
--- Helper: 既卒タグを持つプロフィールか
+-- Helper: 呼び出し元が既卒か（auth.uid() 固定・偽装不可）
 -- ---------------------------------------------------------------------------
 
-create or replace function public.is_kisotsu_profile(p_uid uuid)
+-- 旧シグネチャ（uuid引数）が残っていれば除去（UUIDプローブ防止）
+drop function if exists public.is_kisotsu_profile(uuid);
+
+create or replace function public.is_kisotsu_profile()
 returns boolean
 language sql
 security definer
@@ -21,18 +24,20 @@ as $$
     select 1
     from public.profile_student_tags pst
     inner join public.student_tags st on st.id = pst.tag_id
-    where pst.profile_id = p_uid
+    where pst.profile_id = auth.uid()
       and st.category = '学年'
       and st.name = '既卒'
   );
 $$;
 
-comment on function public.is_kisotsu_profile(uuid) is
-  '指定プロフィールが学年タグ「既卒」を持つか。RLS 用（security definer）。ポリシーは必ず is_kisotsu_profile(auth.uid()) で呼ぶ。';
+comment on function public.is_kisotsu_profile() is
+  '呼び出し元 auth.uid() が学年タグ「既卒」を持つか。RLS 用（security definer）。引数なしで UUID プローブ不可。';
 
--- 任意 UUID の既卒判定プローブを防ぐ（RLS は auth.uid() 経由のみ想定）
-revoke all on function public.is_kisotsu_profile(uuid) from public;
-grant execute on function public.is_kisotsu_profile(uuid) to authenticated;
+revoke all on function public.is_kisotsu_profile() from public;
+revoke all on function public.is_kisotsu_profile() from anon;
+grant execute on function public.is_kisotsu_profile() to authenticated;
+-- service_role はデフォルトで実行可。明示付与で verify を安定させる
+grant execute on function public.is_kisotsu_profile() to service_role;
 
 -- ---------------------------------------------------------------------------
 -- class_schedule_days
@@ -85,7 +90,7 @@ drop policy if exists "class_schedule_days_select" on public.class_schedule_days
 create policy "class_schedule_days_select"
   on public.class_schedule_days for select
   to authenticated
-  using (public.is_admin() or public.is_kisotsu_profile(auth.uid()));
+  using (public.is_admin() or public.is_kisotsu_profile());
 
 drop policy if exists "class_schedule_days_insert_admin" on public.class_schedule_days;
 create policy "class_schedule_days_insert_admin"
@@ -193,7 +198,7 @@ drop policy if exists "class_schedule_sessions_select" on public.class_schedule_
 create policy "class_schedule_sessions_select"
   on public.class_schedule_sessions for select
   to authenticated
-  using (public.is_admin() or public.is_kisotsu_profile(auth.uid()));
+  using (public.is_admin() or public.is_kisotsu_profile());
 
 drop policy if exists "class_schedule_sessions_insert_admin" on public.class_schedule_sessions;
 create policy "class_schedule_sessions_insert_admin"
@@ -218,7 +223,11 @@ grant select, insert, update, delete on table public.class_schedule_sessions to 
 
 -- ---------------------------------------------------------------------------
 -- Atomic create: 授業日 + 初期コマ（1件以上）を同一トランザクションで保存
+-- EXECUTE は service_role のみ。アプリは requireAdmin 後に Admin Client から呼ぶ。
 -- ---------------------------------------------------------------------------
+
+drop function if exists public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb);
+drop function if exists public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid);
 
 create or replace function public.create_class_schedule_day_with_sessions(
   p_schedule_date date,
@@ -226,7 +235,8 @@ create or replace function public.create_class_schedule_day_with_sessions(
   p_address text,
   p_map_url text,
   p_room_note text,
-  p_sessions jsonb
+  p_sessions jsonb,
+  p_actor_id uuid
 )
 returns table (day_id uuid, notify_revision integer)
 language plpgsql
@@ -242,10 +252,56 @@ declare
   v_subject text;
   v_note text;
   v_count integer;
+  v_venue text;
+  v_address text;
+  v_map text;
+  v_room text;
 begin
-  if not public.is_admin() then
-    raise exception 'permission denied: admin only'
+  -- Authenticated/anon cannot EXECUTE; still refuse non-service callers in-body.
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'permission denied: service_role only'
       using errcode = '42501';
+  end if;
+
+  if p_actor_id is null then
+    raise exception 'actor id is required'
+      using errcode = '22023';
+  end if;
+
+  if not exists (
+    select 1
+    from public.profiles p
+    where p.id = p_actor_id
+      and p.role = 'admin'
+  ) then
+    raise exception 'permission denied: admin actor required'
+      using errcode = '42501';
+  end if;
+
+  v_venue := trim(coalesce(p_venue_name, ''));
+  if char_length(v_venue) = 0 or char_length(v_venue) > 200 then
+    raise exception 'invalid venue_name'
+      using errcode = '22023';
+  end if;
+
+  v_address := nullif(trim(coalesce(p_address, '')), '');
+  if v_address is not null and char_length(v_address) > 500 then
+    raise exception 'invalid address'
+      using errcode = '22023';
+  end if;
+
+  v_map := nullif(trim(coalesce(p_map_url, '')), '');
+  if v_map is not null then
+    if char_length(v_map) > 2000 or v_map !~* '^https://' then
+      raise exception 'invalid map_url'
+        using errcode = '22023';
+    end if;
+  end if;
+
+  v_room := nullif(trim(coalesce(p_room_note, '')), '');
+  if v_room is not null and char_length(v_room) > 200 then
+    raise exception 'invalid room_note'
+      using errcode = '22023';
   end if;
 
   if p_sessions is null or jsonb_typeof(p_sessions) is distinct from 'array' then
@@ -256,6 +312,10 @@ begin
   v_count := jsonb_array_length(p_sessions);
   if v_count is null or v_count < 1 then
     raise exception 'at least one session is required'
+      using errcode = '22023';
+  end if;
+  if v_count > 24 then
+    raise exception 'too many sessions'
       using errcode = '22023';
   end if;
 
@@ -272,19 +332,18 @@ begin
   )
   values (
     p_schedule_date,
-    p_venue_name,
-    nullif(trim(coalesce(p_address, '')), ''),
-    nullif(trim(coalesce(p_map_url, '')), ''),
-    nullif(trim(coalesce(p_room_note, '')), ''),
+    v_venue,
+    v_address,
+    v_map,
+    v_room,
     'scheduled',
     1,
-    auth.uid(),
-    auth.uid()
+    p_actor_id,
+    p_actor_id
   )
   returning id, notify_revision
   into v_day_id, v_revision;
 
-  -- Serialize with overlap trigger locking this day
   perform 1 from public.class_schedule_days d where d.id = v_day_id for update;
 
   for v_session in
@@ -300,7 +359,7 @@ begin
     end;
 
     v_subject := trim(coalesce(v_session->>'subject', ''));
-    if char_length(v_subject) = 0 then
+    if char_length(v_subject) = 0 or char_length(v_subject) > 100 then
       raise exception 'session subject is required'
         using errcode = '22023';
     end if;
@@ -311,6 +370,10 @@ begin
     end if;
 
     v_note := nullif(trim(coalesce(v_session->>'note', '')), '');
+    if v_note is not null and char_length(v_note) > 500 then
+      raise exception 'invalid session note'
+        using errcode = '22023';
+    end if;
 
     insert into public.class_schedule_sessions (
       day_id, start_time, end_time, subject, note, status
@@ -325,13 +388,15 @@ begin
 end;
 $$;
 
-comment on function public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb) is
-  '管理者のみ。授業日と初期コマを同一トランザクションで作成。コマ0件は拒否。失敗時は全体ロールバック。';
+comment on function public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid) is
+  'service_role のみ EXECUTE。アプリは requireAdmin 後に Admin Client から呼ぶ。作成者は p_actor_id（admin profiles 必須）。コマ1〜24件。失敗時は全体ロールバック。';
 
-revoke all on function public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb) from public;
-grant execute on function public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb) to authenticated;
+revoke all on function public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid) from public;
+revoke all on function public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid) from anon;
+revoke all on function public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid) from authenticated;
+grant execute on function public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb, uuid) to service_role;
 
--- Atomic notify_revision bump（同時更新でも重複 revision を避ける）
+-- Atomic notify_revision bump（service_role のみ。生徒は EXECUTE 不可）
 create or replace function public.bump_class_schedule_notify_revision(
   p_day_id uuid,
   p_updated_by uuid
@@ -344,8 +409,23 @@ as $$
 declare
   v_revision integer;
 begin
-  if not public.is_admin() then
-    raise exception 'permission denied: admin only'
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'permission denied: service_role only'
+      using errcode = '42501';
+  end if;
+
+  if p_day_id is null or p_updated_by is null then
+    raise exception 'day id and updated_by are required'
+      using errcode = '22023';
+  end if;
+
+  if not exists (
+    select 1
+    from public.profiles p
+    where p.id = p_updated_by
+      and p.role = 'admin'
+  ) then
+    raise exception 'permission denied: admin actor required'
       using errcode = '42501';
   end if;
 
@@ -358,6 +438,8 @@ begin
   returning notify_revision into v_revision;
 
   if v_revision is null then
+    -- Do not distinguish missing vs unauthorized to callers without EXECUTE;
+    -- service_role only reaches here.
     raise exception 'class_schedule_day not found'
       using errcode = 'P0002';
   end if;
@@ -367,7 +449,9 @@ end;
 $$;
 
 comment on function public.bump_class_schedule_notify_revision(uuid, uuid) is
-  '管理者のみ。notify_revision を原子的に +1 して返す。';
+  'service_role のみ EXECUTE。notify_revision を原子的に +1。p_updated_by は admin profiles 必須。アプリの重要変更処理からのみ呼ぶ。';
 
 revoke all on function public.bump_class_schedule_notify_revision(uuid, uuid) from public;
-grant execute on function public.bump_class_schedule_notify_revision(uuid, uuid) to authenticated;
+revoke all on function public.bump_class_schedule_notify_revision(uuid, uuid) from anon;
+revoke all on function public.bump_class_schedule_notify_revision(uuid, uuid) from authenticated;
+grant execute on function public.bump_class_schedule_notify_revision(uuid, uuid) to service_role;

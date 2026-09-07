@@ -4,6 +4,11 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/class-schedule/access'
 import {
+  CLASS_SCHEDULE_MAX_SESSIONS_PER_DAY,
+  isWithinSessionLimit,
+  requireAdminClassScheduleRpcClient,
+} from '@/lib/class-schedule/rpc-auth'
+import {
   findFirstInternalOverlap,
   hasOverlappingScheduledSession,
 } from '@/lib/class-schedule/overlap'
@@ -54,6 +59,12 @@ function parseSessionsFromFormData(formData: FormData): {
   const count = Math.max(starts.length, ends.length, subjects.length, notes.length)
   if (count === 0) {
     return { ok: false, error: 'コマを1つ以上追加してください' }
+  }
+  if (!isWithinSessionLimit(count)) {
+    return {
+      ok: false,
+      error: `コマは1日あたり最大${CLASS_SCHEDULE_MAX_SESSIONS_PER_DAY}件までです`,
+    }
   }
 
   const sessions: Array<{
@@ -112,10 +123,14 @@ async function bumpNotifyRevision(
   dayId: string,
   updatedBy: string,
 ): Promise<{ ok: true; notifyRevision: number } | { ok: false }> {
-  const supabase = await createClient()
-  const { data, error } = await supabase.rpc('bump_class_schedule_notify_revision', {
+  const gate = await requireAdminClassScheduleRpcClient()
+  if (!gate.ok) return { ok: false }
+  // updatedBy must be the verified admin from requireAdmin — never a client-supplied id.
+  if (updatedBy !== gate.profile.id) return { ok: false }
+
+  const { data, error } = await gate.admin.rpc('bump_class_schedule_notify_revision', {
     p_day_id: dayId,
-    p_updated_by: updatedBy,
+    p_updated_by: gate.profile.id,
   })
 
   if (error || data == null) return { ok: false }
@@ -136,8 +151,10 @@ function mapClassScheduleDbError(error: {
   if (code === '23P01' || /overlap/i.test(message)) {
     return '既存のコマと時間が重複しています'
   }
-  if (code === '22023' || /at least one session|sessions must be/i.test(message)) {
-    return 'コマを1つ以上追加してください'
+  if (code === '22023' || /at least one session|sessions must be|too many sessions/i.test(message)) {
+    return /too many/i.test(message)
+      ? `コマは1日あたり最大${CLASS_SCHEDULE_MAX_SESSIONS_PER_DAY}件までです`
+      : 'コマを1つ以上追加してください'
   }
   if (/end_time must be after|invalid session time|subject is required/i.test(message)) {
     return 'コマの内容が不正です'
@@ -204,8 +221,8 @@ export async function createClassScheduleDay(
   _prev: ClassScheduleActionState,
   formData: FormData,
 ): Promise<ClassScheduleActionState> {
-  const access = await requireAdmin()
-  if (!access.ok) return { error: access.error }
+  const gate = await requireAdminClassScheduleRpcClient()
+  if (!gate.ok) return { error: gate.error }
 
   const dayFields = parseDayFields({
     schedule_date: String(formData.get('scheduleDate') ?? ''),
@@ -219,8 +236,7 @@ export async function createClassScheduleDay(
   const sessionsResult = parseSessionsFromFormData(formData)
   if (!sessionsResult.ok) return { error: sessionsResult.error }
 
-  const supabase = await createClient()
-  const { data, error } = await supabase.rpc('create_class_schedule_day_with_sessions', {
+  const { data, error } = await gate.admin.rpc('create_class_schedule_day_with_sessions', {
     p_schedule_date: dayFields.day.schedule_date,
     p_venue_name: dayFields.day.venue_name,
     p_address: dayFields.day.address,
@@ -232,6 +248,7 @@ export async function createClassScheduleDay(
       subject: session.subject,
       note: session.note,
     })),
+    p_actor_id: gate.profile.id,
   })
 
   if (error || !data) {
