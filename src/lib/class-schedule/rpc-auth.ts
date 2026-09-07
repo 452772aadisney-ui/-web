@@ -24,6 +24,16 @@ export async function requireAdminClassScheduleRpcClient(): Promise<
 
   const admin = createAdminClient()
   if (!admin) {
+    // Safe diagnostic only — never log keys or profile ids.
+    console.error('[class-schedule] create failed:', {
+      op: 'class_schedule_create',
+      phase: 'admin_client',
+      errorClass: 'admin_client_missing',
+      supabaseCode: null,
+      argKeyCount: null,
+      sessionCount: null,
+      hasMessage: false,
+    })
     return { ok: false, error: '授業予定の保存に失敗しました' }
   }
 

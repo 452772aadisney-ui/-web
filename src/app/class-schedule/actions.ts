@@ -9,6 +9,13 @@ import {
   requireAdminClassScheduleRpcClient,
 } from '@/lib/class-schedule/rpc-auth'
 import {
+  CREATE_CLASS_SCHEDULE_RPC_NAME,
+  buildCreateClassScheduleRpcArgs,
+  createClassScheduleRpcArgKeyCount,
+  createClassScheduleRpcDiagnostic,
+  mapClassScheduleDbError,
+} from '@/lib/class-schedule/create-rpc'
+import {
   findFirstInternalOverlap,
   hasOverlappingScheduledSession,
 } from '@/lib/class-schedule/overlap'
@@ -139,32 +146,6 @@ async function bumpNotifyRevision(
   return { ok: true, notifyRevision: revision }
 }
 
-function mapClassScheduleDbError(error: {
-  code?: string
-  message?: string
-}): string {
-  const code = error.code ?? ''
-  const message = error.message ?? ''
-  if (code === '23505' || /duplicate key|unique/i.test(message)) {
-    return '同じ日付の授業予定が既にあります'
-  }
-  if (code === '23P01' || /overlap/i.test(message)) {
-    return '既存のコマと時間が重複しています'
-  }
-  if (code === '22023' || /at least one session|sessions must be|too many sessions/i.test(message)) {
-    return /too many/i.test(message)
-      ? `コマは1日あたり最大${CLASS_SCHEDULE_MAX_SESSIONS_PER_DAY}件までです`
-      : 'コマを1つ以上追加してください'
-  }
-  if (/end_time must be after|invalid session time|subject is required/i.test(message)) {
-    return 'コマの内容が不正です'
-  }
-  if (code === '42501' || /permission denied/i.test(message)) {
-    return '管理者権限が必要です'
-  }
-  return '授業予定の保存に失敗しました'
-}
-
 async function notifyAfterSave(params: {
   dayId: string
   notifyRevision: number
@@ -236,22 +217,34 @@ export async function createClassScheduleDay(
   const sessionsResult = parseSessionsFromFormData(formData)
   if (!sessionsResult.ok) return { error: sessionsResult.error }
 
-  const { data, error } = await gate.admin.rpc('create_class_schedule_day_with_sessions', {
-    p_schedule_date: dayFields.day.schedule_date,
-    p_venue_name: dayFields.day.venue_name,
-    p_address: dayFields.day.address,
-    p_map_url: dayFields.day.map_url,
-    p_room_note: dayFields.day.room_note,
-    p_sessions: sessionsResult.sessions.map((session) => ({
-      start_time: session.start_time,
-      end_time: session.end_time,
-      subject: session.subject,
-      note: session.note,
-    })),
-    p_actor_id: gate.profile.id,
+  // Atomic create only via service_role RPC — no prior table writes (no partial rows).
+  const rpcArgs = buildCreateClassScheduleRpcArgs({
+    schedule_date: dayFields.day.schedule_date,
+    venue_name: dayFields.day.venue_name,
+    address: dayFields.day.address,
+    map_url: dayFields.day.map_url,
+    room_note: dayFields.day.room_note,
+    sessions: sessionsResult.sessions,
+    actorId: gate.profile.id,
   })
+  const argKeyCount = createClassScheduleRpcArgKeyCount(rpcArgs)
+  const sessionCount = rpcArgs.p_sessions.length
+
+  const { data, error } = await gate.admin.rpc(
+    CREATE_CLASS_SCHEDULE_RPC_NAME,
+    rpcArgs,
+  )
 
   if (error || !data) {
+    console.error(
+      '[class-schedule] create failed:',
+      createClassScheduleRpcDiagnostic({
+        phase: 'create_rpc',
+        error: error ?? null,
+        argKeyCount,
+        sessionCount,
+      }),
+    )
     return { error: mapClassScheduleDbError(error ?? {}) }
   }
 
@@ -263,6 +256,14 @@ export async function createClassScheduleDay(
       : NaN
 
   if (!dayId || !Number.isFinite(notifyRevisionRaw)) {
+    console.error(
+      '[class-schedule] create failed:',
+      createClassScheduleRpcDiagnostic({
+        phase: 'empty_result',
+        argKeyCount,
+        sessionCount,
+      }),
+    )
     return { error: '授業予定の登録に失敗しました' }
   }
 
