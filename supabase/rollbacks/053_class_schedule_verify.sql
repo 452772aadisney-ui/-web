@@ -35,6 +35,14 @@ kisotsu_fn as (
       join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public' and p.proname = 'is_kisotsu_profile'
     ) as overload_count,
+    exists (
+      select 1
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname = 'is_kisotsu_profile'
+        and pg_get_function_identity_arguments(p.oid) = 'uuid'
+    ) as has_uuid_overload,
     (
       select pg_get_userbyid(p.proowner)
       from pg_proc p
@@ -44,6 +52,43 @@ kisotsu_fn as (
         and pg_get_function_identity_arguments(p.oid) = ''
       limit 1
     ) as owner_name
+),
+select_policy_defs as (
+  select
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'public'
+        and tablename = 'class_schedule_days'
+        and policyname = 'class_schedule_days_select'
+        and cmd = 'SELECT'
+    ) as days_select_exists,
+    exists (
+      select 1 from pg_policies
+      where schemaname = 'public'
+        and tablename = 'class_schedule_sessions'
+        and policyname = 'class_schedule_sessions_select'
+        and cmd = 'SELECT'
+    ) as sessions_select_exists,
+    coalesce(
+      (
+        select qual from pg_policies
+        where schemaname = 'public'
+          and tablename = 'class_schedule_days'
+          and policyname = 'class_schedule_days_select'
+        limit 1
+      ),
+      ''
+    ) as days_select_qual,
+    coalesce(
+      (
+        select qual from pg_policies
+        where schemaname = 'public'
+          and tablename = 'class_schedule_sessions'
+          and policyname = 'class_schedule_sessions_select'
+        limit 1
+      ),
+      ''
+    ) as sessions_select_qual
 ),
 create_rpc as (
   select
@@ -279,9 +324,50 @@ checks as (
   select 'is_kisotsu_profile_security_definer_search_path',
     case when (select security_ok from kisotsu_fn) then 'PASS' else 'FAIL' end, '{}'::jsonb
   union all
-  select 'is_kisotsu_profile_no_uuid_overload',
-    case when (select overload_count from kisotsu_fn) = 1 then 'PASS' else 'FAIL' end,
+  select 'is_kisotsu_profile_uuid_absent',
+    case when not (select has_uuid_overload from kisotsu_fn) then 'PASS' else 'FAIL' end,
+    jsonb_build_object('has_uuid_overload', (select has_uuid_overload from kisotsu_fn))
+  union all
+  select 'is_kisotsu_profile_noarg_only',
+    case
+      when (select exists_ok from kisotsu_fn)
+       and (select overload_count from kisotsu_fn) = 1
+       and not (select has_uuid_overload from kisotsu_fn)
+      then 'PASS' else 'FAIL'
+    end,
     jsonb_build_object('overload_count', (select overload_count from kisotsu_fn))
+  union all
+  select 'is_kisotsu_profile_no_uuid_overload',
+    case
+      when (select overload_count from kisotsu_fn) = 1
+       and not (select has_uuid_overload from kisotsu_fn)
+      then 'PASS' else 'FAIL'
+    end,
+    jsonb_build_object('overload_count', (select overload_count from kisotsu_fn))
+  union all
+  select 'days_select_policy_present',
+    case when (select days_select_exists from select_policy_defs) then 'PASS' else 'FAIL' end,
+    '{}'::jsonb
+  union all
+  select 'sessions_select_policy_present',
+    case when (select sessions_select_exists from select_policy_defs) then 'PASS' else 'FAIL' end,
+    '{}'::jsonb
+  union all
+  select 'days_select_uses_noarg_kisotsu',
+    case
+      when (select days_select_qual from select_policy_defs) like '%is_kisotsu_profile()%'
+       and (select days_select_qual from select_policy_defs) not like '%is_kisotsu_profile(auth%'
+      then 'PASS' else 'FAIL'
+    end,
+    jsonb_build_object('qual', (select days_select_qual from select_policy_defs))
+  union all
+  select 'sessions_select_uses_noarg_kisotsu',
+    case
+      when (select sessions_select_qual from select_policy_defs) like '%is_kisotsu_profile()%'
+       and (select sessions_select_qual from select_policy_defs) not like '%is_kisotsu_profile(auth%'
+      then 'PASS' else 'FAIL'
+    end,
+    jsonb_build_object('qual', (select sessions_select_qual from select_policy_defs))
   union all
   select 'is_kisotsu_profile_execute_grants',
     case

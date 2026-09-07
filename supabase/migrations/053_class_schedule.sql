@@ -5,12 +5,40 @@
 -- 適用順: 必ず 053 → 054。rollback は 054 → 053。
 -- 通知カテゴリ・配信は 054。notify_revision は通知冪等用。
 -- 新規登録は create_class_schedule_day_with_sessions で日+コマを同一トランザクション保存（コマ1件以上必須）。
+--
+-- 再実行安全（テーブル・データは DROP しない）:
+-- 1) 旧 is_kisotsu_profile(uuid) を参照し得るポリシーを明示 DROP
+-- 2) 旧 uuid 関数を DROP（CASCADE なし）
+-- 3) 引数なし is_kisotsu_profile() を作成
+-- 4) テーブル IF NOT EXISTS → ポリシー再作成（引数なし関数参照）
 
 -- ---------------------------------------------------------------------------
--- Helper: 呼び出し元が既卒か（auth.uid() 固定・偽装不可）
+-- 0) 旧 uuid 関数を参照し得るポリシーを先に外す（部分適用からの再実行用）
+--    テーブルが無い空DBでは何もしない。データは削除しない。
 -- ---------------------------------------------------------------------------
 
--- 旧シグネチャ（uuid引数）が残っていれば除去（UUIDプローブ防止）
+do $$
+begin
+  if to_regclass('public.class_schedule_days') is not null then
+    drop policy if exists "class_schedule_days_select" on public.class_schedule_days;
+    drop policy if exists "class_schedule_days_insert_admin" on public.class_schedule_days;
+    drop policy if exists "class_schedule_days_update_admin" on public.class_schedule_days;
+    drop policy if exists "class_schedule_days_delete_admin" on public.class_schedule_days;
+  end if;
+
+  if to_regclass('public.class_schedule_sessions') is not null then
+    drop policy if exists "class_schedule_sessions_select" on public.class_schedule_sessions;
+    drop policy if exists "class_schedule_sessions_insert_admin" on public.class_schedule_sessions;
+    drop policy if exists "class_schedule_sessions_update_admin" on public.class_schedule_sessions;
+    drop policy if exists "class_schedule_sessions_delete_admin" on public.class_schedule_sessions;
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 1) Helper: 呼び出し元が既卒か（auth.uid() 固定・偽装不可）
+-- ---------------------------------------------------------------------------
+
+-- 依存ポリシーは上で除去済み。CASCADE は使わない。
 drop function if exists public.is_kisotsu_profile(uuid);
 
 create or replace function public.is_kisotsu_profile()
@@ -40,7 +68,7 @@ grant execute on function public.is_kisotsu_profile() to authenticated;
 grant execute on function public.is_kisotsu_profile() to service_role;
 
 -- ---------------------------------------------------------------------------
--- class_schedule_days
+-- 2) class_schedule_days
 -- ---------------------------------------------------------------------------
 
 create table if not exists public.class_schedule_days (
@@ -114,7 +142,7 @@ create policy "class_schedule_days_delete_admin"
 grant select, insert, update, delete on table public.class_schedule_days to authenticated;
 
 -- ---------------------------------------------------------------------------
--- class_schedule_sessions
+-- 3) class_schedule_sessions
 -- ---------------------------------------------------------------------------
 
 create table if not exists public.class_schedule_sessions (
@@ -222,8 +250,7 @@ create policy "class_schedule_sessions_delete_admin"
 grant select, insert, update, delete on table public.class_schedule_sessions to authenticated;
 
 -- ---------------------------------------------------------------------------
--- Atomic create: 授業日 + 初期コマ（1件以上）を同一トランザクションで保存
--- EXECUTE は service_role のみ。アプリは requireAdmin 後に Admin Client から呼ぶ。
+-- 4) Atomic create / bump RPCs（service_role のみ）
 -- ---------------------------------------------------------------------------
 
 drop function if exists public.create_class_schedule_day_with_sessions(date, text, text, text, text, jsonb);
