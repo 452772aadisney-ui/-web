@@ -29,31 +29,25 @@ function extractCreateRpcParamNames(sql: string): string[] {
 }
 
 describe('create class schedule RPC arg alignment', () => {
-  it('keeps app RPC name identical to migration function', () => {
-    const sql = readMigration('055_repair_class_schedule_partial_migration.sql')
+  it('keeps app RPC name identical to migration 057 function', () => {
+    const sql = readMigration('057_class_schedule_location_details.sql')
     expect(sql).toContain(
       `create or replace function public.${CREATE_CLASS_SCHEDULE_RPC_NAME}(`,
     )
   })
 
-  it('matches migration parameter names exactly (order and keys)', () => {
-    const from055 = extractCreateRpcParamNames(
-      readMigration('055_repair_class_schedule_partial_migration.sql'),
+  it('matches 057 parameter names exactly (order and keys)', () => {
+    const from057 = extractCreateRpcParamNames(
+      readMigration('057_class_schedule_location_details.sql'),
     )
-    const from053 = extractCreateRpcParamNames(
-      readMigration('053_class_schedule.sql'),
-    )
-    expect(from055).toEqual([...CREATE_CLASS_SCHEDULE_RPC_ARG_KEYS])
-    expect(from053).toEqual([...CREATE_CLASS_SCHEDULE_RPC_ARG_KEYS])
+    expect(from057).toEqual([...CREATE_CLASS_SCHEDULE_RPC_ARG_KEYS])
   })
 
-  it('builds all 7 named keys including null optional fields', () => {
+  it('builds all 5 named keys including null optional location_details', () => {
     const day = parseDayFields({
       schedule_date: '2026-09-10',
       venue_name: '会場A',
-      address: '',
-      map_url: '',
-      room_note: '  ',
+      location_details: '  ',
     })
     expect(day.ok).toBe(true)
     if (!day.ok) return
@@ -73,11 +67,9 @@ describe('create class schedule RPC arg alignment', () => {
       actorId: '00000000-0000-4000-8000-000000000001',
     })
 
-    expect(createClassScheduleRpcArgKeyCount(args)).toBe(7)
+    expect(createClassScheduleRpcArgKeyCount(args)).toBe(5)
     expect(Object.keys(args)).toEqual([...CREATE_CLASS_SCHEDULE_RPC_ARG_KEYS])
-    expect(args.p_address).toBeNull()
-    expect(args.p_map_url).toBeNull()
-    expect(args.p_room_note).toBeNull()
+    expect(args.p_location_details).toBeNull()
     expect(args.p_sessions).toHaveLength(1)
     expect(args.p_sessions[0]).toEqual({
       start_time: '10:00',
@@ -103,13 +95,12 @@ describe('create class schedule RPC arg alignment', () => {
     const args = buildCreateClassScheduleRpcArgs({
       schedule_date: '2026-09-11',
       venue_name: '会場B',
-      address: '東京都',
-      map_url: 'https://maps.example.com/x',
-      room_note: '3F',
+      location_details: '東京都\nhttps://maps.example.com/x\n3F',
       sessions,
       actorId: '00000000-0000-4000-8000-000000000002',
     })
 
+    expect(args.p_location_details).toContain('東京都')
     expect(args.p_sessions).toHaveLength(2)
     expect(args.p_sessions.every((s) => 'start_time' in s && 'end_time' in s)).toBe(
       true,
@@ -188,7 +179,7 @@ describe('classifyClassScheduleRpcError', () => {
         code: 'PGRST202',
         message: 'Could not find the function',
       },
-      argKeyCount: 7,
+      argKeyCount: 5,
       sessionCount: 1,
     })
     expect(diagnostic).toEqual({
@@ -196,7 +187,7 @@ describe('classifyClassScheduleRpcError', () => {
       phase: 'create_rpc',
       errorClass: 'rpc_not_found',
       supabaseCode: 'PGRST202',
-      argKeyCount: 7,
+      argKeyCount: 5,
       sessionCount: 1,
       hasMessage: true,
     })
@@ -270,9 +261,7 @@ describe('createClassScheduleDay service_role path', () => {
     const formData = new FormData()
     formData.set('scheduleDate', '2026-09-12')
     formData.set('venueName', '会場')
-    formData.set('address', '')
-    formData.set('mapUrl', '')
-    formData.set('roomNote', '')
+    formData.set('locationDetails', '')
     formData.append('sessionStartTime', '10:00')
     formData.append('sessionEndTime', '11:00')
     formData.append('sessionSubject', EXAM_SUBJECTS[0])
@@ -288,9 +277,7 @@ describe('createClassScheduleDay service_role path', () => {
       expect.objectContaining({
         p_schedule_date: '2026-09-12',
         p_venue_name: '会場',
-        p_address: null,
-        p_map_url: null,
-        p_room_note: null,
+        p_location_details: null,
         p_actor_id: 'admin-1',
         p_sessions: [
           {

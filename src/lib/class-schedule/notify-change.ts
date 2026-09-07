@@ -5,9 +5,7 @@
 export type ClassScheduleDayComparable = {
   schedule_date: string
   venue_name: string
-  address: string | null
-  map_url: string | null
-  room_note: string | null
+  location_details: string | null
 }
 
 export type ClassScheduleSessionComparable = {
@@ -19,7 +17,7 @@ export type ClassScheduleSessionComparable = {
 
 function normalizeNullableText(value: string | null | undefined): string | null {
   if (value == null) return null
-  const trimmed = value.trim()
+  const trimmed = value.replace(/^\s+|\s+$/g, '')
   return trimmed.length === 0 ? null : trimmed
 }
 
@@ -34,9 +32,8 @@ export function classScheduleDayFieldsChanged(
   return (
     before.schedule_date !== after.schedule_date ||
     before.venue_name.trim() !== after.venue_name.trim() ||
-    normalizeNullableText(before.address) !== normalizeNullableText(after.address) ||
-    normalizeNullableText(before.map_url) !== normalizeNullableText(after.map_url) ||
-    normalizeNullableText(before.room_note) !== normalizeNullableText(after.room_note)
+    normalizeNullableText(before.location_details) !==
+      normalizeNullableText(after.location_details)
   )
 }
 

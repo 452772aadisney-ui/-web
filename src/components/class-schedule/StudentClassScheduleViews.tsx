@@ -3,43 +3,49 @@ import {
   dayStatusLabel,
   formatClassScheduleDateLabel,
   formatSessionTimeRange,
-  isHttpsMapUrl,
   isSessionEffectivelyCancelled,
   sessionStatusLabel,
 } from '@/lib/class-schedule/format'
+import {
+  renderLocationDetailsWithLinks,
+  resolveLocationDetailsText,
+} from '@/lib/class-schedule/location-details'
 import type {
   ClassScheduleDayWithSessions,
   ClassScheduleSession,
 } from '@/types/class-schedule'
-import type { NextClassSession } from '@/lib/class-schedule/queries'
+import type { NextClassDay } from '@/lib/class-schedule/queries'
 
-function MapLink({ url }: { url: string }) {
-  if (!isHttpsMapUrl(url)) return null
+function LocationBlock({ day }: { day: ClassScheduleDayWithSessions | NextClassDay }) {
+  const text = resolveLocationDetailsText(day)
+  if (!text) return null
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-sm font-medium text-primary hover:underline"
-    >
-      地図を開く
-    </a>
+    <p className="mt-2 whitespace-pre-wrap break-words text-sm text-muted">
+      {renderLocationDetailsWithLinks(text, day.id)}
+    </p>
   )
 }
 
 function SessionList({
   dayStatus,
   sessions,
+  showCancelled = true,
 }: {
   dayStatus: ClassScheduleDayWithSessions['status']
   sessions: ClassScheduleSession[]
+  showCancelled?: boolean
 }) {
-  if (sessions.length === 0) {
+  const visible = showCancelled
+    ? sessions
+    : sessions.filter((session) => session.status === 'scheduled')
+
+  if (visible.length === 0) {
     return <p className="text-sm text-muted">コマはありません</p>
   }
+
   return (
-    <ul className="mt-2 space-y-2">
-      {sessions.map((session) => {
+    <ul className="mt-2 space-y-1.5">
+      {visible.map((session) => {
         const cancelled = isSessionEffectivelyCancelled(dayStatus, session.status)
         return (
           <li
@@ -51,7 +57,8 @@ function SessionList({
             }
           >
             <p className="font-medium">
-              {formatSessionTimeRange(session.start_time, session.end_time)} {session.subject}
+              {formatSessionTimeRange(session.start_time, session.end_time)}{' '}
+              <span className="break-words">{session.subject}</span>
               {cancelled && (
                 <span className="ml-2 text-xs font-semibold no-underline">
                   {sessionStatusLabel({ dayStatus, sessionStatus: session.status })}
@@ -59,7 +66,9 @@ function SessionList({
               )}
             </p>
             {session.note && (
-              <p className="mt-0.5 text-xs text-muted no-underline">{session.note}</p>
+              <p className="mt-0.5 break-words text-xs text-muted no-underline">
+                {session.note}
+              </p>
             )}
           </li>
         )
@@ -68,35 +77,25 @@ function SessionList({
   )
 }
 
-export function StudentClassScheduleNextHero({ next }: { next: NextClassSession | null }) {
+export function StudentClassScheduleNextHero({ next }: { next: NextClassDay | null }) {
   if (!next) {
     return (
-      <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+      <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-muted">次の授業</h2>
         <p className="mt-2 text-base font-bold">予定されている授業はありません</p>
       </section>
     )
   }
 
-  const { day, session } = next
   return (
-    <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+    <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
       <h2 className="text-sm font-semibold text-muted">次の授業</h2>
       <p className="mt-2 text-xl font-bold">
-        {formatClassScheduleDateLabel(day.schedule_date)}
+        {formatClassScheduleDateLabel(next.schedule_date)}
       </p>
-      <p className="mt-1 text-base font-semibold">
-        {formatSessionTimeRange(session.start_time, session.end_time)} {session.subject}
-      </p>
-      <p className="mt-2 text-sm text-muted">{day.venue_name}</p>
-      {day.room_note && <p className="text-sm text-muted">{day.room_note}</p>}
-      {day.address && <p className="mt-1 text-sm text-muted">{day.address}</p>}
-      {day.map_url && (
-        <p className="mt-2">
-          <MapLink url={day.map_url} />
-        </p>
-      )}
-      {session.note && <p className="mt-2 text-sm">{session.note}</p>}
+      <p className="mt-1 text-sm font-semibold">{next.venue_name}</p>
+      <LocationBlock day={next} />
+      <SessionList dayStatus={next.status} sessions={next.sessions} showCancelled={false} />
     </section>
   )
 }
@@ -117,7 +116,7 @@ export function StudentClassScheduleDayCards({
       {days.map((day) => (
         <li
           key={day.id}
-          className="rounded-2xl border border-border bg-card p-5 shadow-sm"
+          className="rounded-2xl border border-border bg-card p-4 shadow-sm"
         >
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
@@ -125,8 +124,6 @@ export function StudentClassScheduleDayCards({
                 {formatClassScheduleDateLabel(day.schedule_date)}
               </p>
               <p className="mt-0.5 text-sm text-muted">{day.venue_name}</p>
-              {day.room_note && <p className="text-sm text-muted">{day.room_note}</p>}
-              {day.address && <p className="text-sm text-muted">{day.address}</p>}
             </div>
             {day.status === 'cancelled' && (
               <span className="rounded-md bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700">
@@ -134,11 +131,7 @@ export function StudentClassScheduleDayCards({
               </span>
             )}
           </div>
-          {day.map_url && (
-            <p className="mt-2">
-              <MapLink url={day.map_url} />
-            </p>
-          )}
+          <LocationBlock day={day} />
           <SessionList dayStatus={day.status} sessions={day.sessions} />
         </li>
       ))}

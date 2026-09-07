@@ -132,20 +132,40 @@ export async function fetchClassScheduleDaysPaginated(options: {
   }
 }
 
-export type NextClassSession = {
-  day: ClassScheduleDay
-  session: ClassScheduleSession
-}
+export type NextClassDay = ClassScheduleDayWithSessions
 
 /**
- * Next upcoming scheduled session for student hero.
- * Prefer today (remaining sessions), else earliest future scheduled day/session.
- * Skips cancelled days and cancelled sessions.
+ * Next upcoming *day* with at least one remaining scheduled session.
+ * Skips cancelled days, days whose sessions are all cancelled, and days
+ * whose scheduled sessions have all already ended (JST wall clock).
  */
-export async function fetchNextClassSession(
+export function pickNextClassDay(
+  days: ClassScheduleDayWithSessions[],
+  todayKey: string,
+  nowTimeHHmm: string,
+): NextClassDay | null {
+  for (const day of days) {
+    if (day.status !== 'scheduled') continue
+    const remaining = day.sessions.filter((session) => {
+      if (session.status !== 'scheduled') return false
+      if (day.schedule_date > todayKey) return true
+      if (day.schedule_date < todayKey) return false
+      // today: include in-progress and not-yet-ended
+      return session.end_time > nowTimeHHmm
+    })
+    if (remaining.length === 0) continue
+    return {
+      ...day,
+      sessions: remaining,
+    }
+  }
+  return null
+}
+
+export async function fetchNextClassDay(
   todayKey = getJstDateKey(),
   nowTimeHHmm?: string,
-): Promise<NextClassSession | null> {
+): Promise<NextClassDay | null> {
   const supabase = await createClient()
   const now =
     nowTimeHHmm ??
@@ -169,21 +189,23 @@ export async function fetchNextClassSession(
 
   const sessions = await fetchSessionsForDayIds(dayList.map((d) => d.id))
   const withSessions = attachSessions(dayList, sessions)
+  return pickNextClassDay(withSessions, todayKey, now)
+}
 
-  for (const day of withSessions) {
-    const scheduled = day.sessions.filter((s) => s.status === 'scheduled')
-    for (const session of scheduled) {
-      if (day.schedule_date > todayKey) {
-        return { day, session }
-      }
-      // today: only sessions that have not ended yet
-      if (session.end_time > now) {
-        return { day, session }
-      }
-    }
-  }
+/** @deprecated Prefer fetchNextClassDay — kept for transitional imports. */
+export type NextClassSession = {
+  day: ClassScheduleDay
+  session: ClassScheduleSession
+}
 
-  return null
+/** @deprecated Prefer fetchNextClassDay */
+export async function fetchNextClassSession(
+  todayKey = getJstDateKey(),
+  nowTimeHHmm?: string,
+): Promise<NextClassSession | null> {
+  const day = await fetchNextClassDay(todayKey, nowTimeHHmm)
+  if (!day || day.sessions.length === 0) return null
+  return { day, session: day.sessions[0]! }
 }
 
 export async function fetchUpcomingClassScheduleDays(options?: {

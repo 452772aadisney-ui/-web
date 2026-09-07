@@ -120,13 +120,17 @@ describe('notify-change helpers', () => {
     const base = {
       schedule_date: '2026-09-10',
       venue_name: '本校',
-      address: null,
-      map_url: null,
-      room_note: null,
+      location_details: null,
     }
     expect(classScheduleDayFieldsChanged(base, base)).toBe(false)
     expect(
       classScheduleDayFieldsChanged(base, { ...base, venue_name: '別会場' }),
+    ).toBe(true)
+    expect(
+      classScheduleDayFieldsChanged(base, {
+        ...base,
+        location_details: '東京都',
+      }),
     ).toBe(true)
   })
 

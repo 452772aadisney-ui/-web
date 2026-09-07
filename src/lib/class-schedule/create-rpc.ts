@@ -1,15 +1,13 @@
 import { CLASS_SCHEDULE_MAX_SESSIONS_PER_DAY } from '@/lib/class-schedule/rpc-auth'
 
-/** Must match public.create_class_schedule_day_with_sessions parameter names exactly. */
+/** Must match public.create_class_schedule_day_with_sessions (057) parameter names. */
 export const CREATE_CLASS_SCHEDULE_RPC_NAME =
   'create_class_schedule_day_with_sessions' as const
 
 export const CREATE_CLASS_SCHEDULE_RPC_ARG_KEYS = [
   'p_schedule_date',
   'p_venue_name',
-  'p_address',
-  'p_map_url',
-  'p_room_note',
+  'p_location_details',
   'p_sessions',
   'p_actor_id',
 ] as const
@@ -24,9 +22,7 @@ export type CreateClassScheduleRpcSession = {
 export type CreateClassScheduleRpcArgs = {
   p_schedule_date: string
   p_venue_name: string
-  p_address: string | null
-  p_map_url: string | null
-  p_room_note: string | null
+  p_location_details: string | null
   p_sessions: CreateClassScheduleRpcSession[]
   p_actor_id: string
 }
@@ -51,25 +47,17 @@ export type ClassScheduleRpcErrorLike = {
   hint?: string | null
 }
 
-/**
- * Named-arg payload for PostgREST. Always includes all 7 keys (nulls kept)
- * so overload resolution cannot drop optional text params.
- */
 export function buildCreateClassScheduleRpcArgs(input: {
   schedule_date: string
   venue_name: string
-  address: string | null
-  map_url: string | null
-  room_note: string | null
+  location_details: string | null
   sessions: CreateClassScheduleRpcSession[]
   actorId: string
 }): CreateClassScheduleRpcArgs {
   return {
     p_schedule_date: input.schedule_date,
     p_venue_name: input.venue_name,
-    p_address: input.address,
-    p_map_url: input.map_url,
-    p_room_note: input.room_note,
+    p_location_details: input.location_details,
     p_sessions: input.sessions.map((session) => ({
       start_time: session.start_time,
       end_time: session.end_time,
@@ -118,16 +106,13 @@ export function classifyClassScheduleRpcError(
   if (code === '23503' || /foreign key|not found for session/i.test(message)) {
     return 'foreign_key_violation'
   }
-  if (
-    code === '42702' ||
-    /ambiguous column|ambiguous_column/i.test(message)
-  ) {
+  if (code === '42702' || /ambiguous column|ambiguous_column/i.test(message)) {
     return 'ambiguous_column'
   }
   if (
     code === '22023' ||
     code === '22P02' ||
-    /invalid venue|invalid address|invalid map_url|invalid room_note|invalid session|at least one session|sessions must be|too many sessions|actor id is required|subject is required|end_time must be after/i.test(
+    /invalid venue|invalid address|invalid map_url|invalid room_note|invalid location_details|invalid session|at least one session|sessions must be|too many sessions|actor id is required|subject is required|end_time must be after/i.test(
       message,
     )
   ) {
@@ -136,7 +121,6 @@ export function classifyClassScheduleRpcError(
   return 'unknown'
 }
 
-/** Safe server-only log fields — never include PII, venue, URLs, or raw payloads. */
 export function createClassScheduleRpcDiagnostic(input: {
   phase: 'create_rpc' | 'admin_client' | 'empty_result'
   error?: ClassScheduleRpcErrorLike | null
@@ -165,10 +149,7 @@ export function createClassScheduleRpcDiagnostic(input: {
   }
 }
 
-/**
- * User-facing copy — keep parity with pre-diagnostic mapping.
- * Classification for logs is separate (classifyClassScheduleRpcError).
- */
+/** User-facing copy — keep parity with pre-diagnostic mapping. */
 export function mapClassScheduleDbError(error: ClassScheduleRpcErrorLike): string {
   const code = error.code ?? ''
   const message = error.message ?? ''

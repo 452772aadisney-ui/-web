@@ -6,9 +6,14 @@ import {
   createClassScheduleDay,
   type ClassScheduleActionState,
 } from '@/app/class-schedule/actions'
-import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
+import {
+  CLASS_SCHEDULE_LOCATION_DETAILS_MAX_LENGTH,
+  CLASS_SCHEDULE_SUBJECT_MAX_LENGTH,
+  CLASS_SCHEDULE_SUBJECT_SUGGESTIONS,
+} from '@/lib/class-schedule/validation'
 import { classScheduleFieldClass } from '@/lib/class-schedule/format'
 import { useActionToast } from '@/hooks/useActionToast'
+import { SessionTimeRangeFields } from '@/components/class-schedule/SessionTimeRangeFields'
 
 const initialState: ClassScheduleActionState = {}
 
@@ -25,7 +30,7 @@ function newSessionRow(): SessionRow {
     key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     startTime: '10:00',
     endTime: '11:30',
-    subject: EXAM_SUBJECTS[0],
+    subject: '',
     note: '',
   }
 }
@@ -36,7 +41,6 @@ export function AdminClassScheduleCreateForm() {
     async (prev: ClassScheduleActionState, formData: FormData) => {
       const result = await createClassScheduleDay(prev, formData)
       if (result.success) {
-        // Success toast is shown on the list via one-shot flash cookie.
         router.push('/admin/class-schedule')
         router.refresh()
       }
@@ -53,7 +57,7 @@ export function AdminClassScheduleCreateForm() {
   })
 
   return (
-    <form action={formAction} className="space-y-6 rounded-2xl border border-border bg-card p-6 shadow-sm">
+    <form action={formAction} className="space-y-5 rounded-2xl border border-border bg-card p-5 shadow-sm">
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="mb-1 block text-sm font-medium">日付 *</span>
@@ -69,27 +73,20 @@ export function AdminClassScheduleCreateForm() {
           <input name="venueName" required className={classScheduleFieldClass} />
         </label>
         <label className="block sm:col-span-2">
-          <span className="mb-1 block text-sm font-medium">住所</span>
-          <input name="address" className={classScheduleFieldClass} />
-        </label>
-        <label className="block sm:col-span-2">
-          <span className="mb-1 block text-sm font-medium">地図URL（https）</span>
-          <input
-            name="mapUrl"
-            type="url"
-            placeholder="https://"
+          <span className="mb-1 block text-sm font-medium">場所の詳細</span>
+          <textarea
+            name="locationDetails"
+            rows={2}
+            maxLength={CLASS_SCHEDULE_LOCATION_DETAILS_MAX_LENGTH}
+            placeholder={'例）東京都○○区○○1-2-3　会議室A\nhttps://maps.google.com/...'}
             className={classScheduleFieldClass}
           />
         </label>
-        <label className="block sm:col-span-2">
-          <span className="mb-1 block text-sm font-medium">教室・階などのメモ</span>
-          <input name="roomNote" className={classScheduleFieldClass} />
-        </label>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-base font-bold">コマ</h2>
+          <h2 className="text-sm font-bold">コマ</h2>
           <button
             type="button"
             className="text-sm font-medium text-primary hover:underline"
@@ -99,14 +96,14 @@ export function AdminClassScheduleCreateForm() {
           </button>
         </div>
 
-        <ul className="space-y-3">
+        <ul className="space-y-2">
           {sessions.map((session, index) => (
             <li
               key={session.key}
-              className="space-y-3 rounded-xl border border-border bg-background p-4"
+              className="rounded-xl border border-border bg-background p-3"
             >
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">{index + 1}コマ目</p>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-muted">{index + 1}コマ目</p>
                 {sessions.length > 1 && (
                   <button
                     type="button"
@@ -120,50 +117,35 @@ export function AdminClassScheduleCreateForm() {
                   </button>
                 )}
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2 lg:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+                <SessionTimeRangeFields
+                  startName="sessionStartTime"
+                  endName="sessionEndTime"
+                  startValue={session.startTime}
+                  endValue={session.endTime}
+                  idPrefix={`create-${session.key}`}
+                  onStartChange={(value) =>
+                    setSessions((prev) =>
+                      prev.map((row) =>
+                        row.key === session.key ? { ...row, startTime: value } : row,
+                      ),
+                    )
+                  }
+                  onEndChange={(value) =>
+                    setSessions((prev) =>
+                      prev.map((row) =>
+                        row.key === session.key ? { ...row, endTime: value } : row,
+                      ),
+                    )
+                  }
+                />
                 <label className="block">
-                  <span className="mb-1 block text-sm font-medium">開始 *</span>
+                  <span className="mb-1 block text-xs font-medium text-muted">科目 *</span>
                   <input
-                    type="time"
-                    name="sessionStartTime"
-                    required
-                    value={session.startTime}
-                    onChange={(event) =>
-                      setSessions((prev) =>
-                        prev.map((row) =>
-                          row.key === session.key
-                            ? { ...row, startTime: event.target.value }
-                            : row,
-                        ),
-                      )
-                    }
-                    className={classScheduleFieldClass}
-                  />
-                </label>
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium">終了 *</span>
-                  <input
-                    type="time"
-                    name="sessionEndTime"
-                    required
-                    value={session.endTime}
-                    onChange={(event) =>
-                      setSessions((prev) =>
-                        prev.map((row) =>
-                          row.key === session.key
-                            ? { ...row, endTime: event.target.value }
-                            : row,
-                        ),
-                      )
-                    }
-                    className={classScheduleFieldClass}
-                  />
-                </label>
-                <label className="block sm:col-span-2">
-                  <span className="mb-1 block text-sm font-medium">科目 *</span>
-                  <select
                     name="sessionSubject"
                     required
+                    list="class-schedule-subject-suggestions"
+                    maxLength={CLASS_SCHEDULE_SUBJECT_MAX_LENGTH}
                     value={session.subject}
                     onChange={(event) =>
                       setSessions((prev) =>
@@ -175,35 +157,35 @@ export function AdminClassScheduleCreateForm() {
                       )
                     }
                     className={classScheduleFieldClass}
-                  >
-                    {EXAM_SUBJECTS.map((subject) => (
-                      <option key={subject} value={subject}>
-                        {subject}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block sm:col-span-2">
-                  <span className="mb-1 block text-sm font-medium">生徒向けメモ</span>
-                  <input
-                    name="sessionNote"
-                    value={session.note}
-                    onChange={(event) =>
-                      setSessions((prev) =>
-                        prev.map((row) =>
-                          row.key === session.key
-                            ? { ...row, note: event.target.value }
-                            : row,
-                        ),
-                      )
-                    }
-                    className={classScheduleFieldClass}
+                    placeholder="例）英語"
                   />
                 </label>
               </div>
+              <label className="mt-2 block">
+                <span className="mb-1 block text-xs font-medium text-muted">生徒向け補足</span>
+                <input
+                  name="sessionNote"
+                  value={session.note}
+                  onChange={(event) =>
+                    setSessions((prev) =>
+                      prev.map((row) =>
+                        row.key === session.key
+                          ? { ...row, note: event.target.value }
+                          : row,
+                      ),
+                    )
+                  }
+                  className={classScheduleFieldClass}
+                />
+              </label>
             </li>
           ))}
         </ul>
+        <datalist id="class-schedule-subject-suggestions">
+          {CLASS_SCHEDULE_SUBJECT_SUGGESTIONS.map((subject) => (
+            <option key={subject} value={subject} />
+          ))}
+        </datalist>
       </div>
 
       {state.error && (

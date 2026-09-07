@@ -48,10 +48,10 @@ export function isWithinSessionLimit(count: number): boolean {
   )
 }
 
-/** Signatures used in verify SQL — keep in sync with 053. */
+/** Signatures used in verify SQL — keep in sync with 057. */
 export const CLASS_SCHEDULE_WRITE_RPC_SIGNATURES = {
   create:
-    'public.create_class_schedule_day_with_sessions(date,text,text,text,text,jsonb,uuid)',
+    'public.create_class_schedule_day_with_sessions(date,text,text,jsonb,uuid)',
   bump: 'public.bump_class_schedule_notify_revision(uuid,uuid)',
   isKisotsu: 'public.is_kisotsu_profile()',
 } as const

@@ -24,6 +24,7 @@ import {
   classScheduleDayFieldsChanged,
   classScheduleSessionFieldsChanged,
 } from '@/lib/class-schedule/notify-change'
+import { resolveLocationDetailsText } from '@/lib/class-schedule/location-details'
 import {
   classScheduleNotifySuccessMessage,
   deliverClassScheduleNotifications,
@@ -228,9 +229,7 @@ export async function createClassScheduleDay(
   const dayFields = parseDayFields({
     schedule_date: String(formData.get('scheduleDate') ?? ''),
     venue_name: String(formData.get('venueName') ?? ''),
-    address: String(formData.get('address') ?? ''),
-    map_url: String(formData.get('mapUrl') ?? ''),
-    room_note: String(formData.get('roomNote') ?? ''),
+    location_details: String(formData.get('locationDetails') ?? ''),
   })
   if (!dayFields.ok) return { error: dayFields.error }
 
@@ -241,9 +240,7 @@ export async function createClassScheduleDay(
   const rpcArgs = buildCreateClassScheduleRpcArgs({
     schedule_date: dayFields.day.schedule_date,
     venue_name: dayFields.day.venue_name,
-    address: dayFields.day.address,
-    map_url: dayFields.day.map_url,
-    room_note: dayFields.day.room_note,
+    location_details: dayFields.day.location_details,
     sessions: sessionsResult.sessions,
     actorId: gate.profile.id,
   })
@@ -319,16 +316,19 @@ export async function updateClassScheduleDay(
   const dayFields = parseDayFields({
     schedule_date: String(formData.get('scheduleDate') ?? ''),
     venue_name: String(formData.get('venueName') ?? ''),
-    address: String(formData.get('address') ?? ''),
-    map_url: String(formData.get('mapUrl') ?? ''),
-    room_note: String(formData.get('roomNote') ?? ''),
+    location_details: String(formData.get('locationDetails') ?? ''),
   })
   if (!dayFields.ok) return { error: dayFields.error }
 
   const existing = await fetchDay(dayId)
   if (!existing) return { error: '授業日が見つかりません' }
 
-  const changed = classScheduleDayFieldsChanged(existing, dayFields.day)
+  const before = {
+    schedule_date: existing.schedule_date,
+    venue_name: existing.venue_name,
+    location_details: resolveLocationDetailsText(existing),
+  }
+  const changed = classScheduleDayFieldsChanged(before, dayFields.day)
   if (!changed) {
     revalidateClassSchedulePaths(dayId)
     return { success: true, successMessage: '変更はありません' }
@@ -338,7 +338,9 @@ export async function updateClassScheduleDay(
   const { data: updated, error } = await supabase
     .from('class_schedule_days')
     .update({
-      ...dayFields.day,
+      schedule_date: dayFields.day.schedule_date,
+      venue_name: dayFields.day.venue_name,
+      location_details: dayFields.day.location_details,
       updated_by: access.profile.id,
     })
     .eq('id', dayId)
@@ -447,14 +449,6 @@ export async function updateClassScheduleSession(
   const dayId = String(formData.get('dayId') ?? '').trim()
   if (!sessionId || !dayId) return { error: 'コマが見つかりません' }
 
-  const parsed = parseSessionDraft({
-    start_time: String(formData.get('startTime') ?? ''),
-    end_time: String(formData.get('endTime') ?? ''),
-    subject: String(formData.get('subject') ?? ''),
-    note: String(formData.get('note') ?? ''),
-  })
-  if (!parsed.ok) return { error: parsed.error }
-
   const day = await fetchDay(dayId)
   if (!day) return { error: '授業日が見つかりません' }
   if (day.status === 'cancelled') {
@@ -464,6 +458,16 @@ export async function updateClassScheduleSession(
   const existing = await fetchSessionsForDay(dayId)
   const current = existing.find((s) => s.id === sessionId)
   if (!current) return { error: 'コマが見つかりません' }
+
+  const parsed = parseSessionDraft({
+    start_time: String(formData.get('startTime') ?? ''),
+    end_time: String(formData.get('endTime') ?? ''),
+    subject: String(formData.get('subject') ?? ''),
+    note: String(formData.get('note') ?? ''),
+    originalStart: current.start_time,
+    originalEnd: current.end_time,
+  })
+  if (!parsed.ok) return { error: parsed.error }
 
   if (!classScheduleSessionFieldsChanged(current, parsed.session)) {
     revalidateClassSchedulePaths(dayId)

@@ -1,0 +1,20 @@
+-- 057 rollback guidance (destructive — do not run casually on production).
+--
+-- Preferred recovery if 057 must be undone:
+-- 1) Restore previous 7-arg create RPC from 056 definition (service_role only).
+-- 2) Optionally copy location_details back into address when address is null
+--    (lossy — map_url/room_note cannot be perfectly split).
+-- 3) Do NOT DROP location_details until app no longer reads it.
+-- 4) NEVER DROP TABLE. NEVER CASCADE.
+--
+-- Example (commented): restore 7-arg is a large CREATE OR REPLACE — re-apply
+-- supabase/migrations/056_fix_class_schedule_create_rpc_ambiguous_columns.sql
+-- create function section only after dropping the 5-arg overload, then:
+--   drop function if exists public.create_class_schedule_day_with_sessions(date, text, text, jsonb, uuid);
+-- and re-grant service_role only.
+--
+-- Column removal (only after app fully migrated away):
+--   alter table public.class_schedule_days drop column if exists location_details;
+--
+-- This file intentionally contains no executable DROP of live data.
+select '057 rollback is documented only; no automatic destructive SQL'::text as note;

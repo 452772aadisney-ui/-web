@@ -33,8 +33,10 @@ describe('isWithinSessionLimit', () => {
 })
 
 describe('CLASS_SCHEDULE_WRITE_RPC_SIGNATURES', () => {
-  it('documents full signatures including create actor uuid', () => {
-    expect(CLASS_SCHEDULE_WRITE_RPC_SIGNATURES.create).toContain('jsonb,uuid)')
+  it('documents full signatures including create actor uuid (057 5-arg)', () => {
+    expect(CLASS_SCHEDULE_WRITE_RPC_SIGNATURES.create).toBe(
+      'public.create_class_schedule_day_with_sessions(date,text,text,jsonb,uuid)',
+    )
     expect(CLASS_SCHEDULE_WRITE_RPC_SIGNATURES.bump).toBe(
       'public.bump_class_schedule_notify_revision(uuid,uuid)',
     )

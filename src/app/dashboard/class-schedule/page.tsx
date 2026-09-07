@@ -1,6 +1,6 @@
 import { requireKisotsuStudentOrRedirect } from '@/lib/class-schedule/access'
 import {
-  fetchNextClassSession,
+  fetchNextClassDay,
   fetchUpcomingClassScheduleDays,
 } from '@/lib/class-schedule/queries'
 import { getJstDateKey } from '@/lib/study/dates'
@@ -18,7 +18,7 @@ export default async function StudentClassSchedulePage() {
   const todayKey = getJstDateKey()
 
   const [next, upcoming] = await Promise.all([
-    fetchNextClassSession(todayKey),
+    fetchNextClassDay(todayKey),
     fetchUpcomingClassScheduleDays({ todayKey, limit: 30 }),
   ])
 
