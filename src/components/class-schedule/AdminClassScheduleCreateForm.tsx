@@ -36,6 +36,7 @@ export function AdminClassScheduleCreateForm() {
     async (prev: ClassScheduleActionState, formData: FormData) => {
       const result = await createClassScheduleDay(prev, formData)
       if (result.success) {
+        // Success toast is shown on the list via one-shot flash cookie.
         router.push('/admin/class-schedule')
         router.refresh()
       }
@@ -47,6 +48,7 @@ export function AdminClassScheduleCreateForm() {
 
   useActionToast(state, {
     successMessage: '授業予定を登録しました',
+    showSuccess: false,
     pending,
   })
 

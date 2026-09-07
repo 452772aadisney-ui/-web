@@ -13,6 +13,9 @@ describe('flash toast messages', () => {
     expect(FLASH_TOAST_MESSAGES.login).toBe('ログインしました')
     expect(FLASH_TOAST_MESSAGES.logout).toBe('ログアウトしました')
     expect(FLASH_TOAST_MESSAGES.auth_required).toBe('ログインが必要です')
+    expect(FLASH_TOAST_MESSAGES.class_schedule_created).toBe(
+      '授業予定を登録しました',
+    )
     expect(getFlashToastMessage('login')).toBe(FLASH_TOAST_MESSAGES.login)
   })
 
@@ -20,6 +23,8 @@ describe('flash toast messages', () => {
     expect(isFlashToastKind('login')).toBe(true)
     expect(isFlashToastKind('logout')).toBe(true)
     expect(isFlashToastKind('auth_required')).toBe(true)
+    expect(isFlashToastKind('class_schedule_created')).toBe(true)
+    expect(isFlashToastKind('class_schedule_day_deleted')).toBe(true)
     expect(isFlashToastKind('other')).toBe(false)
     expect(isFlashToastKind(null)).toBe(false)
     expect(isFlashToastKind('<script>')).toBe(false)

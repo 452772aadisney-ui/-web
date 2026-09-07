@@ -250,14 +250,22 @@ describe('createClassScheduleDay service_role path', () => {
         durationMs: 1,
         wouldUsePushFirst: 0,
         wouldFallbackToEmail: 0,
+        alreadyCompleted: 0,
+        inProgress: 0,
+        emailFailed: 0,
+        nonProductionSkip: 0,
       }),
       classScheduleNotifySuccessMessage: (saved: string) => saved,
+    }))
+    vi.doMock('@/lib/toast/flash-toast-server', () => ({
+      setFlashToastCookie: vi.fn().mockResolvedValue(undefined),
     }))
     vi.doMock('next/cache', () => ({
       revalidatePath: vi.fn(),
     }))
 
     const { createClassScheduleDay } = await import('@/app/class-schedule/actions')
+    const { setFlashToastCookie } = await import('@/lib/toast/flash-toast-server')
 
     const formData = new FormData()
     formData.set('scheduleDate', '2026-09-12')
@@ -273,6 +281,7 @@ describe('createClassScheduleDay service_role path', () => {
     const result = await createClassScheduleDay({}, formData)
 
     expect(result.success).toBe(true)
+    expect(setFlashToastCookie).toHaveBeenCalledWith('class_schedule_created')
     expect(rpc).toHaveBeenCalledTimes(1)
     expect(rpc).toHaveBeenCalledWith(
       CREATE_CLASS_SCHEDULE_RPC_NAME,
@@ -352,11 +361,15 @@ describe('createClassScheduleDay service_role path', () => {
         }),
       }
     })
+    vi.doMock('@/lib/toast/flash-toast-server', () => ({
+      setFlashToastCookie: vi.fn().mockResolvedValue(undefined),
+    }))
     vi.doMock('next/cache', () => ({
       revalidatePath: vi.fn(),
     }))
 
     const { createClassScheduleDay } = await import('@/app/class-schedule/actions')
+    const { setFlashToastCookie } = await import('@/lib/toast/flash-toast-server')
     const formData = new FormData()
     formData.set('scheduleDate', '2026-09-13')
     formData.set('venueName', '会場')
@@ -369,6 +382,7 @@ describe('createClassScheduleDay service_role path', () => {
     expect(result.error).toBe('授業予定の保存に失敗しました')
     expect(from).not.toHaveBeenCalled()
     expect(rpc).toHaveBeenCalledTimes(1)
+    expect(setFlashToastCookie).not.toHaveBeenCalled()
   })
 })
 

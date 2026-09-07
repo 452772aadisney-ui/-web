@@ -28,6 +28,12 @@ import {
   classScheduleNotifySuccessMessage,
   deliverClassScheduleNotifications,
 } from '@/lib/class-schedule/class-schedule-orchestrator'
+import {
+  resolveClassScheduleCreateFlashKind,
+  resolveClassScheduleNotifyFlashOutcome,
+  type ClassScheduleNotifyFlashOutcome,
+} from '@/lib/class-schedule/flash-toast'
+import { setFlashToastCookie } from '@/lib/toast/flash-toast-server'
 import type { ClassScheduleNotifyKind } from '@/lib/class-schedule/class-schedule-email'
 import type { ClassScheduleDay, ClassScheduleSession } from '@/types/class-schedule'
 
@@ -37,6 +43,8 @@ export type ClassScheduleActionState = {
   successMessage?: string
   /** True when the schedule row saved but notification fan-out had failures. */
   notifyPartialFailure?: boolean
+  /** Fixed flash outcome for navigation toasts (never free-form). */
+  notifyFlashOutcome?: ClassScheduleNotifyFlashOutcome
 }
 
 function revalidateClassSchedulePaths(dayId?: string) {
@@ -154,6 +162,7 @@ async function notifyAfterSave(params: {
 }): Promise<ClassScheduleActionState> {
   let successMessage = params.savedMessage
   let notifyPartialFailure = false
+  let notifyFlashOutcome: ClassScheduleNotifyFlashOutcome = 'ok'
 
   try {
     const summary = await deliverClassScheduleNotifications({
@@ -170,6 +179,15 @@ async function notifyAfterSave(params: {
         summary.stalePending > 0 ||
         summary.timedOut ||
         !summary.ok)
+
+    notifyFlashOutcome = resolveClassScheduleNotifyFlashOutcome({
+      mode: summary.mode,
+      notifyPartialFailure,
+      pushSucceeded: summary.pushSucceeded,
+      emailFallbackSucceeded: summary.emailFallbackSucceeded,
+      legacyEmailSentCount: summary.legacyEmailSentCount,
+      alreadyCompleted: summary.alreadyCompleted,
+    })
 
     console.info('[class-schedule] notification summary:', {
       mode: summary.mode,
@@ -188,12 +206,14 @@ async function notifyAfterSave(params: {
     console.error('[class-schedule] notification failed after save')
     successMessage = `${params.savedMessage}（通知を送信できませんでした）`
     notifyPartialFailure = true
+    notifyFlashOutcome = 'failed'
   }
 
   revalidateClassSchedulePaths(params.dayId)
   return {
     success: true,
     successMessage,
+    notifyFlashOutcome,
     ...(notifyPartialFailure ? { notifyPartialFailure: true } : {}),
   }
 }
@@ -267,12 +287,23 @@ export async function createClassScheduleDay(
     return { error: '授業予定の登録に失敗しました' }
   }
 
-  return notifyAfterSave({
+  const result = await notifyAfterSave({
     dayId,
     notifyRevision: notifyRevisionRaw,
     kind: 'create',
     savedMessage: '授業予定を登録しました',
   })
+
+  if (result.success) {
+    await setFlashToastCookie(
+      resolveClassScheduleCreateFlashKind(
+        result.notifyPartialFailure,
+        result.notifyFlashOutcome ?? 'ok',
+      ),
+    )
+  }
+
+  return result
 }
 
 export async function updateClassScheduleDay(
@@ -728,8 +759,9 @@ export async function deleteClassScheduleDay(
   if (error) return { error: '授業日の削除に失敗しました' }
 
   // Misregistration delete: NO notify
+  await setFlashToastCookie('class_schedule_day_deleted')
   revalidateClassSchedulePaths()
-  return { success: true, successMessage: '誤登録の授業日を削除しました' }
+  return { success: true, successMessage: '誤登録を削除しました' }
 }
 
 export async function deleteClassScheduleSession(
@@ -766,5 +798,5 @@ export async function deleteClassScheduleSession(
     .eq('id', dayId)
 
   revalidateClassSchedulePaths(dayId)
-  return { success: true, successMessage: 'コマを削除しました' }
+  return { success: true, successMessage: '誤登録のコマを削除しました' }
 }

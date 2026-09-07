@@ -22,6 +22,11 @@ interface UseActionToastOptions {
   pending?: boolean
   /** Stable id prefix to prevent duplicate stacked toasts */
   toastId?: string
+  /**
+   * When false, success toasts are skipped (e.g. navigation + flash cookie).
+   * Errors still toast.
+   */
+  showSuccess?: boolean
 }
 
 /**
@@ -35,6 +40,7 @@ export function useActionToast(
     errorMessage = APP_TOAST_SAFE_ERROR_MESSAGE,
     pending = false,
     toastId,
+    showSuccess = true,
   }: UseActionToastOptions = {},
 ) {
   const reactId = useId()
@@ -55,7 +61,9 @@ export function useActionToast(
     const session = sessionRef.current
 
     if (state.success) {
-      session.success(state.successMessage ?? successMessage, `${idPrefix}-success`)
+      if (showSuccess) {
+        session.success(state.successMessage ?? successMessage, `${idPrefix}-success`)
+      }
       return
     }
 
@@ -70,5 +78,6 @@ export function useActionToast(
     successMessage,
     errorMessage,
     idPrefix,
+    showSuccess,
   ])
 }

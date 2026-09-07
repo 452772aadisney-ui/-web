@@ -367,14 +367,15 @@ export function AdminClassScheduleEditPage({ day }: { day: ClassScheduleDayWithS
       formData.set('dayId', day.id)
       const result = await action(formData)
       if (result.success) {
-        toast.success(result.successMessage ?? '完了しました')
         setConfirmCancelDay(false)
         setConfirmDeleteDay(false)
         if (redirectAfterDelete) {
+          // Toast comes from flash cookie set by deleteClassScheduleDay.
           router.push('/admin/class-schedule')
           router.refresh()
           return
         }
+        toast.success(result.successMessage ?? '完了しました')
         router.refresh()
       } else if (result.error) {
         toast.error(result.error)

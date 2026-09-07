@@ -1,15 +1,30 @@
 export const FLASH_TOAST_COOKIE = 'app_flash_toast'
 
-export type FlashToastKind = 'login' | 'logout' | 'auth_required'
+export type FlashToastKind =
+  | 'login'
+  | 'logout'
+  | 'auth_required'
+  | 'class_schedule_created'
+  | 'class_schedule_created_notify_partial'
+  | 'class_schedule_created_notify_failed'
+  | 'class_schedule_day_deleted'
 
 export const FLASH_TOAST_MESSAGES: Record<FlashToastKind, string> = {
   login: 'ログインしました',
   logout: 'ログアウトしました',
   auth_required: 'ログインが必要です',
+  class_schedule_created: '授業予定を登録しました',
+  class_schedule_created_notify_partial:
+    '予定は保存しましたが、一部の通知に失敗しました',
+  class_schedule_created_notify_failed:
+    '予定は保存しましたが、通知を送信できませんでした',
+  class_schedule_day_deleted: '誤登録を削除しました',
 }
 
+const FLASH_TOAST_KIND_SET = new Set<string>(Object.keys(FLASH_TOAST_MESSAGES))
+
 export function isFlashToastKind(value: string | undefined | null): value is FlashToastKind {
-  return value === 'login' || value === 'logout' || value === 'auth_required'
+  return value != null && FLASH_TOAST_KIND_SET.has(value)
 }
 
 export function getFlashToastMessage(kind: FlashToastKind): string {
