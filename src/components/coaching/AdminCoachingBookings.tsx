@@ -1,7 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { useTransition, type FormEvent } from 'react'
+import {
+  useState,
+  useTransition,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 import { useRouter } from 'next/navigation'
 import {
   cancelCoachingBooking,
@@ -13,29 +18,14 @@ import {
   formatCoachingBookingDateTime,
 } from '@/lib/coaching/format'
 import { getPersonName } from '@/lib/auth/display-name'
-import { getJstDateKey } from '@/lib/study/dates'
 import {
   COACHING_BOOKING_STATUS_LABELS,
   type CoachingBookingStatus,
   type CoachingBookingWithDetails,
 } from '@/types/coaching'
 
-interface AdminCoachingBookingsProps {
-  bookings: CoachingBookingWithDetails[]
-}
-
-function getBookingDateKey(booking: CoachingBookingWithDetails): string {
-  return booking.slot.slot_date ?? booking.slot.starts_at.slice(0, 10)
-}
-
-function sortByStartAsc(a: CoachingBookingWithDetails, b: CoachingBookingWithDetails): number {
-  return a.slot.starts_at.localeCompare(b.slot.starts_at)
-}
-
 function coachingStatusLabel(status: string): string {
-  return (
-    COACHING_BOOKING_STATUS_LABELS[status as CoachingBookingStatus] ?? status
-  )
+  return COACHING_BOOKING_STATUS_LABELS[status as CoachingBookingStatus] ?? status
 }
 
 const actionButtonClass =
@@ -43,7 +33,7 @@ const actionButtonClass =
 
 function BookingStatusBadge({ status }: { status: string }) {
   return (
-    <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-primary">
+    <span className="inline-flex rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-primary">
       {coachingStatusLabel(status)}
     </span>
   )
@@ -136,124 +126,182 @@ function BookingActionButtons({ booking }: { booking: CoachingBookingWithDetails
   )
 }
 
-function BookingListItem({
+function BookingCard({
   booking,
-  showActions = false,
   showPastScheduledHint = false,
+  allowEditActions = false,
 }: {
   booking: CoachingBookingWithDetails
-  showActions?: boolean
   showPastScheduledHint?: boolean
+  allowEditActions?: boolean
 }) {
+  const [editing, setEditing] = useState(false)
+  const studentName = booking.student ? getPersonName(booking.student) : '生徒'
+  const dateTimeLabel = formatCoachingBookingDateTime(
+    booking.slot.slot_date,
+    booking.slot.start_time,
+    booking.slot.starts_at,
+    booking.slot.ends_at,
+  )
+  const canEdit = allowEditActions && booking.status === 'scheduled'
+  const editAriaLabel = `${studentName} ${dateTimeLabel}を編集`
+
   return (
-    <li className="p-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
+    <li className="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-medium">
-              {booking.student ? getPersonName(booking.student) : '生徒'}
-              {' / '}
-              {booking.coach.name}
+            <p className="text-sm font-bold">
+              {studentName}
+              <span className="font-medium text-muted"> / {booking.coach.name}</span>
             </p>
             <BookingStatusBadge status={booking.status} />
           </div>
-          <p className="mt-1 text-sm text-muted">
-            {formatCoachingBookingDateTime(
-              booking.slot.slot_date,
-              booking.slot.start_time,
-              booking.slot.starts_at,
-              booking.slot.ends_at,
-            )}
-          </p>
+          <p className="mt-0.5 text-sm text-muted">{dateTimeLabel}</p>
           {showPastScheduledHint && booking.status === 'scheduled' && (
-            <p className="mt-2 text-sm text-amber-800" role="status">
+            <p className="mt-1.5 text-sm text-amber-800" role="status">
               実施状況を更新してください
             </p>
           )}
-          {booking.student_note && <p className="mt-2 text-sm">伝言: {booking.student_note}</p>}
+          {booking.student_note && (
+            <p className="mt-1.5 text-sm text-muted">伝言: {booking.student_note}</p>
+          )}
         </div>
-        {showActions && booking.status === 'scheduled' && (
-          <BookingActionButtons booking={booking} />
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => setEditing((open) => !open)}
+            className="shrink-0 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium hover:border-primary/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            aria-expanded={editing}
+            aria-controls={`booking-actions-${booking.id}`}
+            aria-label={editAriaLabel}
+          >
+            {editing ? '閉じる' : '編集'}
+          </button>
         )}
       </div>
+      {canEdit && editing && (
+        <div id={`booking-actions-${booking.id}`} className="mt-3 border-t border-border pt-3">
+          <BookingActionButtons booking={booking} />
+        </div>
+      )}
     </li>
   )
 }
 
 function BookingSection({
+  id,
   title,
   bookings,
   emptyMessage,
-  showActions = false,
+  allowEditActions = false,
   showPastScheduledHint = false,
+  headerExtra,
+  footer,
 }: {
+  id?: string
   title: string
   bookings: CoachingBookingWithDetails[]
   emptyMessage: string
-  showActions?: boolean
+  allowEditActions?: boolean
   showPastScheduledHint?: boolean
+  headerExtra?: ReactNode
+  footer?: ReactNode
 }) {
   return (
-    <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-      <h2 className="text-lg font-bold">{title}</h2>
+    <section id={id} className="space-y-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-lg font-bold">{title}</h2>
+        {headerExtra}
+      </div>
       {bookings.length === 0 ? (
-        <p className="mt-4 text-sm text-muted">{emptyMessage}</p>
+        <p className="rounded-xl border border-dashed border-border bg-card px-4 py-6 text-sm text-muted">
+          {emptyMessage}
+        </p>
       ) : (
-        <ul className="mt-4 divide-y divide-border rounded-lg border border-border">
+        <ul className="space-y-2">
           {bookings.map((booking) => (
-            <BookingListItem
+            <BookingCard
               key={booking.id}
               booking={booking}
-              showActions={showActions}
+              allowEditActions={allowEditActions}
               showPastScheduledHint={showPastScheduledHint}
             />
           ))}
         </ul>
       )}
+      {footer}
     </section>
   )
 }
 
-export function AdminCoachingBookings({ bookings }: AdminCoachingBookingsProps) {
-  const todayKey = getJstDateKey()
-  const scheduledBookings = bookings
-    .filter((booking) => booking.status === 'scheduled')
-    .sort(sortByStartAsc)
+interface AdminCoachingBookingsProps {
+  todayBookings: CoachingBookingWithDetails[]
+  futureBookings: CoachingBookingWithDetails[]
+  pastBookings: CoachingBookingWithDetails[]
+  pastTotalCount: number
+  pastRangeLabel: string | null
+  pastSearchForm: ReactNode
+  pastPagination: ReactNode
+}
 
-  const todayBookings = scheduledBookings.filter(
-    (booking) => getBookingDateKey(booking) === todayKey,
-  )
-  const futureBookings = scheduledBookings.filter(
-    (booking) => getBookingDateKey(booking) > todayKey,
-  )
-  const pastBookings = bookings
-    .filter((booking) => booking.status !== 'cancelled' && getBookingDateKey(booking) < todayKey)
-    .sort((a, b) => b.slot.starts_at.localeCompare(a.slot.starts_at))
-
+export function AdminCoachingBookings({
+  todayBookings,
+  futureBookings,
+  pastBookings,
+  pastTotalCount,
+  pastRangeLabel,
+  pastSearchForm,
+  pastPagination,
+}: AdminCoachingBookingsProps) {
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       <BookingSection
         title="今日の予約"
         bookings={todayBookings}
         emptyMessage="今日の予約はありません。"
-        showActions
+        allowEditActions
       />
       <BookingSection
         title="今後（明日以降）の予約"
         bookings={futureBookings}
         emptyMessage="明日以降の予約はありません。"
-        showActions
+        allowEditActions
       />
 
-      {pastBookings.length > 0 && (
-        <BookingSection
-          title="過去の予約"
-          bookings={pastBookings.slice(0, 20)}
-          emptyMessage="過去の予約はありません。"
-          showActions
-          showPastScheduledHint
-        />
-      )}
+      <section
+        id="past-coaching-bookings"
+        className="space-y-3 border-t border-border pt-8"
+      >
+        <h2 className="text-lg font-bold">過去の予約</h2>
+        {pastSearchForm}
+        <p className="text-sm text-muted">
+          {pastTotalCount === 0
+            ? '全0件'
+            : pastRangeLabel
+              ? `全${pastTotalCount}件／${pastRangeLabel}`
+              : `全${pastTotalCount}件`}
+        </p>
+        {pastBookings.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-border bg-card px-4 py-6 text-sm text-muted">
+            {pastTotalCount === 0
+              ? '該当する過去の予約はありません。'
+              : 'このページに表示する予約はありません。'}
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {pastBookings.map((booking) => (
+              <BookingCard
+                key={booking.id}
+                booking={booking}
+                allowEditActions
+                showPastScheduledHint
+              />
+            ))}
+          </ul>
+        )}
+        {pastPagination}
+      </section>
     </div>
   )
 }

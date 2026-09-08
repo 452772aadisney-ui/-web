@@ -23,9 +23,22 @@ export function isGradeTagName(value: string): value is GradeTagName {
   return (GRADE_TAG_NAMES as readonly string[]).includes(value)
 }
 
-export function getGradeSortIndex(name: string): number {
-  const index = GRADE_TAG_NAMES.indexOf(name as GradeTagName)
-  return index === -1 ? GRADE_TAG_NAMES.length : index
+/**
+ * Sort index for grade tags: 高1 → 高2 → 高3 → 既卒 → 学年未設定・その他.
+ * Missing / unexpected tags share the trailing bucket (do not drop students).
+ */
+export function getGradeSortIndex(name: string | null | undefined): number {
+  if (!name || !isGradeTagName(name)) return GRADE_TAG_NAMES.length
+  return GRADE_TAG_NAMES.indexOf(name)
+}
+
+/** Map raw tag to a display/sort bucket (unknown → 学年未設定). */
+export function resolveStudentGradeLabel(
+  gradeTagName: string | null | undefined,
+): string {
+  if (!gradeTagName) return UNASSIGNED_GRADE_LABEL
+  if (isGradeTagName(gradeTagName)) return gradeTagName
+  return UNASSIGNED_GRADE_LABEL
 }
 
 export type StudentListItem = {
@@ -42,6 +55,19 @@ export type StudentListGroup = {
   students: StudentListItem[]
 }
 
+export function sortStudentsByGradeThenName<T extends { id: string; full_name: string }>(
+  students: T[],
+  gradeTagByStudentId: Map<string, string>,
+): T[] {
+  return [...students].sort((a, b) => {
+    const gradeA = resolveStudentGradeLabel(gradeTagByStudentId.get(a.id))
+    const gradeB = resolveStudentGradeLabel(gradeTagByStudentId.get(b.id))
+    const byGrade = getGradeSortIndex(gradeA) - getGradeSortIndex(gradeB)
+    if (byGrade !== 0) return byGrade
+    return a.full_name.localeCompare(b.full_name, 'ja')
+  })
+}
+
 export function groupStudentsByGrade(
   students: StudentListItem[],
   gradeTagByStudentId: Map<string, string>,
@@ -49,7 +75,7 @@ export function groupStudentsByGrade(
   const buckets = new Map<string, StudentListItem[]>()
 
   for (const student of students) {
-    const grade = gradeTagByStudentId.get(student.id) ?? UNASSIGNED_GRADE_LABEL
+    const grade = resolveStudentGradeLabel(gradeTagByStudentId.get(student.id))
     const list = buckets.get(grade) ?? []
     list.push(student)
     buckets.set(grade, list)

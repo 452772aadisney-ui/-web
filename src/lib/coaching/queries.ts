@@ -7,6 +7,8 @@ import {
   slotDateTimeKey,
 } from '@/lib/coaching/slot-times'
 import { getWeekdays, getWeekStartMonday, parseDateKey } from '@/lib/coaching/week'
+import { getTotalPages, parsePageParam } from '@/lib/pagination'
+import { sanitizeIlikePattern } from '@/lib/supabase/ilike'
 import { fetchStudentList } from '@/lib/study/queries'
 import { isKisotsuGradeTag } from '@/lib/tags/grade-order'
 import { fetchGradeTagNamesByStudentId } from '@/lib/tags/queries'
@@ -307,6 +309,131 @@ export async function fetchCoachingBookingsForAdmin(): Promise<CoachingBookingWi
   }
 
   return ((data as BookingRow[]) ?? []).map(mapBooking)
+}
+
+export const PAST_COACHING_BOOKINGS_PAGE_SIZE = 20
+
+export type CoachingBookingsPage = {
+  bookings: CoachingBookingWithDetails[]
+  page: number
+  pageSize: number
+  totalCount: number
+  totalPages: number
+}
+
+async function findStudentIdsByNameIlike(query: string): Promise<string[] | null> {
+  const pattern = sanitizeIlikePattern(query)
+  if (!pattern) return null
+
+  const supabase = await createClient()
+  // Prefer filter builder over string-concatenated `.or(...)` filter lists.
+  const [{ data: byFullName }, { data: byDisplayName }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id')
+      .eq('role', 'student')
+      .ilike('full_name', pattern),
+    supabase
+      .from('profiles')
+      .select('id')
+      .eq('role', 'student')
+      .ilike('display_name', pattern),
+  ])
+
+  const ids = new Set<string>()
+  for (const row of byFullName ?? []) ids.add(String((row as { id: string }).id))
+  for (const row of byDisplayName ?? []) ids.add(String((row as { id: string }).id))
+  return [...ids]
+}
+
+/** Scheduled bookings for today and later (JST date key), ascending by slot start. */
+export async function fetchUpcomingCoachingBookingsForAdmin(
+  todayKey: string,
+): Promise<CoachingBookingWithDetails[]> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('coaching_bookings')
+    .select(
+      '*, coaching_slots!inner(*), coaching_coaches(id, name), profiles(id, full_name, display_name)',
+    )
+    .eq('status', 'scheduled')
+    .gte('coaching_slots.slot_date', todayKey)
+    .order('starts_at', { ascending: true, foreignTable: 'coaching_slots' })
+
+  if (error) {
+    console.error('[coaching] upcoming admin bookings query failed:', error.message)
+    return []
+  }
+
+  return ((data as BookingRow[]) ?? []).map(mapBooking)
+}
+
+/**
+ * Past bookings (slot_date < today, not cancelled), newest first.
+ * Optional student-name search is applied before count/pagination.
+ */
+export async function fetchPastCoachingBookingsForAdmin(options: {
+  todayKey: string
+  page?: number
+  pageSize?: number
+  studentNameQuery?: string
+}): Promise<CoachingBookingsPage> {
+  const pageSize = options.pageSize ?? PAST_COACHING_BOOKINGS_PAGE_SIZE
+  const supabase = await createClient()
+
+  const studentIds = options.studentNameQuery?.trim()
+    ? await findStudentIdsByNameIlike(options.studentNameQuery)
+    : null
+
+  if (studentIds && studentIds.length === 0) {
+    return { bookings: [], page: 1, pageSize, totalCount: 0, totalPages: 0 }
+  }
+
+  const select =
+    '*, coaching_slots!inner(*), coaching_coaches(id, name), profiles(id, full_name, display_name)'
+
+  let countQuery = supabase
+    .from('coaching_bookings')
+    .select('id, coaching_slots!inner(slot_date)', { count: 'exact', head: true })
+    .neq('status', 'cancelled')
+    .lt('coaching_slots.slot_date', options.todayKey)
+
+  let dataQuery = supabase
+    .from('coaching_bookings')
+    .select(select)
+    .neq('status', 'cancelled')
+    .lt('coaching_slots.slot_date', options.todayKey)
+    .order('starts_at', { ascending: false, foreignTable: 'coaching_slots' })
+
+  if (studentIds) {
+    countQuery = countQuery.in('student_id', studentIds)
+    dataQuery = dataQuery.in('student_id', studentIds)
+  }
+
+  const { count, error: countError } = await countQuery
+  if (countError) {
+    console.error('[coaching] past admin bookings count failed:', countError.message)
+  }
+
+  const totalCount = count ?? 0
+  const totalPages = getTotalPages(totalCount, pageSize)
+  const page = parsePageParam(options.page ? String(options.page) : undefined, totalPages)
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
+
+  const { data, error } = await dataQuery.range(from, to)
+  if (error) {
+    console.error('[coaching] past admin bookings query failed:', error.message)
+    return { bookings: [], page, pageSize, totalCount, totalPages }
+  }
+
+  return {
+    bookings: ((data as BookingRow[]) ?? []).map(mapBooking),
+    page,
+    pageSize,
+    totalCount,
+    totalPages,
+  }
 }
 
 export async function fetchCoachingBookingBySlotId(
