@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import type { StudyLog } from '@/lib/study/chart-data'
 import { computeCurrentStudyStreak } from '@/lib/study/streak'
 import type { Textbook } from '@/types/textbook'
+import { fullNameKanaIlikePattern } from '@/lib/profiles/full-name-kana'
 
 function mapTextbook(book: Textbook): Textbook {
   return {
@@ -492,12 +493,19 @@ export async function fetchStudentsPaginated(options: {
 
   if (query) {
     const pattern = `%${query}%`
-    countQuery = countQuery.or(
-      `full_name.ilike.${pattern},display_name.ilike.${pattern},email.ilike.${pattern},student_code.ilike.${pattern},full_name_kana.ilike.${pattern}`,
-    )
-    dataQuery = dataQuery.or(
-      `full_name.ilike.${pattern},display_name.ilike.${pattern},email.ilike.${pattern},student_code.ilike.${pattern},full_name_kana.ilike.${pattern}`,
-    )
+    const kanaPattern = fullNameKanaIlikePattern(query)
+    const filters = [
+      `full_name.ilike.${pattern}`,
+      `display_name.ilike.${pattern}`,
+      `email.ilike.${pattern}`,
+      `student_code.ilike.${pattern}`,
+    ]
+    if (kanaPattern) {
+      filters.push(`full_name_kana.ilike.${kanaPattern}`)
+    }
+    const filterExpr = filters.join(',')
+    countQuery = countQuery.or(filterExpr)
+    dataQuery = dataQuery.or(filterExpr)
   }
 
   const { count, error: countError } = await countQuery

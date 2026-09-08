@@ -16,6 +16,7 @@ import { getTotalPages, parsePageParam } from '@/lib/pagination'
 import type { StudentListItemRow } from '@/lib/study/queries'
 import { sortStudentsByGradeThenKana } from '@/lib/tags/grade-order'
 import { fetchGradeTagNamesByStudentId } from '@/lib/tags/queries'
+import { fullNameKanaIlikePattern } from '@/lib/profiles/full-name-kana'
 
 type AdminClient = NonNullable<ReturnType<typeof createAdminClient>>
 
@@ -196,9 +197,17 @@ export async function fetchMatchingStudentSortRows(options: {
     }
     if (query) {
       const pattern = `%${query}%`
-      q = q.or(
-        `full_name.ilike.${pattern},display_name.ilike.${pattern},email.ilike.${pattern},student_code.ilike.${pattern},full_name_kana.ilike.${pattern}`,
-      )
+      const kanaPattern = fullNameKanaIlikePattern(query)
+      const filters = [
+        `full_name.ilike.${pattern}`,
+        `display_name.ilike.${pattern}`,
+        `email.ilike.${pattern}`,
+        `student_code.ilike.${pattern}`,
+      ]
+      if (kanaPattern) {
+        filters.push(`full_name_kana.ilike.${kanaPattern}`)
+      }
+      q = q.or(filters.join(','))
     }
     return q
   })

@@ -36,6 +36,14 @@ fallback — this app treats missing kana as null).
 
 ## Permissions
 
-059 does **not** alter RLS or GRANTs. Students still cannot change
-`full_name_kana` (trigger mirrors `student_code` protection). Only an
-authenticated admin session updating via existing admin paths succeeds.
+059 does **not** alter RLS or table GRANTs on `profiles`. Students still cannot
+change `full_name_kana` (trigger mirrors `student_code` protection). Only an
+authenticated **admin** session updating via existing admin paths succeeds.
+`protect_full_name_kana()` EXECUTE is revoked from `anon` / `authenticated`
+(trigger still runs).
+
+## Old app while 059 is live
+
+Old Production signup does not send `full_name_kana` metadata → column stays
+`null` → signup still succeeds. Invalid metadata is coerced to `null` inside
+`handle_new_user` so auth/profile creation cannot desync on CHECK failure.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   FULL_NAME_KANA_MAX_LENGTH,
+  fullNameKanaIlikePattern,
   normalizeFullNameKanaInput,
   parseFullNameKana,
 } from '@/lib/profiles/full-name-kana'
@@ -62,5 +63,18 @@ describe('parseFullNameKana', () => {
     expect(parseFullNameKana('やまだ\u0000たろう', { required: true }).ok).toBe(false)
     expect(parseFullNameKana('山田 太郎', { required: true }).ok).toBe(false)
     expect(parseFullNameKana('yamada', { required: true }).ok).toBe(false)
+  })
+})
+
+describe('fullNameKanaIlikePattern', () => {
+  it('normalizes katakana search to hiragana pattern', () => {
+    expect(fullNameKanaIlikePattern('ヤマダ')).toBe('%やまだ%')
+    expect(fullNameKanaIlikePattern('やまだ')).toBe('%やまだ%')
+  })
+
+  it('returns null for empty or non-kana queries', () => {
+    expect(fullNameKanaIlikePattern('')).toBeNull()
+    expect(fullNameKanaIlikePattern('山田')).toBeNull()
+    expect(fullNameKanaIlikePattern('%%%')).toBeNull()
   })
 })

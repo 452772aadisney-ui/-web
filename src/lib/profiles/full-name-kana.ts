@@ -109,3 +109,19 @@ export function parseFullNameKana(
 export function fullNameKanaSortKey(kana: string | null | undefined): string | null {
   return normalizeFullNameKanaInput(kana)
 }
+
+/**
+ * Build an ilike pattern for searching stored full_name_kana.
+ * Uses hiragana-normalized input so カタカナ searches match saved ひらがな.
+ * Returns null when the query has no usable kana after normalize+sanitize.
+ */
+export function fullNameKanaIlikePattern(rawQuery: string): string | null {
+  const normalized = normalizeFullNameKanaInput(rawQuery)
+  if (!normalized) return null
+  const cleaned = normalized.replace(/[%_,.()\\]/g, '')
+  if (!cleaned) return null
+  if (!/^[\u3041-\u3096ー・]+(?: [\u3041-\u3096ー・]+)*$/u.test(cleaned)) {
+    return null
+  }
+  return `%${cleaned}%`
+}

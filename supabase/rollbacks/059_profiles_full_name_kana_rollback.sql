@@ -47,6 +47,9 @@ alter table public.profiles
 alter table public.profiles
   drop constraint if exists profiles_full_name_kana_not_blank;
 
+alter table public.profiles
+  drop constraint if exists profiles_full_name_kana_charset;
+
 -- WARNING: drops kana values. Profiles rows themselves are kept.
 alter table public.profiles
   drop column if exists full_name_kana;

@@ -9,9 +9,11 @@ import {
 import { getWeekdays, getWeekStartMonday, parseDateKey } from '@/lib/coaching/week'
 import { getTotalPages, parsePageParam } from '@/lib/pagination'
 import { sanitizeIlikePattern } from '@/lib/supabase/ilike'
+import { fullNameKanaIlikePattern } from '@/lib/profiles/full-name-kana'
 import { fetchStudentList } from '@/lib/study/queries'
 import { isKisotsuGradeTag } from '@/lib/tags/grade-order'
 import { fetchGradeTagNamesByStudentId } from '@/lib/tags/queries'
+import { comparePastCoachingBookingSortKeys } from '@/lib/coaching/past-booking-order'
 import type {
   AvailableCoachingSlot,
   CoachingBooking,
@@ -326,9 +328,11 @@ async function findStudentIdsByNameIlike(query: string): Promise<string[]> {
   // Non-empty search that sanitizes to nothing must not match all students.
   if (!pattern) return []
 
+  const kanaPattern = fullNameKanaIlikePattern(query)
+
   const supabase = await createClient()
   // Prefer filter builder over string-concatenated `.or(...)` filter lists.
-  const [{ data: byFullName }, { data: byDisplayName }, { data: byKana }] = await Promise.all([
+  const searches = [
     supabase
       .from('profiles')
       .select('id')
@@ -339,17 +343,23 @@ async function findStudentIdsByNameIlike(query: string): Promise<string[]> {
       .select('id')
       .eq('role', 'student')
       .ilike('display_name', pattern),
-    supabase
-      .from('profiles')
-      .select('id')
-      .eq('role', 'student')
-      .ilike('full_name_kana', pattern),
-  ])
+  ]
+  if (kanaPattern) {
+    searches.push(
+      supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', 'student')
+        .ilike('full_name_kana', kanaPattern),
+    )
+  }
+
+  const results = await Promise.all(searches)
 
   const ids = new Set<string>()
-  for (const row of byFullName ?? []) ids.add(String((row as { id: string }).id))
-  for (const row of byDisplayName ?? []) ids.add(String((row as { id: string }).id))
-  for (const row of byKana ?? []) ids.add(String((row as { id: string }).id))
+  for (const { data } of results) {
+    for (const row of data ?? []) ids.add(String((row as { id: string }).id))
+  }
   return [...ids]
 }
 
@@ -377,8 +387,11 @@ export async function fetchUpcomingCoachingBookingsForAdmin(
 
 /**
  * Past bookings (slot_date < today, not cancelled), newest date first.
- * Ordered from coaching_slots as the root so date/time order applies before range
- * (foreignTable .order on nested slots does not reliably sort parent booking rows).
+ *
+ * Ordering is booking-unit (not slot-unit): a slot may have multiple historical
+ * non-cancelled rows after unique(slot_id) was relaxed to scheduled-only (022).
+ * Light sort keys are loaded for the filtered set, sorted, then paged; details
+ * for the page are fetched in one query (no N+1).
  */
 export async function fetchPastCoachingBookingsForAdmin(options: {
   todayKey: string
@@ -398,113 +411,85 @@ export async function fetchPastCoachingBookingsForAdmin(options: {
     }
   }
 
-  const select = `
-    id,
-    slot_date,
-    start_time,
-    starts_at,
-    ends_at,
-    coach_id,
-    is_open,
-    created_at,
-    coaching_bookings!inner(
-      id,
-      slot_id,
-      student_id,
-      coach_id,
-      student_note,
-      status,
-      google_calendar_event_id,
-      booked_at,
-      created_at,
-      updated_at,
-      coaching_coaches(id, name),
-      profiles(id, full_name, display_name)
-    )
-  `
-
-  let countQuery = supabase
-    .from('coaching_slots')
-    .select('id, coaching_bookings!inner(id)', { count: 'exact', head: true })
-    .lt('slot_date', options.todayKey)
-    .neq('coaching_bookings.status', 'cancelled')
-
-  let dataQuery = supabase
-    .from('coaching_slots')
-    .select(select)
-    .lt('slot_date', options.todayKey)
-    .neq('coaching_bookings.status', 'cancelled')
-    .order('slot_date', { ascending: false })
-    .order('start_time', { ascending: true })
-    .order('id', { ascending: true })
-
-  if (studentIds) {
-    countQuery = countQuery.in('coaching_bookings.student_id', studentIds)
-    dataQuery = dataQuery.in('coaching_bookings.student_id', studentIds)
+  type PastSortKeyRow = {
+    id: string
+    coaching_slots:
+      | { slot_date: string | null; start_time: string | null }
+      | { slot_date: string | null; start_time: string | null }[]
   }
 
-  const { count, error: countError } = await countQuery
-  if (countError) {
-    console.error('[coaching] past admin bookings count failed:', countError.message)
+  const sortKeys: Array<{ id: string; slot_date: string; start_time: string }> = []
+  const PAGE = 1000
+  let fromKey = 0
+  for (;;) {
+    let keyQuery = supabase
+      .from('coaching_bookings')
+      .select('id, coaching_slots!inner(slot_date, start_time)')
+      .neq('status', 'cancelled')
+      .lt('coaching_slots.slot_date', options.todayKey)
+      .order('id', { ascending: true })
+      .range(fromKey, fromKey + PAGE - 1)
+
+    if (studentIds) {
+      keyQuery = keyQuery.in('student_id', studentIds)
+    }
+
+    const { data, error } = await keyQuery
+    if (error) {
+      console.error('[coaching] past admin bookings sort-key query failed:', error.message)
+      return { bookings: [], page: 1, pageSize, totalCount: 0, totalPages: 0 }
+    }
+
+    const batch = (data as PastSortKeyRow[] | null) ?? []
+    for (const row of batch) {
+      const slot = Array.isArray(row.coaching_slots)
+        ? row.coaching_slots[0]
+        : row.coaching_slots
+      if (!slot?.slot_date) continue
+      sortKeys.push({
+        id: String(row.id),
+        slot_date: String(slot.slot_date),
+        start_time: String(slot.start_time ?? '').slice(0, 5),
+      })
+    }
+
+    if (batch.length < PAGE) break
+    fromKey += PAGE
   }
 
-  const totalCount = count ?? 0
+  sortKeys.sort(comparePastCoachingBookingSortKeys)
+
+  const totalCount = sortKeys.length
   const totalPages = getTotalPages(totalCount, pageSize)
   const page = parsePageParam(options.page ? String(options.page) : undefined, totalPages)
   const from = (page - 1) * pageSize
-  const to = from + pageSize - 1
+  const pageIds = sortKeys.slice(from, from + pageSize).map((row) => row.id)
 
-  const { data, error } = await dataQuery.range(from, to)
-  if (error) {
-    console.error('[coaching] past admin bookings query failed:', error.message)
+  if (pageIds.length === 0) {
     return { bookings: [], page, pageSize, totalCount, totalPages }
   }
 
-  type PastBookingNested = CoachingBooking & {
-    coaching_coaches: { id: string; name: string } | { id: string; name: string }[]
-    profiles?:
-      | { id: string; full_name: string; display_name: string }
-      | { id: string; full_name: string; display_name: string }[]
-      | null
+  const select =
+    '*, coaching_slots!inner(*), coaching_coaches(id, name), profiles(id, full_name, display_name)'
+
+  const { data, error } = await supabase
+    .from('coaching_bookings')
+    .select(select)
+    .in('id', pageIds)
+
+  if (error) {
+    console.error('[coaching] past admin bookings detail query failed:', error.message)
+    return { bookings: [], page, pageSize, totalCount, totalPages }
   }
 
-  type PastSlotRow = CoachingSlot & {
-    coaching_bookings: PastBookingNested | PastBookingNested[]
+  const byId = new Map<string, CoachingBookingWithDetails>()
+  for (const row of (data as BookingRow[]) ?? []) {
+    byId.set(row.id, mapBooking(row))
   }
 
-  function firstRelation<T>(value: T | T[] | null | undefined): T | null {
-    if (value == null) return null
-    return Array.isArray(value) ? (value[0] ?? null) : value
-  }
-
-  const bookings: CoachingBookingWithDetails[] = []
-  for (const slotRow of (data as unknown as PastSlotRow[] | null) ?? []) {
-    const nested = slotRow.coaching_bookings
-    const bookingList = Array.isArray(nested) ? nested : nested ? [nested] : []
-    bookingList.sort((a, b) => a.id.localeCompare(b.id))
-    const slot: CoachingSlot = {
-      id: slotRow.id,
-      coach_id: slotRow.coach_id,
-      slot_date: slotRow.slot_date,
-      start_time: slotRow.start_time,
-      starts_at: slotRow.starts_at,
-      ends_at: slotRow.ends_at,
-      is_open: slotRow.is_open,
-      created_at: slotRow.created_at,
-    }
-    for (const booking of bookingList) {
-      const coach = firstRelation(booking.coaching_coaches)
-      if (!coach) continue
-      bookings.push(
-        mapBooking({
-          ...booking,
-          coaching_slots: slot,
-          coaching_coaches: coach,
-          profiles: firstRelation(booking.profiles),
-        }),
-      )
-    }
-  }
+  const bookings = pageIds
+    .map((id) => byId.get(id))
+    .filter((row): row is CoachingBookingWithDetails => Boolean(row))
 
   return {
     bookings,

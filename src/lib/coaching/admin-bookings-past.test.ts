@@ -64,13 +64,11 @@ describe('past coaching bookings search and pagination wiring', () => {
     expect(queries).toContain('findStudentIdsByNameIlike')
     expect(queries).toContain('sanitizes to nothing must not match all students')
     expect(queries).toContain('.ilike(')
-    expect(queries).toContain('range(from, to)')
-    expect(queries).toContain(".from('coaching_slots')")
-    expect(queries).toContain(".order('slot_date', { ascending: false })")
-    expect(queries).toContain(".order('start_time', { ascending: true })")
+    expect(queries).toContain('comparePastCoachingBookingSortKeys')
+    expect(queries).toContain(".from('coaching_bookings')")
+    expect(queries).toContain('fullNameKanaIlikePattern')
     expect(queries).not.toContain(
       ".order('slot_date', { ascending: false, foreignTable: 'coaching_slots' })",
     )
-    expect(queries).toContain('full_name_kana')
   })
 })

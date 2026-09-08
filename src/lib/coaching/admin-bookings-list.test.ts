@@ -71,19 +71,14 @@ describe('future booking date grouping', () => {
 })
 
 describe('past booking query order wiring', () => {
-  it('orders from coaching_slots root: slot_date DESC then start_time ASC then id', () => {
+  it('orders booking-unit sort keys before paging (not slot-root range)', () => {
     const queries = readFileSync(
       path.join(process.cwd(), 'src/lib/coaching/queries.ts'),
       'utf8',
     )
     const pastFn = queries.slice(queries.indexOf('fetchPastCoachingBookingsForAdmin'))
-    expect(pastFn).toContain(".from('coaching_slots')")
-    expect(pastFn).toContain(".order('slot_date', { ascending: false })")
-    expect(pastFn).toContain(".order('start_time', { ascending: true })")
-    expect(pastFn).toContain(".order('id', { ascending: true })")
+    expect(pastFn).toContain('comparePastCoachingBookingSortKeys')
+    expect(pastFn).toContain(".from('coaching_bookings')")
     expect(pastFn).not.toContain("foreignTable: 'coaching_slots'")
-    expect(pastFn.indexOf("slot_date', { ascending: false")).toBeLessThan(
-      pastFn.indexOf("start_time', { ascending: true"),
-    )
   })
 })
