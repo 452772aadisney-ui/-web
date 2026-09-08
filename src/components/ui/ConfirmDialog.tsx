@@ -52,7 +52,7 @@ export function ConfirmDialog({
       ref={dialogRef}
       role="dialog"
       aria-modal="true"
-      className="w-[min(24rem,calc(100vw-2rem))] rounded-2xl border border-border bg-card p-0 text-foreground shadow-lg backdrop:bg-black/40"
+      className="fixed inset-0 z-50 m-auto max-h-[min(90dvh,24rem)] w-[min(24rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-border bg-card p-0 text-foreground shadow-lg backdrop:bg-black/40"
       aria-labelledby={titleId}
       aria-describedby={descId}
       onClose={onCancel}

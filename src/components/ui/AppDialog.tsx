@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { cn } from '@/lib/utils'
 
 type AppDialogProps = {
   open: boolean
@@ -12,10 +13,15 @@ type AppDialogProps = {
   children: ReactNode
   /** Optional footer rendered below the scrollable body. */
   footer?: ReactNode
+  /** Merged after base shell (width / max-height overrides welcome). */
   className?: string
   /** Initial focus target; defaults to the close button. */
   initialFocusRef?: React.RefObject<HTMLElement | null>
 }
+
+/** Centering survives Tailwind Preflight (`margin: 0` on dialog). */
+const APP_DIALOG_SHELL =
+  'fixed inset-0 z-50 m-auto flex max-h-[min(90dvh,48rem)] w-[min(36rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border bg-card p-0 text-foreground shadow-lg backdrop:bg-black/40'
 
 /**
  * Accessible modal using native `<dialog showModal>` (focus trap + restore).
@@ -84,10 +90,7 @@ export function AppDialog({
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={description ? descId : undefined}
-      className={
-        className ??
-        'w-[min(36rem,calc(100vw-2rem))] max-h-[min(90vh,48rem)] overflow-hidden rounded-2xl border border-border bg-card p-0 text-foreground shadow-lg backdrop:bg-black/40'
-      }
+      className={cn(APP_DIALOG_SHELL, className)}
       onClose={() => {
         if (ignoreCloseEventRef.current) return
         requestClose()
@@ -98,7 +101,7 @@ export function AppDialog({
         requestClose()
       }}
     >
-      <div className="flex max-h-[min(90vh,48rem)] flex-col">
+      <div className="flex min-h-0 max-h-[min(90dvh,48rem)] w-full flex-col">
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-5 py-4">
           <div className="min-w-0">
             <h2 id={titleId} className="text-base font-bold">

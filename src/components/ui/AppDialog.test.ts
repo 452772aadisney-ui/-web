@@ -20,4 +20,12 @@ describe('AppDialog', () => {
     expect(source).toContain('Unmount while open')
     expect(source).toContain('dialog.close()')
   })
+
+  it('centers the modal despite Tailwind margin reset', () => {
+    expect(source).toContain('fixed inset-0')
+    expect(source).toContain('m-auto')
+    expect(source).toContain('dvh')
+    expect(source).toContain('calc(100vw-2rem)')
+    expect(source).toContain('overflow-y-auto')
+  })
 })

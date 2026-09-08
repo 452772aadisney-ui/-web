@@ -315,7 +315,7 @@ function PreviewCoachDialog({
       title="生徒画面での表示"
       description={coach.name}
       onClose={onClose}
-      className="w-[min(28rem,calc(100vw-2rem))] max-h-[min(90vh,40rem)] overflow-hidden rounded-2xl border border-border bg-card p-0 text-foreground shadow-lg backdrop:bg-black/40"
+      className="w-[min(28rem,calc(100vw-2rem))] max-h-[min(90dvh,40rem)]"
     >
       <CoachProfileDisplay coach={coach} variant="plain" />
     </AppDialog>
