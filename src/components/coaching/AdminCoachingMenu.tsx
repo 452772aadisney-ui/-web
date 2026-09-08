@@ -11,8 +11,8 @@ const menuItems = [
   },
   {
     href: '/admin/coaching/instructors',
-    label: '講師追加',
-    description: '担当講師の追加・編集',
+    label: '講師管理',
+    description: '担当講師の登録・編集',
     iconSrc: ADMIN_MYPAGE_MENU_ICONS.students,
   },
   {

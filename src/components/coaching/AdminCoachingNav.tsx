@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
   { href: '/admin/coaching/slots', label: '枠設定' },
-  { href: '/admin/coaching/instructors', label: '講師追加' },
+  { href: '/admin/coaching/instructors', label: '講師管理' },
   { href: '/admin/coaching/bookings', label: '予約確認' },
   { href: '/admin/coaching/karte', label: 'カルテ' },
 ] as const

@@ -155,14 +155,24 @@ export async function updateCoachingCoach(
   return { success: true }
 }
 
-export async function deleteCoachingCoach(formData: FormData): Promise<void> {
-  if (await assertAdmin()) return
-  const id = String(formData.get('id') ?? '')
-  if (!id) return
+export async function deleteCoachingCoach(formData: FormData): Promise<CoachingActionState> {
+  const authError = await assertAdmin()
+  if (authError) return { error: authError }
+
+  const id = String(formData.get('id') ?? '').trim()
+  if (!id) return { error: '講師が指定されていません' }
 
   const supabase = await createClient()
-  await supabase.from('coaching_coaches').delete().eq('id', id)
+  const { error } = await supabase.from('coaching_coaches').delete().eq('id', id)
+
+  if (error) {
+    return {
+      error: '削除できません。予約や枠で使用中の可能性があります。',
+    }
+  }
+
   revalidateCoachingPaths()
+  return { success: true }
 }
 
 export async function loadCoachingGridForWeek(

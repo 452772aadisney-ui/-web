@@ -36,7 +36,7 @@ export function AdminCoachingSlotsManager({
         <p className="mt-4 text-sm text-muted">
           先に
           <a href="/admin/coaching/instructors" className="mx-1 text-primary hover:underline">
-            講師追加
+            講師管理
           </a>
           で担当講師を登録してください。
         </p>

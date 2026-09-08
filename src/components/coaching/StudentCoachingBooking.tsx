@@ -446,7 +446,9 @@ export function StudentCoachingBooking({
                 ))}
               </div>
             )}
-            {selectedCoach && <CoachProfileDisplay coach={selectedCoach} />}
+            {selectedCoach && (
+              <CoachProfileDisplay coach={selectedCoach} variant="plain" className="mt-4" />
+            )}
           </section>
 
           {selectedCoachId && (
