@@ -28,6 +28,12 @@ describe('past coaching bookings search and pagination wiring', () => {
     expect(formatPageItemRangeLabel(1, 20, 5)).toBe('1～5件を表示')
   })
 
+  it('treats sanitized-empty search as zero matches, not all rows', () => {
+    expect(sanitizeIlikePattern('%%%')).toBeNull()
+    expect(sanitizeIlikePattern('___')).toBeNull()
+    expect(sanitizeIlikePattern('()')).toBeNull()
+  })
+
   it('wires pastPage, pastQ, edit button, and shared status labels', () => {
     const page = readFileSync(
       path.join(process.cwd(), 'src/app/admin/coaching/bookings/page.tsx'),
@@ -47,6 +53,7 @@ describe('past coaching bookings search and pagination wiring', () => {
     expect(page).toContain('sortStudentsByGradeThenName')
     expect(page).toContain('fetchPastCoachingBookingsForAdmin')
     expect(page).toContain('ScrollToSectionOnParam')
+    expect(page).toContain('paramValue={pastPage}')
     expect(page).toContain('検索を解除')
     expect(page).toContain('pastPage omitted')
     expect(ui).toContain('編集')
@@ -54,6 +61,7 @@ describe('past coaching bookings search and pagination wiring', () => {
     expect(ui).toContain('COACHING_BOOKING_STATUS_LABELS')
     expect(ui).not.toMatch(/onClick=\{\(\) => .*booking/)
     expect(queries).toContain('findStudentIdsByNameIlike')
+    expect(queries).toContain('sanitizes to nothing must not match all students')
     expect(queries).toContain('.ilike(')
     expect(queries).toContain('range(from, to)')
   })

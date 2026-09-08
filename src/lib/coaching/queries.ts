@@ -321,9 +321,10 @@ export type CoachingBookingsPage = {
   totalPages: number
 }
 
-async function findStudentIdsByNameIlike(query: string): Promise<string[] | null> {
+async function findStudentIdsByNameIlike(query: string): Promise<string[]> {
   const pattern = sanitizeIlikePattern(query)
-  if (!pattern) return null
+  // Non-empty search that sanitizes to nothing must not match all students.
+  if (!pattern) return []
 
   const supabase = await createClient()
   // Prefer filter builder over string-concatenated `.or(...)` filter lists.
@@ -380,13 +381,14 @@ export async function fetchPastCoachingBookingsForAdmin(options: {
 }): Promise<CoachingBookingsPage> {
   const pageSize = options.pageSize ?? PAST_COACHING_BOOKINGS_PAGE_SIZE
   const supabase = await createClient()
+  const trimmedQuery = options.studentNameQuery?.trim() ?? ''
 
-  const studentIds = options.studentNameQuery?.trim()
-    ? await findStudentIdsByNameIlike(options.studentNameQuery)
-    : null
-
-  if (studentIds && studentIds.length === 0) {
-    return { bookings: [], page: 1, pageSize, totalCount: 0, totalPages: 0 }
+  let studentIds: string[] | null = null
+  if (trimmedQuery) {
+    studentIds = await findStudentIdsByNameIlike(trimmedQuery)
+    if (studentIds.length === 0) {
+      return { bookings: [], page: 1, pageSize, totalCount: 0, totalPages: 0 }
+    }
   }
 
   const select =

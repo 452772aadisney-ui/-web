@@ -134,7 +134,7 @@ export default async function AdminCoachingBookingsPage({
       <div className="mt-8">
         <ScrollToSectionOnParam
           sectionId="past-coaching-bookings"
-          paramValue={`${pastPage}:${pastQ}`}
+          paramValue={pastPage}
         />
         <AdminCoachingBookings
           todayBookings={todayBookings}
