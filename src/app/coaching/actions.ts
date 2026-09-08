@@ -24,7 +24,7 @@ import {
   parseCoachCheckboxList,
   parseCoachStringList,
 } from '@/lib/coaching/coach-profile'
-import { getDayWindow } from '@/lib/coaching/week'
+import { getDayWindow, getWeekdays } from '@/lib/coaching/week'
 import type { AvailableCoachingSlot } from '@/types/coaching'
 
 export type CoachingActionState = {
@@ -204,6 +204,19 @@ export async function loadAvailableCoachingSlotsForWindow(
   if (!coachId || !windowStart) return []
 
   const dateKeys = getDayWindow(windowStart).map((day) => day.date)
+  return fetchAvailableCoachingSlots(coachId, dateKeys)
+}
+
+/** Admin proxy booking: available slots for Mon–Sun week starting at weekStartMonday. */
+export async function loadAvailableCoachingSlotsForWeek(
+  coachId: string,
+  weekStartMonday: string,
+): Promise<AvailableCoachingSlot[]> {
+  const authError = await assertAdmin()
+  if (authError) return []
+  if (!coachId || !weekStartMonday) return []
+
+  const dateKeys = getWeekdays(weekStartMonday).map((day) => day.date)
   return fetchAvailableCoachingSlots(coachId, dateKeys)
 }
 

@@ -8,24 +8,20 @@ import { AdminCoachingBookings } from '@/components/coaching/AdminCoachingBookin
 import { AdminCoachingProxyBooking } from '@/components/coaching/AdminCoachingProxyBooking'
 import { Pagination } from '@/components/ui/Pagination'
 import { ScrollToSectionOnParam } from '@/components/ui/ScrollToSectionOnParam'
+import { splitUpcomingCoachingBookings } from '@/lib/coaching/admin-bookings-list'
 import {
   fetchAvailableCoachingSlots,
   fetchCoachingCoaches,
   fetchPastCoachingBookingsForAdmin,
   fetchUpcomingCoachingBookingsForAdmin,
-  getTodayDateKey,
   PAST_COACHING_BOOKINGS_PAGE_SIZE,
 } from '@/lib/coaching/queries'
-import { getDayWindow } from '@/lib/coaching/week'
+import { getWeekStartMonday, getWeekdays } from '@/lib/coaching/week'
 import { formatPageItemRangeLabel, parsePageParam } from '@/lib/pagination'
 import { getJstDateKey } from '@/lib/study/dates'
 import { fetchStudentList } from '@/lib/study/queries'
-import {
-  isKisotsuGradeTag,
-  sortStudentsByGradeThenName,
-} from '@/lib/tags/grade-order'
+import { isKisotsuGradeTag } from '@/lib/tags/grade-order'
 import { fetchGradeTagNamesByStudentId } from '@/lib/tags/queries'
-import { splitUpcomingCoachingBookings } from '@/lib/coaching/admin-bookings-list'
 
 export default async function AdminCoachingBookingsPage({
   searchParams,
@@ -44,9 +40,12 @@ export default async function AdminCoachingBookingsPage({
   if (profile.role !== 'admin') redirect(getDashboardPathForRole('student'))
 
   const params = await searchParams
-  const windowStart = params.start ?? getTodayDateKey()
-  const dateKeys = getDayWindow(windowStart).map((day) => day.date)
   const todayKey = getJstDateKey()
+  // `start` is treated as a date within the target week (normalized to Monday).
+  const weekStart = params.start
+    ? getWeekStartMonday(params.start)
+    : getWeekStartMonday()
+  const dateKeys = getWeekdays(weekStart).map((day) => day.date)
   const pastQ = params.pastQ?.trim() ?? ''
   const pastPageRaw = params.pastPage ? parseInt(params.pastPage, 10) : 1
 
@@ -64,12 +63,15 @@ export default async function AdminCoachingBookingsPage({
       fetchGradeTagNamesByStudentId(),
     ])
 
-  const students = sortStudentsByGradeThenName(
-    allStudents.filter(
-      (student) => !isKisotsuGradeTag(gradeTagByStudentId.get(student.id)),
-    ),
-    gradeTagByStudentId,
+  // Keep 既卒 out of proxy candidates; combobox groups the rest (incl. 未設定).
+  const students = allStudents.filter(
+    (student) => !isKisotsuGradeTag(gradeTagByStudentId.get(student.id)),
   )
+
+  const gradeTagRecord: Record<string, string> = {}
+  for (const [id, name] of gradeTagByStudentId) {
+    gradeTagRecord[id] = name
+  }
 
   const { todayBookings, futureBookings } = splitUpcomingCoachingBookings(
     upcomingBookings,
@@ -99,7 +101,7 @@ export default async function AdminCoachingBookingsPage({
 
   const preserveParams = {
     coach: selectedCoachId ?? undefined,
-    start: params.start,
+    start: weekStart,
     student: params.student,
     pastQ: pastQ || undefined,
   }
@@ -110,7 +112,6 @@ export default async function AdminCoachingBookingsPage({
     if (preserveParams.start) next.set('start', preserveParams.start)
     if (preserveParams.student) next.set('student', preserveParams.student)
     if (nextQ) next.set('pastQ', nextQ)
-    // pastPage omitted → page 1
     const qs = next.toString()
     return qs ? `/admin/coaching/bookings?${qs}` : '/admin/coaching/bookings'
   }
@@ -125,8 +126,9 @@ export default async function AdminCoachingBookingsPage({
       <AdminCoachingProxyBooking
         coaches={coaches}
         students={students}
+        gradeTagByStudentId={gradeTagRecord}
         selectedCoachId={selectedCoachId}
-        windowStart={windowStart}
+        weekStart={weekStart}
         availableSlots={availableSlots}
         defaultStudentId={defaultStudentId}
       />

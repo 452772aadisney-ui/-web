@@ -5,7 +5,7 @@ import { AdminPageShell } from '@/components/layout/AdminPageShell'
 import { AdminCoachingNav } from '@/components/coaching/AdminCoachingNav'
 import { AdminCoachingSlotsManager } from '@/components/coaching/AdminCoachingSlotsManager'
 import { fetchCoachingCoaches, fetchCoachingGridForWeek } from '@/lib/coaching/queries'
-import { getWeekStartMonday, parseDateKey } from '@/lib/coaching/week'
+import { getWeekStartMonday } from '@/lib/coaching/week'
 
 export default async function AdminCoachingSlotsPage({
   searchParams,
@@ -19,7 +19,7 @@ export default async function AdminCoachingSlotsPage({
 
   const params = await searchParams
   const weekStart = params.week
-    ? getWeekStartMonday(parseDateKey(params.week))
+    ? getWeekStartMonday(params.week)
     : getWeekStartMonday()
 
   const coaches = await fetchCoachingCoaches()

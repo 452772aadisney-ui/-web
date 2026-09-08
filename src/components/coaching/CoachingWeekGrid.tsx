@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition, type PointerEvent } from 'react'
 import {
+  loadAvailableCoachingSlotsForWeek,
   loadAvailableCoachingSlotsForWindow,
   loadCoachingGridForWeek,
   setCoachingSlotsOpen,
@@ -23,7 +24,7 @@ import type { CoachingGridSlot } from '@/lib/coaching/queries'
 import { cn } from '@/lib/utils'
 
 interface CoachingWeekGridProps {
-  mode: 'admin' | 'student'
+  mode: 'admin' | 'student' | 'proxy'
   coachId: string
   weekStart?: string
   windowStart?: string
@@ -47,11 +48,13 @@ function WeekNav({
   pending,
   onPrevious,
   onNext,
+  labels = 'arrows',
 }: {
   weekStart: string
   pending: boolean
   onPrevious: () => void
   onNext: () => void
+  labels?: 'arrows' | 'text'
 }) {
   return (
     <div className="mb-4 flex items-center justify-between gap-3">
@@ -62,7 +65,7 @@ function WeekNav({
         className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-background disabled:opacity-60"
         aria-label="前の週"
       >
-        ←
+        {labels === 'text' ? '前の週' : '←'}
       </button>
       <p className="text-sm font-medium">{formatWeekRange(weekStart)}</p>
       <button
@@ -72,7 +75,7 @@ function WeekNav({
         className="rounded-lg border border-border px-3 py-2 text-sm hover:bg-background disabled:opacity-60"
         aria-label="次の週"
       >
-        →
+        {labels === 'text' ? '次の週' : '→'}
       </button>
     </div>
   )
@@ -318,7 +321,7 @@ export function CoachingWeekGrid({
   const [pending, startTransition] = useTransition()
 
   useEffect(() => {
-    if (mode !== 'admin') return
+    if (mode !== 'admin' && mode !== 'proxy') return
     setWeekStart(initialWeekStart)
   }, [coachId, initialWeekStart, mode])
 
@@ -345,6 +348,20 @@ export function CoachingWeekGrid({
     })
   }, [coachId, windowStart, mode])
 
+  useEffect(() => {
+    if (mode !== 'proxy') return
+    setAvailableSlots(initialAvailableSlots)
+  }, [coachId, initialWeekStart, initialAvailableSlots, mode])
+
+  useEffect(() => {
+    if (mode !== 'proxy' || !coachId || !weekStart) return
+
+    startTransition(async () => {
+      const slots = await loadAvailableCoachingSlotsForWeek(coachId, weekStart)
+      setAvailableSlots(slots)
+    })
+  }, [coachId, weekStart, mode])
+
   function refreshAdminGrid(nextWeekStart: string) {
     startTransition(async () => {
       const slots = await loadCoachingGridForWeek(coachId, nextWeekStart)
@@ -359,11 +376,19 @@ export function CoachingWeekGrid({
     })
   }
 
+  function refreshProxySlots(nextWeekStart: string) {
+    startTransition(async () => {
+      const slots = await loadAvailableCoachingSlotsForWeek(coachId, nextWeekStart)
+      setAvailableSlots(slots)
+    })
+  }
+
   function goWeek(offset: number) {
     const next = shiftWeekStart(weekStart, offset)
     setWeekStart(next)
     onNavigate?.()
-    refreshAdminGrid(next)
+    if (mode === 'proxy') refreshProxySlots(next)
+    else refreshAdminGrid(next)
   }
 
   function goWindow(offsetDays: number) {
@@ -424,6 +449,63 @@ export function CoachingWeekGrid({
 
         {!pending && availableSlots.length === 0 && (
           <p className="mt-4 text-sm text-muted">この期間に予約できる枠はありません。</p>
+        )}
+      </>
+    )
+  }
+
+  if (mode === 'proxy') {
+    return (
+      <>
+        <div className="rounded-2xl border border-border bg-white p-4 shadow-sm">
+          <WeekNav
+            weekStart={weekStart}
+            pending={pending}
+            onPrevious={() => goWeek(-1)}
+            onNext={() => goWeek(1)}
+            labels="text"
+          />
+
+          <div className={cn('grid grid-cols-7 gap-1.5 sm:gap-2', pending && 'opacity-60')}>
+            {getWeekdays(weekStart).map((day) => {
+              const daySlots = availableSlots
+                .filter((slot) => slot.slot_date === day.date)
+                .sort((a, b) => a.start_time.localeCompare(b.start_time))
+
+              return (
+                <div key={day.date} className="min-w-0">
+                  <div className="mb-2 text-center text-[11px] font-semibold text-muted sm:text-xs">
+                    {day.label}
+                  </div>
+                  <div className="flex flex-col gap-1 sm:gap-1.5">
+                    {daySlots.length === 0 ? (
+                      <div className="py-3 text-center text-[10px] text-muted sm:text-xs">—</div>
+                    ) : (
+                      daySlots.map((slot) => (
+                        <button
+                          key={slot.id}
+                          type="button"
+                          onClick={() => onSelectSlot?.(slot)}
+                          className={cn(
+                            'h-8 w-full rounded-full border text-[10px] font-medium transition sm:h-9 sm:text-xs',
+                            selectedSlotId === slot.id
+                              ? 'border-primary bg-primary text-white'
+                              : 'border-primary/30 bg-white text-primary hover:bg-blue-50',
+                          )}
+                        >
+                          {slot.start_time}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {!pending && availableSlots.length === 0 && (
+          <p className="mt-4 text-sm text-muted">この週に予約できる枠はありません。</p>
         )}
       </>
     )

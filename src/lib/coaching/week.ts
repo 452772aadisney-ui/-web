@@ -1,3 +1,5 @@
+import { getTodayDateKey } from '@/lib/coaching/slot-times'
+
 const WEEKDAY_LABELS = ['月', '火', '水', '木', '金', '土', '日'] as const
 
 export interface WeekDay {
@@ -19,8 +21,20 @@ export function parseDateKey(dateKey: string): Date {
   return new Date(y, m - 1, d)
 }
 
-export function getWeekStartMonday(date = new Date()): string {
-  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+/**
+ * Monday of the week containing `dateOrKey`.
+ * Default (no arg) uses JST today so Vercel UTC does not shift the week.
+ * String args are calendar date keys (`YYYY-MM-DD`).
+ */
+export function getWeekStartMonday(dateOrKey?: Date | string): string {
+  const dateKey =
+    typeof dateOrKey === 'string'
+      ? dateOrKey
+      : dateOrKey
+        ? toDateKey(dateOrKey)
+        : getTodayDateKey()
+
+  const d = parseDateKey(dateKey)
   const day = d.getDay()
   const diff = day === 0 ? -6 : 1 - day
   d.setDate(d.getDate() + diff)
@@ -72,7 +86,7 @@ function toWeekDay(date: Date): WeekDay {
   }
 }
 
-/** 生徒向け予約画面で一度に表示する日数 */
+/** 生徒向け予約画面で一度に表示する日数（ダッシュボード用） */
 export const COACHING_STUDENT_WINDOW_DAYS = 4
 
 /** 指定日から連続 n 日間（生徒向け予約画面） */

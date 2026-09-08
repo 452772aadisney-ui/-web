@@ -1,18 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import { splitUpcomingCoachingBookings } from '@/lib/coaching/admin-bookings-list'
+import {
+  groupCoachingBookingsByDate,
+  splitUpcomingCoachingBookings,
+} from '@/lib/coaching/admin-bookings-list'
 import type { CoachingBookingWithDetails } from '@/types/coaching'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 
 function booking(
   id: string,
   slotDate: string,
-  startsAt = `${slotDate}T01:00:00.000Z`,
+  startTime: string,
+  startsAt = `${slotDate}T${startTime}:00+09:00`,
 ): CoachingBookingWithDetails {
   return {
     id,
     slot_id: `slot-${id}`,
     student_id: 's1',
     coach_id: 'c1',
-    student_note: '',
+    student_note: id === 'note' ? '伝言です' : '',
     status: 'scheduled',
     google_calendar_event_id: null,
     booked_at: startsAt,
@@ -22,10 +28,10 @@ function booking(
       id: `slot-${id}`,
       coach_id: 'c1',
       slot_date: slotDate,
-      start_time: '10:00',
+      start_time: startTime,
       is_open: true,
       starts_at: startsAt,
-      ends_at: `${slotDate}T02:00:00.000Z`,
+      ends_at: startsAt,
       created_at: startsAt,
     },
     coach: { id: 'c1', name: '講師' },
@@ -33,19 +39,53 @@ function booking(
   }
 }
 
-describe('splitUpcomingCoachingBookings', () => {
-  it('splits today and future and sorts ascending by start', () => {
+describe('future booking date grouping', () => {
+  it('groups same day into one card and sorts dates/times ascending', () => {
+    const groups = groupCoachingBookingsByDate(
+      [
+        booking('b', '2026-09-10', '16:00'),
+        booking('a', '2026-09-09', '17:00'),
+        booking('c', '2026-09-09', '13:30'),
+        booking('d', '2026-09-09', '13:30'),
+      ],
+      'asc',
+    )
+
+    expect(groups.map((g) => g.dateKey)).toEqual(['2026-09-09', '2026-09-10'])
+    expect(groups[0]?.bookings.map((b) => b.id)).toEqual(['c', 'd', 'a'])
+    expect(groups).toHaveLength(2)
+  })
+
+  it('keeps today and future split with ascending times', () => {
     const { todayBookings, futureBookings } = splitUpcomingCoachingBookings(
       [
-        booking('f2', '2026-09-10', '2026-09-10T03:00:00.000Z'),
-        booking('t2', '2026-09-08', '2026-09-08T03:00:00.000Z'),
-        booking('f1', '2026-09-09', '2026-09-09T01:00:00.000Z'),
-        booking('t1', '2026-09-08', '2026-09-08T01:00:00.000Z'),
+        booking('f', '2026-09-10', '10:00'),
+        booking('t2', '2026-09-08', '16:00'),
+        booking('t1', '2026-09-08', '10:00'),
       ],
       '2026-09-08',
     )
-
     expect(todayBookings.map((b) => b.id)).toEqual(['t1', 't2'])
-    expect(futureBookings.map((b) => b.id)).toEqual(['f1', 'f2'])
+    expect(futureBookings.map((b) => b.id)).toEqual(['f'])
+  })
+})
+
+describe('past booking query order wiring', () => {
+  it('orders slot_date DESC then start_time ASC then id in the query', () => {
+    const queries = readFileSync(
+      path.join(process.cwd(), 'src/lib/coaching/queries.ts'),
+      'utf8',
+    )
+    const pastFn = queries.slice(queries.indexOf('fetchPastCoachingBookingsForAdmin'))
+    expect(pastFn).toContain(
+      ".order('slot_date', { ascending: false, foreignTable: 'coaching_slots' })",
+    )
+    expect(pastFn).toContain(
+      ".order('start_time', { ascending: true, foreignTable: 'coaching_slots' })",
+    )
+    expect(pastFn).toContain(".order('id', { ascending: true })")
+    expect(pastFn.indexOf("slot_date', { ascending: false")).toBeLessThan(
+      pastFn.indexOf("start_time', { ascending: true"),
+    )
   })
 })

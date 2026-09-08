@@ -1,15 +1,17 @@
 'use client'
 
-import { useActionState, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useActionState, useEffect, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   adminBookCoachingSlot,
   type CoachingActionState,
 } from '@/app/coaching/actions'
+import { AdminStudentCombobox } from '@/components/coaching/AdminStudentCombobox'
 import { CoachingWeekGrid } from '@/components/coaching/CoachingWeekGrid'
 import { formatCoachingBookingDateTime } from '@/lib/coaching/format'
 import { getPersonName } from '@/lib/auth/display-name'
 import { useActionToast } from '@/hooks/useActionToast'
+import type { StudentListItem } from '@/lib/tags/grade-order'
 import type { AvailableCoachingSlot, CoachingCoach } from '@/types/coaching'
 
 const initialState: CoachingActionState = {}
@@ -18,14 +20,10 @@ const fieldClass =
 
 interface AdminCoachingProxyBookingProps {
   coaches: CoachingCoach[]
-  students: Array<{
-    id: string
-    full_name: string
-    display_name: string
-    student_code: string | null
-  }>
+  students: StudentListItem[]
+  gradeTagByStudentId: Record<string, string>
   selectedCoachId: string | null
-  windowStart: string
+  weekStart: string
   availableSlots: AvailableCoachingSlot[]
   defaultStudentId?: string
 }
@@ -33,13 +31,13 @@ interface AdminCoachingProxyBookingProps {
 export function AdminCoachingProxyBooking({
   coaches,
   students,
+  gradeTagByStudentId,
   selectedCoachId: initialSelectedCoachId,
-  windowStart,
+  weekStart,
   availableSlots,
   defaultStudentId = '',
 }: AdminCoachingProxyBookingProps) {
   const router = useRouter()
-  const [studentQuery, setStudentQuery] = useState('')
   const [selectedStudentId, setSelectedStudentId] = useState(defaultStudentId)
   const [selectedCoachId, setSelectedCoachId] = useState(initialSelectedCoachId)
   const [selectedSlot, setSelectedSlot] = useState<AvailableCoachingSlot | null>(null)
@@ -65,16 +63,10 @@ export function AdminCoachingProxyBooking({
     }
   }, [state.success, router])
 
-  const filteredStudents = useMemo(() => {
-    const normalized = studentQuery.trim().toLowerCase()
-    if (!normalized) return students
-
-    return students.filter((student) => {
-      const name = getPersonName(student).toLowerCase()
-      const code = (student.student_code ?? '').toLowerCase()
-      return name.includes(normalized) || code.includes(normalized)
-    })
-  }, [studentQuery, students])
+  function handleCoachSelect(coachId: string) {
+    setSelectedCoachId(coachId)
+    setSelectedSlot(null)
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -112,29 +104,13 @@ export function AdminCoachingProxyBooking({
       </p>
 
       <div className="mt-4 space-y-4">
-        <label className="block">
-          <span className="mb-1.5 block text-sm font-medium">1. 生徒を選ぶ *</span>
-          <input
-            type="search"
-            value={studentQuery}
-            onChange={(event) => setStudentQuery(event.target.value)}
-            placeholder="生徒名・生徒番号で検索"
-            className={fieldClass}
-          />
-          <select
-            value={selectedStudentId}
-            onChange={(event) => setSelectedStudentId(event.target.value)}
-            className={`${fieldClass} mt-2`}
-          >
-            <option value="">生徒を選択</option>
-            {filteredStudents.map((student) => (
-              <option key={student.id} value={student.id}>
-                {getPersonName(student)}
-                {student.student_code ? `（${student.student_code}）` : ''}
-              </option>
-            ))}
-          </select>
-        </label>
+        <AdminStudentCombobox
+          students={students}
+          gradeTagByStudentId={gradeTagByStudentId}
+          value={selectedStudentId}
+          onChange={setSelectedStudentId}
+          disabled={pending}
+        />
 
         <div>
           <p className="mb-2 text-sm font-medium">2. 担当を選ぶ *</p>
@@ -146,10 +122,7 @@ export function AdminCoachingProxyBooking({
                 <button
                   key={coach.id}
                   type="button"
-                  onClick={() => {
-                    setSelectedCoachId(coach.id)
-                    setSelectedSlot(null)
-                  }}
+                  onClick={() => handleCoachSelect(coach.id)}
                   className={`rounded-xl border px-4 py-2 text-sm font-medium transition ${
                     selectedCoachId === coach.id
                       ? 'border-primary bg-blue-50 text-primary'
@@ -167,9 +140,9 @@ export function AdminCoachingProxyBooking({
           <div>
             <p className="mb-2 text-sm font-medium">3. 日時を選ぶ *</p>
             <CoachingWeekGrid
-              mode="student"
+              mode="proxy"
               coachId={selectedCoachId}
-              windowStart={windowStart}
+              weekStart={weekStart}
               availableSlots={
                 selectedCoachId === initialSelectedCoachId ? availableSlots : []
               }
@@ -181,7 +154,10 @@ export function AdminCoachingProxyBooking({
         )}
 
         {selectedStudentId && selectedSlot && (
-          <form onSubmit={handleSubmit} className="space-y-3 rounded-lg border border-primary/30 bg-blue-50/40 p-4">
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-3 rounded-lg border border-primary/30 bg-blue-50/40 p-4"
+          >
             <input type="hidden" name="studentId" value={selectedStudentId} />
             <input type="hidden" name="slotId" value={selectedSlot.id} />
             <p className="text-sm font-medium">

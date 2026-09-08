@@ -405,7 +405,9 @@ export async function fetchPastCoachingBookingsForAdmin(options: {
     .select(select)
     .neq('status', 'cancelled')
     .lt('coaching_slots.slot_date', options.todayKey)
-    .order('starts_at', { ascending: false, foreignTable: 'coaching_slots' })
+    .order('slot_date', { ascending: false, foreignTable: 'coaching_slots' })
+    .order('start_time', { ascending: true, foreignTable: 'coaching_slots' })
+    .order('id', { ascending: true })
 
   if (studentIds) {
     countQuery = countQuery.in('student_id', studentIds)
