@@ -34,7 +34,7 @@ describe('past coaching bookings search and pagination wiring', () => {
     expect(sanitizeIlikePattern('()')).toBeNull()
   })
 
-  it('wires pastPage, pastQ, edit button, and shared status labels', () => {
+  it('wires pastPage, pastQ, edit toggle for today/past, always actions for future', () => {
     const page = readFileSync(
       path.join(process.cwd(), 'src/app/admin/coaching/bookings/page.tsx'),
       'utf8',
@@ -58,6 +58,14 @@ describe('past coaching bookings search and pagination wiring', () => {
     expect(page).toContain('getWeekdays(weekStart)')
     expect(ui).toContain('編集')
     expect(ui).toContain('aria-label={editAriaLabel}')
+    expect(ui).toContain('actionAppearance="always"')
+    expect(ui).toContain('actionAppearance="legacy"')
+    expect(ui).toContain('actionBlackClass')
+    expect(ui).toContain('actionBlueClass')
+    expect(ui).toContain('actionRedClass')
+    expect(ui).toContain('actionGrayClass')
+    expect(ui).toContain("status === 'completed'")
+    expect(ui).toContain("status === 'no_show'")
     expect(ui).toContain('COACHING_BOOKING_STATUS_LABELS')
     expect(ui).toContain('groupCoachingBookingsByDate')
     expect(ui).not.toMatch(/onClick=\{\(\) => .*booking/)

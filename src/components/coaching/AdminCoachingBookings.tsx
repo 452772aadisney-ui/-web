@@ -34,13 +34,40 @@ function coachingStatusLabel(status: string): string {
   return COACHING_BOOKING_STATUS_LABELS[status as CoachingBookingStatus] ?? status
 }
 
-const actionButtonClass =
-  'rounded-lg border border-border px-3 py-1.5 text-xs font-medium transition hover:bg-background'
+const actionButtonBaseClass =
+  'rounded-lg border px-3 py-1.5 text-xs font-medium transition disabled:opacity-60'
+
+/** Shared with legacy カルテ / 実施済み accent (primary blue). */
+const actionBlueClass = 'border-primary/30 bg-blue-50 text-primary hover:bg-blue-100'
+
+/** Shared with legacy キャンセル accent (error red). */
+const actionRedClass = 'border-red-200 bg-red-50 text-error hover:bg-red-100'
+
+const actionBlackClass =
+  'border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800'
+
+const actionGrayClass =
+  'border-zinc-300 bg-zinc-100 text-zinc-800 hover:bg-zinc-200'
 
 function BookingStatusBadge({ status }: { status: string }) {
+  const label = coachingStatusLabel(status)
+  if (status === 'completed') {
+    return (
+      <span className="inline-flex rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-primary">
+        {label}
+      </span>
+    )
+  }
+  if (status === 'no_show') {
+    return (
+      <span className="inline-flex rounded-md bg-red-50 px-2 py-0.5 text-[11px] font-medium text-error">
+        {label}
+      </span>
+    )
+  }
   return (
-    <span className="inline-flex rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-primary">
-      {coachingStatusLabel(status)}
+    <span className="inline-flex rounded-md border border-border bg-background px-2 py-0.5 text-[11px] font-medium text-muted">
+      {label}
     </span>
   )
 }
@@ -54,7 +81,14 @@ function formatBookingTimeRange(booking: CoachingBookingWithDetails): string {
   return `${start}〜${end}`
 }
 
-function BookingActionButtons({ booking }: { booking: CoachingBookingWithDetails }) {
+function BookingActionButtons({
+  booking,
+  appearance,
+}: {
+  booking: CoachingBookingWithDetails
+  /** `legacy` = today/past collapsible panel styles; `always` = future row colors. */
+  appearance: 'legacy' | 'always'
+}) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
 
@@ -81,12 +115,31 @@ function BookingActionButtons({ booking }: { booking: CoachingBookingWithDetails
     booking.slot.starts_at,
   )
 
+  const completeLabel = appearance === 'always' ? '実施済み' : '実施済みにする'
+
+  const karteClass =
+    appearance === 'always'
+      ? `${actionButtonBaseClass} ${actionBlackClass}`
+      : `${actionButtonBaseClass} ${actionBlueClass}`
+  const completeClass =
+    appearance === 'always'
+      ? `${actionButtonBaseClass} ${actionBlueClass}`
+      : `${actionButtonBaseClass} border-border hover:bg-background`
+  const noShowClass =
+    appearance === 'always'
+      ? `${actionButtonBaseClass} ${actionRedClass}`
+      : `${actionButtonBaseClass} border-border hover:bg-background`
+  const cancelClass =
+    appearance === 'always'
+      ? `${actionButtonBaseClass} ${actionGrayClass}`
+      : `${actionButtonBaseClass} ${actionRedClass}`
+
   return (
-    <div className="flex shrink-0 flex-wrap gap-2">
+    <div className="flex max-w-full shrink-0 flex-wrap gap-2">
       {booking.student && (
         <Link
           href={`/admin/coaching/karte/${booking.student.id}?booking=${booking.id}&coach=${booking.coach_id}`}
-          className={`${actionButtonClass} border-primary/30 text-primary`}
+          className={karteClass}
           aria-label={`${target}のカルテを開く`}
         >
           カルテ
@@ -101,10 +154,10 @@ function BookingActionButtons({ booking }: { booking: CoachingBookingWithDetails
         <button
           type="submit"
           disabled={pending}
-          className={actionButtonClass}
+          className={completeClass}
           aria-label={`${target}を実施済みにする`}
         >
-          実施済みにする
+          {completeLabel}
         </button>
       </form>
       <form
@@ -116,7 +169,7 @@ function BookingActionButtons({ booking }: { booking: CoachingBookingWithDetails
         <button
           type="submit"
           disabled={pending}
-          className={actionButtonClass}
+          className={noShowClass}
           aria-label={`${target}を無断欠席にする`}
         >
           無断欠席
@@ -131,7 +184,7 @@ function BookingActionButtons({ booking }: { booking: CoachingBookingWithDetails
         <button
           type="submit"
           disabled={pending}
-          className={`${actionButtonClass} border-red-200 text-error hover:bg-red-50`}
+          className={cancelClass}
           aria-label={`${target}をキャンセルする`}
         >
           キャンセル
@@ -145,10 +198,13 @@ function BookingRow({
   booking,
   showPastScheduledHint = false,
   allowEditActions = false,
+  actionAppearance = 'legacy',
 }: {
   booking: CoachingBookingWithDetails
   showPastScheduledHint?: boolean
   allowEditActions?: boolean
+  /** Future rows show actions always; today/past keep the edit toggle. */
+  actionAppearance?: 'legacy' | 'always'
 }) {
   const [editing, setEditing] = useState(false)
   const studentName = booking.student ? getPersonName(booking.student) : '生徒'
@@ -158,6 +214,8 @@ function BookingRow({
   )
   const canEdit = allowEditActions && booking.status === 'scheduled'
   const editAriaLabel = `${studentName} ${dateLabel} ${timeRange}を編集`
+  const showAlwaysActions = canEdit && actionAppearance === 'always'
+  const showCollapsedToggle = canEdit && actionAppearance === 'legacy'
 
   return (
     <li className="border-t border-border py-2 first:border-t-0 first:pt-0">
@@ -180,7 +238,7 @@ function BookingRow({
             <p className="mt-1 text-sm text-muted">伝言: {booking.student_note}</p>
           )}
         </div>
-        {canEdit && (
+        {showCollapsedToggle && (
           <button
             type="button"
             onClick={() => setEditing((open) => !open)}
@@ -193,9 +251,14 @@ function BookingRow({
           </button>
         )}
       </div>
-      {canEdit && editing && (
+      {showAlwaysActions && (
+        <div className="mt-2">
+          <BookingActionButtons booking={booking} appearance="always" />
+        </div>
+      )}
+      {showCollapsedToggle && editing && (
         <div id={`booking-actions-${booking.id}`} className="mt-2">
-          <BookingActionButtons booking={booking} />
+          <BookingActionButtons booking={booking} appearance="legacy" />
         </div>
       )}
     </li>
@@ -208,12 +271,14 @@ function DateBookingCards({
   allowEditActions = false,
   showPastScheduledHint = false,
   dateOrder = 'asc',
+  actionAppearance = 'legacy',
 }: {
   bookings: CoachingBookingWithDetails[]
   emptyMessage: string
   allowEditActions?: boolean
   showPastScheduledHint?: boolean
   dateOrder?: 'asc' | 'desc'
+  actionAppearance?: 'legacy' | 'always'
 }) {
   if (bookings.length === 0) {
     return (
@@ -240,6 +305,7 @@ function DateBookingCards({
                 booking={booking}
                 allowEditActions={allowEditActions}
                 showPastScheduledHint={showPastScheduledHint}
+                actionAppearance={actionAppearance}
               />
             ))}
           </ul>
@@ -276,6 +342,7 @@ export function AdminCoachingBookings({
           bookings={todayBookings}
           emptyMessage="今日の予約はありません。"
           allowEditActions
+          actionAppearance="legacy"
         />
       </section>
 
@@ -285,6 +352,7 @@ export function AdminCoachingBookings({
           bookings={futureBookings}
           emptyMessage="明日以降の予約はありません。"
           allowEditActions
+          actionAppearance="always"
         />
       </section>
 
@@ -314,6 +382,7 @@ export function AdminCoachingBookings({
             allowEditActions
             showPastScheduledHint
             dateOrder="desc"
+            actionAppearance="legacy"
           />
         )}
         {pastPagination}
