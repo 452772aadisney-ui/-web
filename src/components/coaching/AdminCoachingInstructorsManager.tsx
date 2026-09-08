@@ -1,6 +1,13 @@
 'use client'
 
-import { useActionState, useEffect, useRef, useState, useTransition } from 'react'
+import {
+  useActionState,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+} from 'react'
 import { useRouter } from 'next/navigation'
 import {
   createCoachingCoach,
@@ -13,6 +20,7 @@ import { CoachProfileFields } from '@/components/coaching/CoachProfileFields'
 import { AppDialog } from '@/components/ui/AppDialog'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useActionToast } from '@/hooks/useActionToast'
+import { shouldCloseDialogForActionSuccess } from '@/lib/coaching/coach-dialog-success'
 import {
   getCoachAttributeTags,
   getCoachFeatureLabels,
@@ -77,9 +85,48 @@ function CoachFormFields({
           </label>
         )}
       </div>
-      <CoachProfileFields coach={coach} />
+      <CoachProfileFields coach={coach} disabled={pending} />
     </div>
   )
+}
+
+/**
+ * Close on success only after a real submit in this mount (`pending` flipped true).
+ * Remount via parent `key` clears action state so reopen never inherits success.
+ */
+function useCloseOnActionSuccess(
+  open: boolean,
+  pending: boolean,
+  success: boolean | undefined,
+  onClose: () => void,
+) {
+  const router = useRouter()
+  const allowCloseRef = useRef(false)
+
+  useEffect(() => {
+    if (pending) {
+      allowCloseRef.current = true
+    }
+  }, [pending])
+
+  useEffect(() => {
+    if (
+      !shouldCloseDialogForActionSuccess({
+        open,
+        pending,
+        success,
+        allowClose: allowCloseRef.current,
+      })
+    ) {
+      return
+    }
+    allowCloseRef.current = false
+    onClose()
+    // Refresh after close so the dialog is already unmounted (no re-open / flash).
+    queueMicrotask(() => {
+      router.refresh()
+    })
+  }, [open, pending, success, onClose, router])
 }
 
 function CreateCoachDialog({
@@ -91,24 +138,13 @@ function CreateCoachDialog({
 }) {
   const formId = 'coach-create-form'
   const [state, formAction, pending] = useActionState(createCoachingCoach, initialState)
-  const router = useRouter()
-  const closedForSuccess = useRef(false)
 
   useActionToast(state, {
     successMessage: '講師プロフィールを追加しました',
     pending,
   })
 
-  useEffect(() => {
-    if (!open) {
-      closedForSuccess.current = false
-      return
-    }
-    if (pending || !state.success || closedForSuccess.current) return
-    closedForSuccess.current = true
-    onClose()
-    router.refresh()
-  }, [open, pending, state.success, onClose, router])
+  useCloseOnActionSuccess(open, pending, state.success, onClose)
 
   if (!open) return null
 
@@ -167,7 +203,6 @@ function EditCoachDialog({
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deletePending, startDeleteTransition] = useTransition()
   const router = useRouter()
-  const closedForSuccess = useRef(false)
   const busy = pending || deletePending
 
   useActionToast(state, {
@@ -175,16 +210,7 @@ function EditCoachDialog({
     pending,
   })
 
-  useEffect(() => {
-    if (!open) {
-      closedForSuccess.current = false
-      return
-    }
-    if (pending || !state.success || closedForSuccess.current) return
-    closedForSuccess.current = true
-    onClose()
-    router.refresh()
-  }, [open, pending, state.success, onClose, router])
+  useCloseOnActionSuccess(open, pending, state.success, onClose)
 
   function handleDeleteConfirm() {
     startDeleteTransition(async () => {
@@ -192,17 +218,16 @@ function EditCoachDialog({
       formData.set('id', coach.id)
       const result = await deleteCoachingCoach(formData)
       if (result.error) {
-        createToastSession().error(
-          result.error,
-          `coach-delete-${coach.id}`,
-        )
+        createToastSession().error(result.error, `coach-delete-${coach.id}`)
         setConfirmDelete(false)
         return
       }
       createToastSession().success('講師を削除しました', `coach-delete-ok-${coach.id}`)
       setConfirmDelete(false)
       onClose()
-      router.refresh()
+      queueMicrotask(() => {
+        router.refresh()
+      })
     })
   }
 
@@ -398,6 +423,7 @@ type DialogMode =
 export function AdminCoachingInstructorsManager({ coaches }: AdminCoachingInstructorsManagerProps) {
   const [mode, setMode] = useState<DialogMode>({ type: 'none' })
   const [createNonce, setCreateNonce] = useState(0)
+  const [editNonce, setEditNonce] = useState(0)
   const addButtonRef = useRef<HTMLButtonElement>(null)
   const restoreFocusRef = useRef<HTMLElement | null>(null)
 
@@ -405,6 +431,18 @@ export function AdminCoachingInstructorsManager({ coaches }: AdminCoachingInstru
     mode.type === 'edit' ? (coaches.find((c) => c.id === mode.coachId) ?? null) : null
   const previewCoach =
     mode.type === 'preview' ? (coaches.find((c) => c.id === mode.coachId) ?? null) : null
+
+  const closeDialog = useCallback(() => {
+    setMode({ type: 'none' })
+    queueMicrotask(() => {
+      try {
+        restoreFocusRef.current?.focus()
+      } catch {
+        // Trigger may have been replaced by refresh.
+      }
+      restoreFocusRef.current = null
+    })
+  }, [])
 
   function openCreate() {
     restoreFocusRef.current = addButtonRef.current
@@ -414,20 +452,13 @@ export function AdminCoachingInstructorsManager({ coaches }: AdminCoachingInstru
 
   function openEdit(coachId: string, trigger: HTMLElement | null) {
     restoreFocusRef.current = trigger
+    setEditNonce((n) => n + 1)
     setMode({ type: 'edit', coachId })
   }
 
   function openPreview(coachId: string, trigger: HTMLElement | null) {
     restoreFocusRef.current = trigger
     setMode({ type: 'preview', coachId })
-  }
-
-  function closeDialog() {
-    setMode({ type: 'none' })
-    queueMicrotask(() => {
-      restoreFocusRef.current?.focus()
-      restoreFocusRef.current = null
-    })
   }
 
   return (
@@ -473,7 +504,7 @@ export function AdminCoachingInstructorsManager({ coaches }: AdminCoachingInstru
 
       {editingCoach && (
         <EditCoachDialog
-          key={editingCoach.id}
+          key={`edit-${editingCoach.id}-${editNonce}`}
           coach={editingCoach}
           open
           onClose={closeDialog}
@@ -481,7 +512,12 @@ export function AdminCoachingInstructorsManager({ coaches }: AdminCoachingInstru
       )}
 
       {previewCoach && (
-        <PreviewCoachDialog coach={previewCoach} open onClose={closeDialog} />
+        <PreviewCoachDialog
+          key={`preview-${previewCoach.id}`}
+          coach={previewCoach}
+          open
+          onClose={closeDialog}
+        />
       )}
     </div>
   )

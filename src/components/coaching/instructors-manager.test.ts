@@ -32,6 +32,9 @@ describe('instructor management UI wiring', () => {
     expect(manager).toContain('CreateCoachDialog')
     expect(manager).toContain('EditCoachDialog')
     expect(manager).toContain('登録済み講師')
+    expect(manager).toContain('shouldCloseDialogForActionSuccess')
+    expect(manager).toContain('editNonce')
+    expect(manager).toContain('createNonce')
     expect(manager).not.toMatch(/<CoachForm\s*\/>/)
   })
 

@@ -10,14 +10,15 @@ const fieldClass =
 
 interface CoachProfileFieldsProps {
   coach?: CoachingCoach
+  disabled?: boolean
 }
 
-export function CoachProfileFields({ coach }: CoachProfileFieldsProps) {
+export function CoachProfileFields({ coach, disabled = false }: CoachProfileFieldsProps) {
   return (
     <div className="space-y-4 rounded-lg border border-dashed border-border bg-background/60 p-4">
       <p className="text-sm font-medium">プロフィール（任意）</p>
 
-      <fieldset>
+      <fieldset disabled={disabled}>
         <legend className="mb-2 text-sm font-medium">文系 / 理系</legend>
         <div className="flex flex-wrap gap-4 text-sm">
           <label className="flex items-center gap-2">
@@ -50,7 +51,7 @@ export function CoachProfileFields({ coach }: CoachProfileFieldsProps) {
         </div>
       </fieldset>
 
-      <fieldset>
+      <fieldset disabled={disabled}>
         <legend className="mb-2 text-sm font-medium">国公立 / 私立</legend>
         <div className="flex flex-wrap gap-4 text-sm">
           {COACH_SCHOOL_TYPE_OPTIONS.map((option) => (
@@ -67,7 +68,7 @@ export function CoachProfileFields({ coach }: CoachProfileFieldsProps) {
         </div>
       </fieldset>
 
-      <fieldset>
+      <fieldset disabled={disabled}>
         <legend className="mb-2 text-sm font-medium">一般受験 / 推薦</legend>
         <div className="flex flex-wrap gap-4 text-sm">
           {COACH_EXAM_TYPE_OPTIONS.map((option) => (
@@ -89,6 +90,7 @@ export function CoachProfileFields({ coach }: CoachProfileFieldsProps) {
           type="checkbox"
           name="hasInternalRecommendation"
           defaultChecked={coach?.has_internal_recommendation_experience}
+          disabled={disabled}
         />
         内部推薦経験あり
       </label>
@@ -99,6 +101,7 @@ export function CoachProfileFields({ coach }: CoachProfileFieldsProps) {
           name="strongSubjects"
           defaultValue={coach?.strong_subjects?.join('、') ?? ''}
           placeholder="例: 数学、英語"
+          disabled={disabled}
           className={fieldClass}
         />
         <span className="mt-1 block text-xs text-muted">カンマまたは読点区切り</span>
@@ -110,6 +113,7 @@ export function CoachProfileFields({ coach }: CoachProfileFieldsProps) {
           name="featureTags"
           defaultValue={coach?.feature_tags?.join('、') ?? ''}
           placeholder="例: 難関大受験、メンタルサポート"
+          disabled={disabled}
           className={fieldClass}
         />
         <span className="mt-1 block text-xs text-muted">カンマまたは読点区切り</span>
@@ -122,6 +126,7 @@ export function CoachProfileFields({ coach }: CoachProfileFieldsProps) {
           rows={4}
           defaultValue={coach?.bio ?? ''}
           placeholder="生徒向けに表示する紹介文"
+          disabled={disabled}
           className={fieldClass}
         />
       </label>

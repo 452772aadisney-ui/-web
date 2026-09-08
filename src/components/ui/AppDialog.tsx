@@ -38,18 +38,44 @@ export function AppDialog({
   const descId = useId()
   const busyRef = useRef(busy)
   busyRef.current = busy
+  /** Ignore the native `close` event when we call `dialog.close()` ourselves. */
+  const ignoreCloseEventRef = useRef(false)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   useEffect(() => {
     const dialog = dialogRef.current
     if (!dialog) return
+
     if (open) {
-      if (!dialog.open) dialog.showModal()
+      if (!dialog.open) {
+        dialog.showModal()
+      }
       const focusTarget = initialFocusRef?.current ?? closeRef.current
       focusTarget?.focus()
     } else if (dialog.open) {
+      ignoreCloseEventRef.current = true
       dialog.close()
+      ignoreCloseEventRef.current = false
+    }
+
+    return () => {
+      if (!dialog.open) return
+      // Unmount while open: close without notifying React (parent already tearing down).
+      ignoreCloseEventRef.current = true
+      try {
+        dialog.close()
+      } catch {
+        // Element may already be detached.
+      }
+      ignoreCloseEventRef.current = false
     }
   }, [open, initialFocusRef])
+
+  function requestClose() {
+    if (busyRef.current) return
+    onCloseRef.current()
+  }
 
   return (
     <dialog
@@ -63,11 +89,13 @@ export function AppDialog({
         'w-[min(36rem,calc(100vw-2rem))] max-h-[min(90vh,48rem)] overflow-hidden rounded-2xl border border-border bg-card p-0 text-foreground shadow-lg backdrop:bg-black/40'
       }
       onClose={() => {
-        if (!busyRef.current) onClose()
+        if (ignoreCloseEventRef.current) return
+        requestClose()
       }}
       onCancel={(event) => {
+        // Always cancel the native close so React `open` stays the source of truth.
         event.preventDefault()
-        if (!busyRef.current) onClose()
+        requestClose()
       }}
     >
       <div className="flex max-h-[min(90vh,48rem)] flex-col">
@@ -85,9 +113,7 @@ export function AppDialog({
           <button
             ref={closeRef}
             type="button"
-            onClick={() => {
-              if (!busy) onClose()
-            }}
+            onClick={requestClose}
             disabled={busy}
             className="shrink-0 rounded-lg px-2 py-1 text-sm text-muted hover:bg-background hover:text-foreground disabled:opacity-60"
             aria-label="閉じる"

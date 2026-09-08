@@ -50,6 +50,9 @@ describe('coach profile display helpers', () => {
     expect(getCoachStrongSubjects(row)).toEqual([])
     expect(getCoachFeatureLabels(row)).toEqual([])
     expect(getCoachNameInitial(row.name)).toBe('佐')
+    expect(getCoachNameInitial('')).toBe('?')
+    expect(getCoachNameInitial('!!!')).toBe('?')
+    expect(getCoachNameInitial('ABC')).toBe('A')
     expect(summarizeCoachText(null)).toBeNull()
   })
 

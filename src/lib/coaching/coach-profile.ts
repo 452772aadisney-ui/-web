@@ -51,7 +51,8 @@ export function getCoachProfileBadges(coach: CoachingCoach): string[] {
 export function getCoachNameInitial(name: string): string {
   const trimmed = name.trim()
   if (!trimmed) return '?'
-  return trimmed.slice(0, 1)
+  const letterOrNumber = trimmed.match(/[\p{L}\p{N}]/u)
+  return letterOrNumber?.[0] ?? '?'
 }
 
 export function summarizeCoachText(value: string | null | undefined, max = 80): string | null {
