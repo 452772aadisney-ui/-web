@@ -43,8 +43,9 @@ const actionBlueClass = 'border-primary/30 bg-blue-50 text-primary hover:bg-blue
 /** Shared with legacy キャンセル accent (error red). */
 const actionRedClass = 'border-red-200 bg-red-50 text-error hover:bg-red-100'
 
-const actionBlackClass =
-  'border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800'
+/** Future「カルテ」: softer charcoal than pure black. */
+const actionCharcoalClass =
+  'border-slate-700 bg-slate-700 text-white hover:border-slate-800 hover:bg-slate-800'
 
 const actionGrayClass =
   'border-zinc-300 bg-zinc-100 text-zinc-800 hover:bg-zinc-200'
@@ -119,7 +120,7 @@ function BookingActionButtons({
 
   const karteClass =
     appearance === 'always'
-      ? `${actionButtonBaseClass} ${actionBlackClass}`
+      ? `${actionButtonBaseClass} ${actionCharcoalClass}`
       : `${actionButtonBaseClass} ${actionBlueClass}`
   const completeClass =
     appearance === 'always'
@@ -135,7 +136,13 @@ function BookingActionButtons({
       : `${actionButtonBaseClass} ${actionRedClass}`
 
   return (
-    <div className="flex max-w-full shrink-0 flex-wrap gap-2">
+    <div
+      className={
+        appearance === 'always'
+          ? 'flex max-w-full flex-wrap justify-end gap-2'
+          : 'flex max-w-full shrink-0 flex-wrap gap-2'
+      }
+    >
       {booking.student && (
         <Link
           href={`/admin/coaching/karte/${booking.student.id}?booking=${booking.id}&coach=${booking.coach_id}`}
@@ -219,8 +226,8 @@ function BookingRow({
 
   return (
     <li className="border-t border-border py-2 first:border-t-0 first:pt-0">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+        <div className="min-w-0 flex-1 basis-[12rem]">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
             <span className="font-semibold tabular-nums">{timeRange}</span>
             <span>
@@ -238,6 +245,11 @@ function BookingRow({
             <p className="mt-1 text-sm text-muted">伝言: {booking.student_note}</p>
           )}
         </div>
+        {showAlwaysActions && (
+          <div className="ml-auto min-w-0 max-w-full">
+            <BookingActionButtons booking={booking} appearance="always" />
+          </div>
+        )}
         {showCollapsedToggle && (
           <button
             type="button"
@@ -251,11 +263,6 @@ function BookingRow({
           </button>
         )}
       </div>
-      {showAlwaysActions && (
-        <div className="mt-2">
-          <BookingActionButtons booking={booking} appearance="always" />
-        </div>
-      )}
       {showCollapsedToggle && editing && (
         <div id={`booking-actions-${booking.id}`} className="mt-2">
           <BookingActionButtons booking={booking} appearance="legacy" />
