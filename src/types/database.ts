@@ -27,6 +27,7 @@ export interface Profile {
   id: string
   email: string
   full_name: string
+  full_name_kana: string | null
   display_name: string
   birthday: string | null
   target_schools: string[]
@@ -57,6 +58,7 @@ export interface Database {
           id: string
           email: string
           full_name?: string
+          full_name_kana?: string | null
           display_name?: string
           birthday?: string | null
           target_schools?: string[]
@@ -71,6 +73,7 @@ export interface Database {
         Update: {
           email?: string
           full_name?: string
+          full_name_kana?: string | null
           display_name?: string
           birthday?: string | null
           target_schools?: string[]

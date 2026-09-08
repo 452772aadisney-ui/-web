@@ -1,19 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import {
   COACHING_PROXY_OTHER_GRADE_LABEL,
-  compareStudentDisplayNamesJa,
   filterCoachingProxyStudentGroups,
   groupStudentsForCoachingProxy,
 } from '@/lib/coaching/proxy-student-groups'
 import type { StudentListItem } from '@/lib/tags/grade-order'
 
-function student(id: string, full_name: string, code: string | null = null): StudentListItem {
+function student(
+  id: string,
+  full_name: string,
+  opts: { code?: string | null; kana?: string | null } = {},
+): StudentListItem {
   return {
     id,
     full_name,
     display_name: full_name,
     email: `${id}@example.com`,
-    student_code: code,
+    student_code: opts.code ?? null,
+    full_name_kana: opts.kana ?? null,
   }
 }
 
@@ -47,34 +51,53 @@ describe('groupStudentsForCoachingProxy', () => {
     expect(groups.at(-1)?.students.map((s) => s.id)).toEqual(['e'])
   })
 
-  it('sorts within a grade by Japanese display name', () => {
+  it('sorts within a grade by kana, unset last', () => {
     const grades = new Map([
       ['a', '高1'],
       ['b', '高1'],
       ['c', '高1'],
+      ['d', '高1'],
     ])
     const groups = groupStudentsForCoachingProxy(
-      [student('a', '山田'), student('b', '伊藤'), student('c', '佐藤')],
+      [
+        student('a', '山田', { kana: 'やまだ' }),
+        student('b', '伊藤', { kana: 'いとう' }),
+        student('c', '佐藤', { kana: null }),
+        student('d', '青木', { kana: 'あおき' }),
+      ],
       grades,
     )
-    expect(groups[0]?.students.map((s) => s.full_name)).toEqual(['伊藤', '佐藤', '山田'])
-    expect(compareStudentDisplayNamesJa(student('b', '伊藤'), student('c', '佐藤'))).toBeLessThan(
-      0,
-    )
+    expect(groups[0]?.students.map((s) => s.id)).toEqual(['d', 'b', 'a', 'c'])
   })
 
-  it('keeps grade headings and order after search', () => {
+  it('keeps grade headings and order after search including kana', () => {
     const grades = new Map([
       ['a', '高1'],
       ['b', '高2'],
       ['c', '高1'],
     ])
     const groups = groupStudentsForCoachingProxy(
-      [student('a', '山田太郎'), student('b', '山田花子'), student('c', '佐藤')],
+      [
+        student('a', '山田太郎', { kana: 'やまだたろう' }),
+        student('b', '山田花子', { kana: 'やまだはなこ' }),
+        student('c', '佐藤', { kana: 'さとう' }),
+      ],
       grades,
     )
-    const filtered = filterCoachingProxyStudentGroups(groups, '山田')
-    expect(filtered.map((g) => g.gradeLabel)).toEqual(['高1', '高2'])
-    expect(filtered[0]?.students.map((s) => s.id)).toEqual(['a'])
+    const byName = filterCoachingProxyStudentGroups(groups, '山田')
+    expect(byName.map((g) => g.gradeLabel)).toEqual(['高1', '高2'])
+    expect(byName[0]?.students.map((s) => s.id)).toEqual(['a'])
+
+    const byKana = filterCoachingProxyStudentGroups(groups, 'やまだ')
+    expect(byKana.flatMap((g) => g.students.map((s) => s.id)).sort()).toEqual(['a', 'b'])
+  })
+
+  it('keeps students without kana in search by name', () => {
+    const grades = new Map([['a', '高1']])
+    const groups = groupStudentsForCoachingProxy(
+      [student('a', '田中', { kana: null })],
+      grades,
+    )
+    expect(filterCoachingProxyStudentGroups(groups, '田中')[0]?.students).toHaveLength(1)
   })
 })

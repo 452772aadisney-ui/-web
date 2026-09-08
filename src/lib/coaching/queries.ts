@@ -328,7 +328,7 @@ async function findStudentIdsByNameIlike(query: string): Promise<string[]> {
 
   const supabase = await createClient()
   // Prefer filter builder over string-concatenated `.or(...)` filter lists.
-  const [{ data: byFullName }, { data: byDisplayName }] = await Promise.all([
+  const [{ data: byFullName }, { data: byDisplayName }, { data: byKana }] = await Promise.all([
     supabase
       .from('profiles')
       .select('id')
@@ -339,11 +339,17 @@ async function findStudentIdsByNameIlike(query: string): Promise<string[]> {
       .select('id')
       .eq('role', 'student')
       .ilike('display_name', pattern),
+    supabase
+      .from('profiles')
+      .select('id')
+      .eq('role', 'student')
+      .ilike('full_name_kana', pattern),
   ])
 
   const ids = new Set<string>()
   for (const row of byFullName ?? []) ids.add(String((row as { id: string }).id))
   for (const row of byDisplayName ?? []) ids.add(String((row as { id: string }).id))
+  for (const row of byKana ?? []) ids.add(String((row as { id: string }).id))
   return [...ids]
 }
 
@@ -370,8 +376,9 @@ export async function fetchUpcomingCoachingBookingsForAdmin(
 }
 
 /**
- * Past bookings (slot_date < today, not cancelled), newest first.
- * Optional student-name search is applied before count/pagination.
+ * Past bookings (slot_date < today, not cancelled), newest date first.
+ * Ordered from coaching_slots as the root so date/time order applies before range
+ * (foreignTable .order on nested slots does not reliably sort parent booking rows).
  */
 export async function fetchPastCoachingBookingsForAdmin(options: {
   todayKey: string
@@ -391,27 +398,49 @@ export async function fetchPastCoachingBookingsForAdmin(options: {
     }
   }
 
-  const select =
-    '*, coaching_slots!inner(*), coaching_coaches(id, name), profiles(id, full_name, display_name)'
+  const select = `
+    id,
+    slot_date,
+    start_time,
+    starts_at,
+    ends_at,
+    coach_id,
+    is_open,
+    created_at,
+    coaching_bookings!inner(
+      id,
+      slot_id,
+      student_id,
+      coach_id,
+      student_note,
+      status,
+      google_calendar_event_id,
+      booked_at,
+      created_at,
+      updated_at,
+      coaching_coaches(id, name),
+      profiles(id, full_name, display_name)
+    )
+  `
 
   let countQuery = supabase
-    .from('coaching_bookings')
-    .select('id, coaching_slots!inner(slot_date)', { count: 'exact', head: true })
-    .neq('status', 'cancelled')
-    .lt('coaching_slots.slot_date', options.todayKey)
+    .from('coaching_slots')
+    .select('id, coaching_bookings!inner(id)', { count: 'exact', head: true })
+    .lt('slot_date', options.todayKey)
+    .neq('coaching_bookings.status', 'cancelled')
 
   let dataQuery = supabase
-    .from('coaching_bookings')
+    .from('coaching_slots')
     .select(select)
-    .neq('status', 'cancelled')
-    .lt('coaching_slots.slot_date', options.todayKey)
-    .order('slot_date', { ascending: false, foreignTable: 'coaching_slots' })
-    .order('start_time', { ascending: true, foreignTable: 'coaching_slots' })
+    .lt('slot_date', options.todayKey)
+    .neq('coaching_bookings.status', 'cancelled')
+    .order('slot_date', { ascending: false })
+    .order('start_time', { ascending: true })
     .order('id', { ascending: true })
 
   if (studentIds) {
-    countQuery = countQuery.in('student_id', studentIds)
-    dataQuery = dataQuery.in('student_id', studentIds)
+    countQuery = countQuery.in('coaching_bookings.student_id', studentIds)
+    dataQuery = dataQuery.in('coaching_bookings.student_id', studentIds)
   }
 
   const { count, error: countError } = await countQuery
@@ -431,8 +460,54 @@ export async function fetchPastCoachingBookingsForAdmin(options: {
     return { bookings: [], page, pageSize, totalCount, totalPages }
   }
 
+  type PastBookingNested = CoachingBooking & {
+    coaching_coaches: { id: string; name: string } | { id: string; name: string }[]
+    profiles?:
+      | { id: string; full_name: string; display_name: string }
+      | { id: string; full_name: string; display_name: string }[]
+      | null
+  }
+
+  type PastSlotRow = CoachingSlot & {
+    coaching_bookings: PastBookingNested | PastBookingNested[]
+  }
+
+  function firstRelation<T>(value: T | T[] | null | undefined): T | null {
+    if (value == null) return null
+    return Array.isArray(value) ? (value[0] ?? null) : value
+  }
+
+  const bookings: CoachingBookingWithDetails[] = []
+  for (const slotRow of (data as unknown as PastSlotRow[] | null) ?? []) {
+    const nested = slotRow.coaching_bookings
+    const bookingList = Array.isArray(nested) ? nested : nested ? [nested] : []
+    bookingList.sort((a, b) => a.id.localeCompare(b.id))
+    const slot: CoachingSlot = {
+      id: slotRow.id,
+      coach_id: slotRow.coach_id,
+      slot_date: slotRow.slot_date,
+      start_time: slotRow.start_time,
+      starts_at: slotRow.starts_at,
+      ends_at: slotRow.ends_at,
+      is_open: slotRow.is_open,
+      created_at: slotRow.created_at,
+    }
+    for (const booking of bookingList) {
+      const coach = firstRelation(booking.coaching_coaches)
+      if (!coach) continue
+      bookings.push(
+        mapBooking({
+          ...booking,
+          coaching_slots: slot,
+          coaching_coaches: coach,
+          profiles: firstRelation(booking.profiles),
+        }),
+      )
+    }
+  }
+
   return {
-    bookings: ((data as BookingRow[]) ?? []).map(mapBooking),
+    bookings,
     page,
     pageSize,
     totalCount,

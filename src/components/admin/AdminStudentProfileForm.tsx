@@ -8,6 +8,10 @@ import {
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
 import { SubjectCheckboxGrid } from '@/components/subjects/SubjectCheckboxGrid'
 import { useActionToast } from '@/hooks/useActionToast'
+import {
+  FULL_NAME_KANA_EXAMPLE,
+  FULL_NAME_KANA_MAX_LENGTH,
+} from '@/lib/profiles/full-name-kana'
 
 const initialState: AdminStudentProfileActionState = {}
 const fieldClass =
@@ -17,6 +21,7 @@ export interface AdminStudentProfileData {
   id: string
   email: string
   full_name: string
+  full_name_kana: string | null
   birthday: string | null
   target_schools: string[]
   subjects: string[]
@@ -59,6 +64,21 @@ export function AdminStudentProfileForm({ student }: AdminStudentProfileFormProp
           />
         </label>
       </div>
+
+      <label className="block sm:max-w-md">
+        <span className="mb-1.5 block text-sm font-medium">氏名かな</span>
+        <input
+          name="fullNameKana"
+          defaultValue={student.full_name_kana ?? ''}
+          maxLength={FULL_NAME_KANA_MAX_LENGTH}
+          placeholder={`例: ${FULL_NAME_KANA_EXAMPLE}`}
+          autoComplete="off"
+          className={fieldClass}
+        />
+        <span className="mt-1 block text-xs text-muted">
+          五十音順の並び替えに使います。ひらがなで入力（カタカナは自動変換）。未設定のまま他項目だけ保存できます。空欄で保存すると未設定に戻ります。
+        </span>
+      </label>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">

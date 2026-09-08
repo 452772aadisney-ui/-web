@@ -5,11 +5,16 @@ import { signUp, type AuthActionState } from '@/app/auth/actions'
 import { AuthCard, AuthLink } from '@/components/auth/AuthCard'
 import { PasswordInput } from '@/components/auth/PasswordInput'
 import { GRADE_TAG_NAMES } from '@/lib/tags/grade-order'
+import {
+  FULL_NAME_KANA_EXAMPLE,
+  FULL_NAME_KANA_MAX_LENGTH,
+} from '@/lib/profiles/full-name-kana'
 
 const initialState: AuthActionState = {}
 
 export function SignUpForm() {
   const [state, formAction, pending] = useActionState(signUp, initialState)
+  const values = state.values
 
   return (
     <AuthCard
@@ -29,9 +34,27 @@ export function SignUpForm() {
             name="fullName"
             autoComplete="name"
             required
+            defaultValue={values?.fullName ?? ''}
             placeholder="山田 太郎"
             className="w-full rounded-lg border border-border bg-background px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
+        </label>
+
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-medium">氏名かな *</span>
+          <input
+            type="text"
+            name="fullNameKana"
+            required
+            maxLength={FULL_NAME_KANA_MAX_LENGTH}
+            defaultValue={values?.fullNameKana ?? ''}
+            placeholder={`例: ${FULL_NAME_KANA_EXAMPLE}`}
+            autoComplete="off"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          />
+          <span className="mt-1 block text-xs text-muted">
+            ひらがなで入力してください（カタカナは自動でひらがなに変換されます）
+          </span>
         </label>
 
         <fieldset className="block">
@@ -47,6 +70,7 @@ export function SignUpForm() {
                   name="gradeTagName"
                   value={grade}
                   required
+                  defaultChecked={values?.gradeTagName === grade}
                   className="sr-only"
                 />
                 {grade}
@@ -62,6 +86,7 @@ export function SignUpForm() {
             name="email"
             autoComplete="email"
             required
+            defaultValue={values?.email ?? ''}
             placeholder="example@email.com"
             className="w-full rounded-lg border border-border bg-background px-3 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />

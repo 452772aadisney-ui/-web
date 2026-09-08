@@ -7,11 +7,18 @@ import { resolveGradeTagId } from '@/lib/tags/queries'
 import { isGradeTagName } from '@/lib/tags/grade-order'
 import { getDashboardPathForRole } from '@/lib/auth/routes'
 import { setFlashToastCookie } from '@/lib/toast/flash-toast-server'
+import { parseFullNameKana } from '@/lib/profiles/full-name-kana'
 import type { Profile } from '@/types/database'
 
 export type AuthActionState = {
   error?: string
   success?: boolean
+  values?: {
+    fullName?: string
+    fullNameKana?: string
+    email?: string
+    gradeTagName?: string
+  }
 }
 
 export async function signIn(
@@ -55,30 +62,46 @@ export async function signUp(
   formData: FormData,
 ): Promise<AuthActionState> {
   const fullName = String(formData.get('fullName') ?? '').trim()
+  const fullNameKanaRaw = String(formData.get('fullNameKana') ?? '')
   const email = String(formData.get('email') ?? '').trim()
   const password = String(formData.get('password') ?? '')
   const passwordConfirm = String(formData.get('passwordConfirm') ?? '')
   const gradeTagName = String(formData.get('gradeTagName') ?? '').trim()
 
+  const retained: AuthActionState['values'] = {
+    fullName,
+    fullNameKana: fullNameKanaRaw,
+    email,
+    gradeTagName,
+  }
+
   if (!fullName || !email || !password) {
-    return { error: 'すべての項目を入力してください' }
+    return { error: 'すべての項目を入力してください', values: retained }
+  }
+
+  const kanaParsed = parseFullNameKana(fullNameKanaRaw, { required: true })
+  if (!kanaParsed.ok) {
+    return { error: kanaParsed.error, values: retained }
   }
 
   if (!isGradeTagName(gradeTagName)) {
-    return { error: '学年を選択してください' }
+    return { error: '学年を選択してください', values: retained }
   }
 
   const gradeTagId = await resolveGradeTagId(gradeTagName)
   if (!gradeTagId) {
-    return { error: '学年の設定に失敗しました。しばらくしてからお試しください' }
+    return {
+      error: '学年の設定に失敗しました。しばらくしてからお試しください',
+      values: retained,
+    }
   }
 
   if (password.length < 8) {
-    return { error: 'パスワードは8文字以上で入力してください' }
+    return { error: 'パスワードは8文字以上で入力してください', values: retained }
   }
 
   if (password !== passwordConfirm) {
-    return { error: 'パスワード（確認）が一致しません' }
+    return { error: 'パスワード（確認）が一致しません', values: retained }
   }
 
   const supabase = await createClient()
@@ -88,6 +111,7 @@ export async function signUp(
     options: {
       data: {
         full_name: fullName,
+        full_name_kana: kanaParsed.value,
         grade_tag_id: gradeTagId,
       },
     },
@@ -95,9 +119,12 @@ export async function signUp(
 
   if (error) {
     if (error.message.includes('already registered')) {
-      return { error: 'このメールアドレスは既に登録されています' }
+      return { error: 'このメールアドレスは既に登録されています', values: retained }
     }
-    return { error: 'アカウントの作成に失敗しました。しばらくしてからお試しください' }
+    return {
+      error: 'アカウントの作成に失敗しました。しばらくしてからお試しください',
+      values: retained,
+    }
   }
 
   redirect('/login?registered=1')

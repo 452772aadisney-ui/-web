@@ -183,6 +183,14 @@ export default async function AdminStudentStudyPage({
             <h2 className="mt-1 text-xl font-bold">{personName}</h2>
             <dl className="mt-4 grid gap-3 text-sm">
               <div>
+                <dt className="text-muted">氏名かな</dt>
+                <dd className="font-medium">
+                  {student.full_name_kana?.trim()
+                    ? student.full_name_kana
+                    : '未設定'}
+                </dd>
+              </div>
+              <div>
                 <dt className="text-muted">志望校</dt>
                 <dd className="font-medium">
                   {targetSchools.length > 0 ? targetSchools.join(' / ') : '未設定'}
@@ -205,6 +213,7 @@ export default async function AdminStudentStudyPage({
                 id: student.id,
                 email: student.email,
                 full_name: student.full_name,
+                full_name_kana: student.full_name_kana ?? null,
                 birthday: student.birthday ?? null,
                 target_schools: targetSchools,
                 subjects: profileSubjects,

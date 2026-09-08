@@ -413,6 +413,7 @@ export type StudentListItemRow = {
   display_name: string
   email: string
   student_code: string | null
+  full_name_kana?: string | null
   subjects?: string[]
 }
 
@@ -421,7 +422,7 @@ export async function fetchStudentList(): Promise<StudentListItemRow[]> {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, display_name, email, student_code, subjects')
+    .select('id, full_name, display_name, email, student_code, full_name_kana, subjects')
     .eq('role', 'student')
     .order('full_name')
 
@@ -480,7 +481,7 @@ export async function fetchStudentsPaginated(options: {
 
   let dataQuery = supabase
     .from('profiles')
-    .select('id, full_name, display_name, email, student_code, subjects')
+    .select('id, full_name, display_name, email, student_code, full_name_kana, subjects')
     .eq('role', 'student')
     .order('full_name')
 
@@ -492,10 +493,10 @@ export async function fetchStudentsPaginated(options: {
   if (query) {
     const pattern = `%${query}%`
     countQuery = countQuery.or(
-      `full_name.ilike.${pattern},display_name.ilike.${pattern},email.ilike.${pattern},student_code.ilike.${pattern}`,
+      `full_name.ilike.${pattern},display_name.ilike.${pattern},email.ilike.${pattern},student_code.ilike.${pattern},full_name_kana.ilike.${pattern}`,
     )
     dataQuery = dataQuery.or(
-      `full_name.ilike.${pattern},display_name.ilike.${pattern},email.ilike.${pattern},student_code.ilike.${pattern}`,
+      `full_name.ilike.${pattern},display_name.ilike.${pattern},email.ilike.${pattern},student_code.ilike.${pattern},full_name_kana.ilike.${pattern}`,
     )
   }
 
@@ -530,7 +531,7 @@ export async function fetchStudentProfile(studentId: string) {
   const { data } = await supabase
     .from('profiles')
     .select(
-      'id, full_name, display_name, email, student_code, role, subjects, target_schools, birthday',
+      'id, full_name, full_name_kana, display_name, email, student_code, role, subjects, target_schools, birthday',
     )
     .eq('id', studentId)
     .maybeSingle()

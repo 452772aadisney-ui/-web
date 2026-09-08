@@ -1,7 +1,9 @@
 import { getPersonName } from '@/lib/auth/display-name'
+import { fullNameKanaSortKey } from '@/lib/profiles/full-name-kana'
 import {
   GRADE_TAG_NAMES,
   isKisotsuGradeTag,
+  sortStudentsByGradeThenKana,
   type StudentListGroup,
   type StudentListItem,
 } from '@/lib/tags/grade-order'
@@ -20,21 +22,10 @@ function resolveCoachingProxyGradeLabel(
   return COACHING_PROXY_OTHER_GRADE_LABEL
 }
 
-/** Display-name sort key (no furigana column exists on profiles). */
-export function compareStudentDisplayNamesJa(
-  a: { full_name: string; display_name?: string | null },
-  b: { full_name: string; display_name?: string | null },
-): number {
-  const nameA = getPersonName(a)
-  const nameB = getPersonName(b)
-  const byName = nameA.localeCompare(nameB, 'ja')
-  if (byName !== 0) return byName
-  return a.full_name.localeCompare(b.full_name, 'ja')
-}
-
 /**
  * Group students for coaching proxy booking:
  * 高1 → 高2 → 高3 → 学年未設定・その他 (既卒 excluded; unexpected tags in trailing bucket).
+ * Within grade: full_name_kana 五十音 (unset last).
  */
 export function groupStudentsForCoachingProxy(
   students: StudentListItem[],
@@ -52,9 +43,15 @@ export function groupStudentsForCoachingProxy(
     buckets.set(grade, list)
   }
 
+  // Temporary map so shared sorter uses proxy bucket labels as grades.
+  const proxyGradeMap = new Map<string, string>()
+  for (const student of eligible) {
+    proxyGradeMap.set(student.id, resolveCoachingProxyGradeLabel(gradeTagByStudentId.get(student.id)))
+  }
+
   return PROXY_GRADE_ORDER.filter((label) => buckets.has(label)).map((gradeLabel) => ({
     gradeLabel,
-    students: (buckets.get(gradeLabel) ?? []).sort(compareStudentDisplayNamesJa),
+    students: sortStudentsByGradeThenKana(buckets.get(gradeLabel) ?? [], proxyGradeMap),
   }))
 }
 
@@ -65,13 +62,20 @@ export function filterCoachingProxyStudentGroups(
   const normalized = query.trim().toLowerCase()
   if (!normalized) return groups
 
+  const kanaQuery = fullNameKanaSortKey(query)?.toLowerCase() ?? normalized
+
   return groups
     .map((group) => ({
       ...group,
       students: group.students.filter((student) => {
         const name = getPersonName(student).toLowerCase()
         const code = (student.student_code ?? '').toLowerCase()
-        return name.includes(normalized) || code.includes(normalized)
+        const kana = (fullNameKanaSortKey(student.full_name_kana) ?? '').toLowerCase()
+        return (
+          name.includes(normalized) ||
+          code.includes(normalized) ||
+          (kana.length > 0 && kana.includes(kanaQuery))
+        )
       }),
     }))
     .filter((group) => group.students.length > 0)

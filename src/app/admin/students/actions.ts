@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
+import { parseFullNameKana } from '@/lib/profiles/full-name-kana'
 
 export type AdminStudentProfileActionState = {
   error?: string
@@ -46,6 +47,7 @@ export async function updateStudentProfileByAdmin(
 
   const studentId = String(formData.get('studentId') ?? '').trim()
   const fullName = String(formData.get('fullName') ?? '').trim()
+  const fullNameKanaRaw = String(formData.get('fullNameKana') ?? '')
   const birthdayRaw = String(formData.get('birthday') ?? '').trim()
   const targetSchoolsRaw = String(formData.get('targetSchools') ?? '')
   let studentCode = String(formData.get('studentCode') ?? '').trim()
@@ -53,6 +55,10 @@ export async function updateStudentProfileByAdmin(
 
   if (!studentId) return { error: '生徒が指定されていません' }
   if (!fullName) return { error: '氏名を入力してください' }
+
+  // Existing students: empty kana clears to null (optional field).
+  const kanaParsed = parseFullNameKana(fullNameKanaRaw, { required: false })
+  if (!kanaParsed.ok) return { error: kanaParsed.error }
 
   const supabase = await createClient()
 
@@ -100,6 +106,7 @@ export async function updateStudentProfileByAdmin(
     .update({
       full_name: fullName,
       display_name: fullName,
+      full_name_kana: kanaParsed.value,
       birthday,
       target_schools: parseTargetSchools(targetSchoolsRaw),
       subjects,

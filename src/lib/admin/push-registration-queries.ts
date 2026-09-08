@@ -14,6 +14,8 @@ import {
 import { createClient } from '@/lib/supabase/server'
 import { getTotalPages, parsePageParam } from '@/lib/pagination'
 import type { StudentListItemRow } from '@/lib/study/queries'
+import { sortStudentsByGradeThenKana } from '@/lib/tags/grade-order'
+import { fetchGradeTagNamesByStudentId } from '@/lib/tags/queries'
 
 type AdminClient = NonNullable<ReturnType<typeof createAdminClient>>
 
@@ -155,14 +157,22 @@ async function resolveGradeStudentIds(
   }
 }
 
+type StudentSortRow = {
+  id: string
+  full_name: string
+  display_name: string
+  full_name_kana: string | null
+}
+
 /**
- * Ordered student ids matching search + optional grade (role=student only).
+ * Matching student sort keys (role=student only). Order is applied in memory
+ * after grade tags load — DB `order` is only for stable paging of the fetch.
  * Uses the signed-in admin's user client (RLS), not service role for profiles.
  */
-export async function fetchMatchingStudentIds(options: {
+export async function fetchMatchingStudentSortRows(options: {
   query?: string
   grade?: string
-}): Promise<{ ok: true; ids: string[] } | { ok: false }> {
+}): Promise<{ ok: true; rows: StudentSortRow[] } | { ok: false }> {
   const supabase = await createClient()
   const query = (options.query?.trim() ?? '').replace(/[%(),]/g, '')
   const grade = options.grade?.trim() ?? ''
@@ -170,15 +180,15 @@ export async function fetchMatchingStudentIds(options: {
   const gradeResult = await resolveGradeStudentIds(grade)
   if (!gradeResult.ok) return { ok: false }
   if (gradeResult.ids && gradeResult.ids.length === 0) {
-    return { ok: true, ids: [] }
+    return { ok: true, rows: [] }
   }
 
-  const fetched = await fetchAllPages<{ id: string }>((from, to) => {
+  const fetched = await fetchAllPages<StudentSortRow>((from, to) => {
     let q = supabase
       .from('profiles')
-      .select('id')
+      .select('id, full_name, display_name, full_name_kana')
       .eq('role', 'student')
-      .order('full_name')
+      .order('id')
       .range(from, to)
 
     if (gradeResult.ids) {
@@ -187,14 +197,44 @@ export async function fetchMatchingStudentIds(options: {
     if (query) {
       const pattern = `%${query}%`
       q = q.or(
-        `full_name.ilike.${pattern},display_name.ilike.${pattern},email.ilike.${pattern},student_code.ilike.${pattern}`,
+        `full_name.ilike.${pattern},display_name.ilike.${pattern},email.ilike.${pattern},student_code.ilike.${pattern},full_name_kana.ilike.${pattern}`,
       )
     }
     return q
   })
 
   if (!fetched.ok) return { ok: false }
-  return { ok: true, ids: fetched.rows.map((row) => String(row.id)) }
+  return {
+    ok: true,
+    rows: fetched.rows.map((row) => ({
+      id: String(row.id),
+      full_name: String(row.full_name ?? ''),
+      display_name: String(row.display_name ?? ''),
+      full_name_kana: row.full_name_kana == null ? null : String(row.full_name_kana),
+    })),
+  }
+}
+
+/** @deprecated Prefer fetchMatchingStudentSortRows + kana sort. */
+export async function fetchMatchingStudentIds(options: {
+  query?: string
+  grade?: string
+}): Promise<{ ok: true; ids: string[] } | { ok: false }> {
+  const matching = await fetchMatchingStudentSortRows(options)
+  if (!matching.ok) return { ok: false }
+  return { ok: true, ids: matching.rows.map((row) => row.id) }
+}
+
+async function orderMatchingIdsByGradeThenKana(
+  rows: StudentSortRow[],
+  filteredIds: string[],
+): Promise<string[]> {
+  const byId = new Map(rows.map((row) => [row.id, row]))
+  const filteredRows = filteredIds
+    .map((id) => byId.get(id))
+    .filter((row): row is StudentSortRow => Boolean(row))
+  const gradeTagByStudentId = await fetchGradeTagNamesByStudentId()
+  return sortStudentsByGradeThenKana(filteredRows, gradeTagByStudentId).map((row) => row.id)
 }
 
 async function fetchStudentsByIdsOrdered(
@@ -208,7 +248,7 @@ async function fetchStudentsByIdsOrdered(
   for (const chunk of chunkIds(ids, IN_CHUNK_SIZE)) {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, full_name, display_name, email, student_code, subjects')
+      .select('id, full_name, display_name, email, student_code, full_name_kana, subjects')
       .eq('role', 'student')
       .in('id', chunk)
 
@@ -257,7 +297,7 @@ export async function fetchAdminStudentsWithPushRegistration(options: {
     registrationLookupFailed: failed,
   })
 
-  const matching = await fetchMatchingStudentIds({
+  const matching = await fetchMatchingStudentSortRows({
     query: options.query,
     grade: options.grade,
   })
@@ -265,15 +305,18 @@ export async function fetchAdminStudentsWithPushRegistration(options: {
     return empty(1, true)
   }
 
+  const matchingIds = matching.rows.map((row) => row.id)
+
   const admin = createAdminClient()
   if (!admin) {
     // Cannot verify push state without admin client.
     if (pushFilter !== 'all') return empty(1, true)
-    const totalCount = matching.ids.length
+    const orderedIds = await orderMatchingIdsByGradeThenKana(matching.rows, matchingIds)
+    const totalCount = orderedIds.length
     const totalPages = getTotalPages(totalCount, pageSize)
     const page = parsePageParam(options.page ? String(options.page) : undefined, totalPages)
     const from = (page - 1) * pageSize
-    const pageIds = matching.ids.slice(from, from + pageSize)
+    const pageIds = orderedIds.slice(from, from + pageSize)
     const students = await fetchStudentsByIdsOrdered(pageIds)
     const registrationByStudentId = new Map(
       students.map((s) => [s.id, derivePushRegistrationView(null)] as const),
@@ -291,11 +334,12 @@ export async function fetchAdminStudentsWithPushRegistration(options: {
   const activeRows = await loadActivePushSubscriptionRows(admin)
   if (!activeRows.ok) {
     if (pushFilter !== 'all') return empty(1, true)
-    const totalCount = matching.ids.length
+    const orderedIds = await orderMatchingIdsByGradeThenKana(matching.rows, matchingIds)
+    const totalCount = orderedIds.length
     const totalPages = getTotalPages(totalCount, pageSize)
     const page = parsePageParam(options.page ? String(options.page) : undefined, totalPages)
     const from = (page - 1) * pageSize
-    const pageIds = matching.ids.slice(from, from + pageSize)
+    const pageIds = orderedIds.slice(from, from + pageSize)
     const students = await fetchStudentsByIdsOrdered(pageIds)
     const registrationByStudentId = new Map(
       students.map((s) => [s.id, derivePushRegistrationView(null)] as const),
@@ -310,18 +354,19 @@ export async function fetchAdminStudentsWithPushRegistration(options: {
     }
   }
 
-  const aggregated = aggregateActivePushRowsForStudents(matching.ids, activeRows.rows)
+  const aggregated = aggregateActivePushRowsForStudents(matchingIds, activeRows.rows)
   const filteredIds = filterStudentIdsByPushRegistration(
-    matching.ids,
+    matchingIds,
     aggregated.countsByUserId,
     pushFilter,
   )
+  const orderedIds = await orderMatchingIdsByGradeThenKana(matching.rows, filteredIds)
 
-  const totalCount = filteredIds.length
+  const totalCount = orderedIds.length
   const totalPages = getTotalPages(totalCount, pageSize)
   const page = parsePageParam(options.page ? String(options.page) : undefined, totalPages)
   const from = (page - 1) * pageSize
-  const pageIds = filteredIds.slice(from, from + pageSize)
+  const pageIds = orderedIds.slice(from, from + pageSize)
   const students = await fetchStudentsByIdsOrdered(pageIds)
 
   const registrationByStudentId = new Map<string, PushRegistrationView>()

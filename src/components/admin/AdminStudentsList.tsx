@@ -86,6 +86,11 @@ export function AdminStudentsList({
                             <p className="font-medium">{getPersonName(student)}</p>
                             {registration && <PushRegistrationBadge view={registration} />}
                           </div>
+                          <p className="mt-1 text-xs text-muted">
+                            {student.full_name_kana?.trim()
+                              ? student.full_name_kana
+                              : '氏名かな未設定'}
+                          </p>
                           <p className="mt-1 truncate text-xs text-muted">{student.email}</p>
                           <p className="mt-2 text-xs text-muted">
                             最終アクセス: {formatLastAccessedAt(student.last_accessed_at)}
