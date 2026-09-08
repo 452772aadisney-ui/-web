@@ -15,16 +15,16 @@ fallback — this app treats missing kana as null).
 
 ## Safe Production order
 
-1. **Precheck** (read-only):  
-   `supabase/rollbacks/059_profiles_full_name_kana_precheck.sql`  
+1. **Precheck** (read-only):
+   `supabase/rollbacks/059_profiles_full_name_kana_precheck.sql`
    Expect `full_name_kana_column_present = 0` before apply. Record `profiles_total`.
 
-2. **Apply 059** in SQL Editor / migration pipeline:  
-   `supabase/migrations/059_profiles_full_name_kana.sql`  
+2. **Apply 059** in SQL Editor / migration pipeline:
+   `supabase/migrations/059_profiles_full_name_kana.sql`
    No backfill. Existing rows stay `full_name_kana = null`.
 
-3. **Verify**:  
-   `supabase/rollbacks/059_profiles_full_name_kana_verify.sql`  
+3. **Verify**:
+   `supabase/rollbacks/059_profiles_full_name_kana_verify.sql`
    All checks `PASS`. Confirm `profiles_total` unchanged vs precheck.
 
 4. **Deploy app** that:
