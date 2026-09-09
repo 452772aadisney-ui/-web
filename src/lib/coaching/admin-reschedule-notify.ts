@@ -93,5 +93,6 @@ export async function notifyStudentOfAdminCoachingReschedule(params: {
     return 'skipped'
   }
 
+  // failed / email_failed / stale_pending / in_progress / timed_out → retryable failed
   return 'failed'
 }

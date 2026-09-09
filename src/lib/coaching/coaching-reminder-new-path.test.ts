@@ -6,12 +6,14 @@ const {
   isPushSendingAvailable,
   sendBookingPromptEmail,
   sendSessionPreviousDayEmail,
+  sendAdminRescheduleEmail,
 } = vi.hoisted(() => ({
   createAdminClient: vi.fn(),
   sendPushNotification: vi.fn(),
   isPushSendingAvailable: vi.fn(),
   sendBookingPromptEmail: vi.fn(),
   sendSessionPreviousDayEmail: vi.fn(),
+  sendAdminRescheduleEmail: vi.fn(),
 }))
 
 vi.mock('@/lib/supabase/admin', () => ({
@@ -35,6 +37,7 @@ vi.mock('@/lib/coaching/coaching-reminder-email', async () => {
     sendBookingPromptEmail: (...args: unknown[]) => sendBookingPromptEmail(...args),
     sendSessionPreviousDayEmail: (...args: unknown[]) =>
       sendSessionPreviousDayEmail(...args),
+    sendAdminRescheduleEmail: (...args: unknown[]) => sendAdminRescheduleEmail(...args),
   }
 })
 
@@ -46,6 +49,7 @@ type TableHandler = {
   select?: (...args: unknown[]) => unknown
   insert?: (...args: unknown[]) => unknown
   update?: (...args: unknown[]) => unknown
+  delete?: (...args: unknown[]) => unknown
 }
 
 function makeAdmin(handlers: Record<string, TableHandler>) {
@@ -64,6 +68,7 @@ describe('processCoachingReminderNewPath', () => {
     isPushSendingAvailable.mockReturnValue(true)
     sendBookingPromptEmail.mockResolvedValue({ ok: true, httpStatus: 200 })
     sendSessionPreviousDayEmail.mockResolvedValue({ ok: true, httpStatus: 200 })
+    sendAdminRescheduleEmail.mockResolvedValue({ ok: true, httpStatus: 200 })
   })
 
   it('returns preference_disabled without push or email', async () => {
@@ -287,6 +292,221 @@ describe('processCoachingReminderNewPath', () => {
 
     expect(outcome).toBe('already_completed')
     expect(sendPushNotification).not.toHaveBeenCalled()
+    expect(sendBookingPromptEmail).not.toHaveBeenCalled()
+  })
+
+  it('admin_reschedule retries failed email without duplicating a sent push', async () => {
+    let emailDeleted = false
+    let emailInsertCount = 0
+
+    createAdminClient.mockReturnValue(
+      makeAdmin({
+        notification_preferences: {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: null, error: null }),
+            }),
+          }),
+        },
+        notification_events: {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                eq: () => ({
+                  maybeSingle: async () => ({ data: { id: 'evt-1' }, error: null }),
+                }),
+              }),
+            }),
+          }),
+        },
+        notification_deliveries: {
+          select: () => ({
+            eq: async () => ({
+              data: emailDeleted
+                ? [
+                    {
+                      id: 'd-push',
+                      channel: 'push',
+                      status: 'failed',
+                      sent_at: null,
+                      created_at: '2026-09-05T12:00:00.000Z',
+                    },
+                  ]
+                : [
+                    {
+                      id: 'd-push',
+                      channel: 'push',
+                      status: 'failed',
+                      sent_at: null,
+                      created_at: '2026-09-05T12:00:00.000Z',
+                    },
+                    {
+                      id: 'd-email',
+                      channel: 'email',
+                      status: 'failed',
+                      sent_at: null,
+                      created_at: '2026-09-05T12:00:00.000Z',
+                    },
+                  ],
+              error: null,
+            }),
+          }),
+          delete: () => ({
+            eq: () => ({
+              eq: () => ({
+                eq: async () => {
+                  emailDeleted = true
+                  return { error: null }
+                },
+              }),
+            }),
+          }),
+          insert: async () => {
+            emailInsertCount += 1
+            return { error: null }
+          },
+          update: () => ({
+            eq: () => ({
+              eq: () => ({
+                select: () => ({
+                  maybeSingle: async () => ({ data: { id: 'd-email-new' }, error: null }),
+                }),
+              }),
+            }),
+          }),
+        },
+      }),
+    )
+
+    isPushSendingAvailable.mockReturnValue(false)
+
+    const outcome = await processCoachingReminderNewPath({
+      studentUserId: STUDENT,
+      email: 's@example.com',
+      idempotencyKey: 'admin-reschedule:b1:11111111-1111-1111-1111-111111111111',
+      kind: 'admin_reschedule',
+      pushBody: 'コーチングの予約が変更されました。内容を確認してください。',
+      coachName: '山田',
+      datetimeLabel: '3月10日 10:00〜10:50',
+      tag: 't',
+      env: { VERCEL_ENV: 'production' },
+    })
+
+    expect(outcome).toBe('email_sent')
+    expect(emailDeleted).toBe(true)
+    expect(emailInsertCount).toBe(1)
+    expect(sendAdminRescheduleEmail).toHaveBeenCalledTimes(1)
+    expect(sendPushNotification).not.toHaveBeenCalled()
+  })
+
+  it('keeps already_completed when push was sent (no duplicate channel send)', async () => {
+    createAdminClient.mockReturnValue(
+      makeAdmin({
+        notification_preferences: {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: null, error: null }),
+            }),
+          }),
+        },
+        notification_events: {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                eq: () => ({
+                  maybeSingle: async () => ({ data: { id: 'evt-1' }, error: null }),
+                }),
+              }),
+            }),
+          }),
+        },
+        notification_deliveries: {
+          select: () => ({
+            eq: async () => ({
+              data: [
+                {
+                  id: 'd1',
+                  channel: 'push',
+                  status: 'sent',
+                  sent_at: '2026-09-05T12:00:00.000Z',
+                  created_at: '2026-09-05T12:00:00.000Z',
+                },
+              ],
+              error: null,
+            }),
+          }),
+        },
+      }),
+    )
+
+    const outcome = await processCoachingReminderNewPath({
+      studentUserId: STUDENT,
+      email: 's@example.com',
+      idempotencyKey: 'admin-reschedule:b1:11111111-1111-1111-1111-111111111111',
+      kind: 'admin_reschedule',
+      pushBody: 'x',
+      coachName: '山田',
+      datetimeLabel: 'x',
+      tag: 't',
+      env: { VERCEL_ENV: 'production' },
+    })
+
+    expect(outcome).toBe('already_completed')
+    expect(sendAdminRescheduleEmail).not.toHaveBeenCalled()
+    expect(sendPushNotification).not.toHaveBeenCalled()
+  })
+
+  it('does not auto-retry email_terminal for non-admin-reschedule kinds', async () => {
+    createAdminClient.mockReturnValue(
+      makeAdmin({
+        notification_preferences: {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({ data: null, error: null }),
+            }),
+          }),
+        },
+        notification_events: {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                eq: () => ({
+                  maybeSingle: async () => ({ data: { id: 'evt-1' }, error: null }),
+                }),
+              }),
+            }),
+          }),
+        },
+        notification_deliveries: {
+          select: () => ({
+            eq: async () => ({
+              data: [
+                {
+                  id: 'd-email',
+                  channel: 'email',
+                  status: 'failed',
+                  sent_at: null,
+                  created_at: '2026-09-05T12:00:00.000Z',
+                },
+              ],
+              error: null,
+            }),
+          }),
+        },
+      }),
+    )
+
+    const outcome = await processCoachingReminderNewPath({
+      studentUserId: STUDENT,
+      email: 's@example.com',
+      idempotencyKey: 'booking-prompt:2026-09-07',
+      kind: 'booking_prompt',
+      pushBody: 'x',
+      tag: 't',
+      env: { VERCEL_ENV: 'production' },
+    })
+
+    expect(outcome).toBe('email_failed')
     expect(sendBookingPromptEmail).not.toHaveBeenCalled()
   })
 })

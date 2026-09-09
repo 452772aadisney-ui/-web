@@ -1,8 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import {
   createCoachingBookingCalendarEvent,
-  fetchCoachingBookingCalendarEventEtag,
+  deleteCoachingBookingCalendarEvent,
+  fetchCoachingBookingCalendarEvent,
   updateCoachingBookingCalendarEvent,
+  type CoachingCalendarUpdateResult,
+  type CreatedCalendarEvent,
+  type FetchCalendarEventResult,
 } from '@/lib/google-calendar/events'
 import { getGoogleCalendarClient } from '@/lib/google-calendar/config'
 
@@ -13,22 +17,296 @@ export type CalendarRescheduleSyncResult =
   | 'skipped_unconfigured'
   | 'failed'
 
-async function bookingStillAtRevision(
-  bookingId: string,
+/** Cap If-Match 412 / missing-etag refresh loops while still the latest revision. */
+export const CALENDAR_RESCHEDULE_MAX_PATCH_ATTEMPTS = 4
+
+export type CalendarBookingSnapshot = {
+  status: string
+  slotId: string
+  scheduleRevision: string
+  coachId: string
+  studentId: string
+  studentNote: string
+  startsAt: string
+  endsAt: string
+  googleCalendarEventId: string | null
+  googleCalendarEtag: string | null
+}
+
+export type CalendarRescheduleSyncDeps = {
+  loadBooking: (bookingId: string) => Promise<CalendarBookingSnapshot | null>
+  persistMeta: (params: {
+    bookingId: string
+    changeRevision: string
+    slotId: string
+    eventId?: string | null
+    etag: string | null
+    /** When true, only write event id if still null (create race). */
+    requireNullEventId?: boolean
+  }) => Promise<'ok' | 'stale' | 'failed'>
+  updateEvent: (input: {
+    eventId: string
+    studentId: string
+    coachId: string
+    startsAt: string
+    endsAt: string
+    studentNote: string
+    ifMatchEtag: string
+  }) => Promise<CoachingCalendarUpdateResult>
+  fetchEvent: (eventId: string) => Promise<FetchCalendarEventResult>
+  createEvent: (input: {
+    studentId: string
+    slotId: string
+    coachId: string
+    startsAt: string
+    studentNote: string
+  }) => Promise<CreatedCalendarEvent | null>
+  deleteEvent: (eventId: string) => Promise<void>
+  isConfigured: () => boolean
+}
+
+function isLatestRevision(
+  snap: CalendarBookingSnapshot,
   changeRevision: string,
-  newSlotId: string,
-): Promise<
-  | {
-      ok: true
-      googleCalendarEventId: string | null
-      googleCalendarEtag: string | null
+): boolean {
+  return (
+    snap.status === 'scheduled' && snap.scheduleRevision === changeRevision
+  )
+}
+
+/**
+ * Sync GWS for a successful reschedule revision.
+ *
+ * - Always patches with If-Match (never unconditional update of an existing event).
+ * - On 412: if this changeRevision is no longer latest → skip; if still latest →
+ *   refetch etag + DB booking fields and retry (bounded).
+ * - Missing DB etag: GET event for etag, re-check revision, then If-Match patch.
+ * - Create: CAS event_id only while null; orphan creates are deleted on lost race.
+ *
+ * Residual: Google may briefly show an older revision's times until the latest
+ * writer finishes its 412-retry; Discord is unrelated to this module.
+ */
+export async function runCalendarRescheduleSync(
+  params: {
+    bookingId: string
+    changeRevision: string
+    /** Hint only; live slot/times always come from DB when revision matches. */
+    googleCalendarEventId: string | null
+  },
+  deps: CalendarRescheduleSyncDeps,
+): Promise<CalendarRescheduleSyncResult> {
+  const initial = await deps.loadBooking(params.bookingId)
+  if (!initial) return 'failed'
+  if (!isLatestRevision(initial, params.changeRevision)) return 'skipped_stale'
+
+  let eventId =
+    initial.googleCalendarEventId?.trim() ||
+    params.googleCalendarEventId?.trim() ||
+    null
+
+  if (eventId) {
+    return patchExistingEvent({
+      bookingId: params.bookingId,
+      changeRevision: params.changeRevision,
+      eventId,
+      deps,
+    })
+  }
+
+  return createNewEvent({
+    bookingId: params.bookingId,
+    changeRevision: params.changeRevision,
+    deps,
+  })
+}
+
+async function patchExistingEvent(args: {
+  bookingId: string
+  changeRevision: string
+  eventId: string
+  deps: CalendarRescheduleSyncDeps
+}): Promise<CalendarRescheduleSyncResult> {
+  const { bookingId, changeRevision, deps } = args
+  let eventId = args.eventId
+
+  for (let attempt = 0; attempt < CALENDAR_RESCHEDULE_MAX_PATCH_ATTEMPTS; attempt += 1) {
+    const snap = await deps.loadBooking(bookingId)
+    if (!snap) return 'failed'
+    if (!isLatestRevision(snap, changeRevision)) return 'skipped_stale'
+
+    const liveEventId =
+      snap.googleCalendarEventId?.trim() || eventId
+    if (!liveEventId) {
+      return createNewEvent({ bookingId, changeRevision, deps })
     }
-  | { ok: false; reason: 'failed' | 'stale' }
-> {
+    eventId = liveEventId
+
+    let live = snap
+    let ifMatch = live.googleCalendarEtag?.trim() || null
+    if (!ifMatch) {
+      const fetched = await deps.fetchEvent(eventId)
+      if (fetched.status === 'unconfigured') return 'skipped_unconfigured'
+      if (fetched.status === 'not_found') {
+        // Stale id in DB — create a fresh event for this revision.
+        const cleared = await deps.persistMeta({
+          bookingId,
+          changeRevision,
+          slotId: live.slotId,
+          eventId: null,
+          etag: null,
+        })
+        if (cleared === 'stale') return 'skipped_stale'
+        if (cleared === 'failed') return 'failed'
+        return createNewEvent({ bookingId, changeRevision, deps })
+      }
+      if (fetched.status !== 'ok' || !fetched.etag?.trim()) return 'failed'
+
+      // Gap after GET: another reschedule may have won.
+      const afterGet = await deps.loadBooking(bookingId)
+      if (!afterGet) return 'failed'
+      if (!isLatestRevision(afterGet, changeRevision)) return 'skipped_stale'
+
+      live = afterGet
+      ifMatch = fetched.etag.trim()
+    }
+
+    const result = await deps.updateEvent({
+      eventId,
+      studentId: live.studentId,
+      coachId: live.coachId,
+      startsAt: live.startsAt,
+      endsAt: live.endsAt,
+      studentNote: live.studentNote,
+      ifMatchEtag: ifMatch,
+    })
+
+    if (result.status === 'skipped') return 'skipped_unconfigured'
+    if (result.status === 'failed') return 'failed'
+    if (result.status === 'missing_etag') return 'failed'
+
+    if (result.status === 'precondition_failed') {
+      // Another writer beat us. Only retry if we are still the latest revision.
+      const after412 = await deps.loadBooking(bookingId)
+      if (!after412) return 'failed'
+      if (!isLatestRevision(after412, changeRevision)) return 'skipped_stale'
+
+      const refreshed = await deps.fetchEvent(eventId)
+      if (refreshed.status === 'unconfigured') return 'skipped_unconfigured'
+      if (refreshed.status === 'not_found') {
+        const cleared = await deps.persistMeta({
+          bookingId,
+          changeRevision,
+          slotId: after412.slotId,
+          eventId: null,
+          etag: null,
+        })
+        if (cleared === 'stale') return 'skipped_stale'
+        if (cleared === 'failed') return 'failed'
+        return createNewEvent({ bookingId, changeRevision, deps })
+      }
+      if (refreshed.status !== 'ok' || !refreshed.etag?.trim()) return 'failed'
+
+      // Store freshest etag for this revision so the next attempt uses If-Match.
+      await deps.persistMeta({
+        bookingId,
+        changeRevision,
+        slotId: after412.slotId,
+        etag: refreshed.etag,
+      })
+      continue
+    }
+
+    // updated — body came from DB snapshot for this revision (not a stale in-memory schedule).
+    const persisted = await deps.persistMeta({
+      bookingId,
+      changeRevision,
+      slotId: live.slotId,
+      etag: result.etag,
+    })
+    if (persisted === 'stale') return 'skipped_stale'
+    if (persisted === 'failed') return 'failed'
+    return 'updated'
+  }
+
+  // Exhausted retries while still claiming to be latest → hard failure (do not skip).
+  return 'failed'
+}
+
+async function createNewEvent(args: {
+  bookingId: string
+  changeRevision: string
+  deps: CalendarRescheduleSyncDeps
+}): Promise<CalendarRescheduleSyncResult> {
+  const { bookingId, changeRevision, deps } = args
+
+  if (!deps.isConfigured()) return 'skipped_unconfigured'
+
+  const before = await deps.loadBooking(bookingId)
+  if (!before) return 'failed'
+  if (!isLatestRevision(before, changeRevision)) return 'skipped_stale'
+
+  // Peer may have created while we decided to create.
+  const existingId = before.googleCalendarEventId?.trim()
+  if (existingId) {
+    return patchExistingEvent({
+      bookingId,
+      changeRevision,
+      eventId: existingId,
+      deps,
+    })
+  }
+
+  const created = await deps.createEvent({
+    studentId: before.studentId,
+    slotId: before.slotId,
+    coachId: before.coachId,
+    startsAt: before.startsAt,
+    studentNote: before.studentNote,
+  })
+  if (!created) return 'failed'
+
+  const persisted = await deps.persistMeta({
+    bookingId,
+    changeRevision,
+    slotId: before.slotId,
+    eventId: created.eventId,
+    etag: created.etag,
+    requireNullEventId: true,
+  })
+
+  if (persisted === 'ok') return 'created'
+
+  // Lost create race or revision moved — delete orphan to avoid duplicate GWS events.
+  await deps.deleteEvent(created.eventId)
+
+  if (persisted === 'stale') {
+    const again = await deps.loadBooking(bookingId)
+    if (!again) return 'failed'
+    if (!isLatestRevision(again, changeRevision)) return 'skipped_stale'
+    const peerId = again.googleCalendarEventId?.trim()
+    if (peerId) {
+      return patchExistingEvent({
+        bookingId,
+        changeRevision,
+        eventId: peerId,
+        deps,
+      })
+    }
+    return 'failed'
+  }
+
+  return 'failed'
+}
+
+async function loadBookingSnapshot(
+  bookingId: string,
+): Promise<CalendarBookingSnapshot | null> {
   const supabase = await createClient()
-  const { data: current, error } = await supabase
+  const { data, error } = await supabase
     .from('coaching_bookings')
-    .select('slot_id, schedule_revision, google_calendar_event_id, google_calendar_etag, status')
+    .select(
+      'slot_id, schedule_revision, google_calendar_event_id, google_calendar_etag, status, coach_id, student_id, student_note, coaching_slots(starts_at, ends_at)',
+    )
     .eq('id', bookingId)
     .maybeSingle<{
       slot_id: string
@@ -36,66 +314,83 @@ async function bookingStillAtRevision(
       google_calendar_event_id: string | null
       google_calendar_etag: string | null
       status: string
+      coach_id: string
+      student_id: string
+      student_note: string
+      coaching_slots: { starts_at: string; ends_at: string } | { starts_at: string; ends_at: string }[]
     }>()
 
-  if (error || !current) return { ok: false, reason: 'failed' }
+  if (error || !data) return null
 
-  if (
-    current.status !== 'scheduled' ||
-    current.slot_id !== newSlotId ||
-    current.schedule_revision !== changeRevision
-  ) {
-    return { ok: false, reason: 'stale' }
-  }
+  const slotRel = Array.isArray(data.coaching_slots)
+    ? data.coaching_slots[0]
+    : data.coaching_slots
+  if (!slotRel?.starts_at || !slotRel?.ends_at) return null
 
   return {
-    ok: true,
-    googleCalendarEventId: current.google_calendar_event_id,
-    googleCalendarEtag: current.google_calendar_etag,
+    status: data.status,
+    slotId: data.slot_id,
+    scheduleRevision: data.schedule_revision,
+    coachId: data.coach_id,
+    studentId: data.student_id,
+    studentNote: data.student_note,
+    startsAt: slotRel.starts_at,
+    endsAt: slotRel.ends_at,
+    googleCalendarEventId: data.google_calendar_event_id,
+    googleCalendarEtag: data.google_calendar_etag,
   }
 }
 
 async function persistCalendarMeta(params: {
   bookingId: string
   changeRevision: string
-  newSlotId: string
+  slotId: string
   eventId?: string | null
   etag: string | null
+  requireNullEventId?: boolean
 }): Promise<'ok' | 'stale' | 'failed'> {
   const supabase = await createClient()
-  const patch: { google_calendar_etag: string | null; google_calendar_event_id?: string } = {
+  const patch: {
+    google_calendar_etag: string | null
+    google_calendar_event_id?: string | null
+  } = {
     google_calendar_etag: params.etag,
   }
-  if (params.eventId) {
+  if (params.eventId !== undefined) {
     patch.google_calendar_event_id = params.eventId
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('coaching_bookings')
     .update(patch)
     .eq('id', params.bookingId)
     .eq('schedule_revision', params.changeRevision)
-    .eq('slot_id', params.newSlotId)
+    .eq('slot_id', params.slotId)
     .eq('status', 'scheduled')
-    .select('id')
-    .maybeSingle<{ id: string }>()
+
+  if (params.requireNullEventId) {
+    query = query.is('google_calendar_event_id', null)
+  }
+
+  const { data, error } = await query.select('id').maybeSingle<{ id: string }>()
 
   if (error) return 'failed'
   if (!data) return 'stale'
   return 'ok'
 }
 
-/**
- * Sync GWS for a successful reschedule revision.
- *
- * Ordering across instances:
- * - DB CAS on schedule_revision before/after external calls
- * - Google Calendar If-Match (etag) so an older patch after a newer one gets 412
- *
- * Residual: if etag is missing (legacy rows / first sync), first writer has no If-Match;
- * a concurrent first writer can still race until an etag is stored. After etags exist,
- * 412 + revision CAS rejects stale writers.
- */
+const liveDeps: CalendarRescheduleSyncDeps = {
+  loadBooking: loadBookingSnapshot,
+  persistMeta: persistCalendarMeta,
+  updateEvent: (input) => updateCoachingBookingCalendarEvent(input),
+  fetchEvent: fetchCoachingBookingCalendarEvent,
+  createEvent: createCoachingBookingCalendarEvent,
+  deleteEvent: async (eventId) => {
+    await deleteCoachingBookingCalendarEvent(eventId)
+  },
+  isConfigured: () => Boolean(getGoogleCalendarClient()),
+}
+
 export async function syncCalendarAfterCoachingReschedule(params: {
   bookingId: string
   studentId: string
@@ -108,79 +403,21 @@ export async function syncCalendarAfterCoachingReschedule(params: {
   /** Persisted schedule_revision from the successful DB reschedule. */
   changeRevision: string
 }): Promise<CalendarRescheduleSyncResult> {
-  const still = await bookingStillAtRevision(
-    params.bookingId,
-    params.changeRevision,
-    params.newSlotId,
+  // studentId / slot / times are intentionally ignored here — live DB snapshot
+  // is the source of truth so a 412 retry never writes an older in-memory schedule.
+  void params.studentId
+  void params.newSlotId
+  void params.newCoachId
+  void params.newStartsAt
+  void params.newEndsAt
+  void params.studentNote
+
+  return runCalendarRescheduleSync(
+    {
+      bookingId: params.bookingId,
+      changeRevision: params.changeRevision,
+      googleCalendarEventId: params.googleCalendarEventId,
+    },
+    liveDeps,
   )
-  if (!still.ok) return still.reason === 'stale' ? 'skipped_stale' : 'failed'
-
-  const eventId = still.googleCalendarEventId ?? params.googleCalendarEventId
-
-  if (eventId) {
-    let ifMatch = still.googleCalendarEtag
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const result = await updateCoachingBookingCalendarEvent({
-        eventId,
-        studentId: params.studentId,
-        coachId: params.newCoachId,
-        startsAt: params.newStartsAt,
-        endsAt: params.newEndsAt,
-        studentNote: params.studentNote,
-        ifMatchEtag: ifMatch,
-      })
-
-      if (result.status === 'skipped') return 'skipped_unconfigured'
-      if (result.status === 'failed') return 'failed'
-
-      if (result.status === 'precondition_failed') {
-        const after412 = await bookingStillAtRevision(
-          params.bookingId,
-          params.changeRevision,
-          params.newSlotId,
-        )
-        if (!after412.ok) {
-          return after412.reason === 'stale' ? 'skipped_stale' : 'failed'
-        }
-        const fresh = await fetchCoachingBookingCalendarEventEtag(eventId)
-        if (!fresh.ok) return 'failed'
-        ifMatch = fresh.etag
-        continue
-      }
-
-      const persisted = await persistCalendarMeta({
-        bookingId: params.bookingId,
-        changeRevision: params.changeRevision,
-        newSlotId: params.newSlotId,
-        etag: result.etag,
-      })
-      if (persisted === 'stale') return 'skipped_stale'
-      if (persisted === 'failed') return 'failed'
-      return 'updated'
-    }
-    return 'skipped_stale'
-  }
-
-  if (!getGoogleCalendarClient()) return 'skipped_unconfigured'
-
-  const created = await createCoachingBookingCalendarEvent({
-    studentId: params.studentId,
-    slotId: params.newSlotId,
-    coachId: params.newCoachId,
-    startsAt: params.newStartsAt,
-    studentNote: params.studentNote,
-  })
-
-  if (!created) return 'failed'
-
-  const persisted = await persistCalendarMeta({
-    bookingId: params.bookingId,
-    changeRevision: params.changeRevision,
-    newSlotId: params.newSlotId,
-    eventId: created.eventId,
-    etag: created.etag,
-  })
-  if (persisted === 'stale') return 'skipped_stale'
-  if (persisted === 'failed') return 'failed'
-  return 'created'
 }

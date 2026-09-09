@@ -688,12 +688,15 @@ export async function adminRescheduleCoachingBooking(
 }
 
 /**
- * Re-run Discord / GWS / student notify for the booking's *current*
- * schedule_revision without changing slot_id.
+ * Re-run GWS / student notify for the booking's *current* schedule_revision
+ * without changing slot_id.
  *
  * - Does not re-reschedule.
- * - Push/email use the persisted revision idempotency key (already_completed on retry).
- * - Discord has no durable idempotency today; callers should avoid blind spam.
+ * - Push/email reuse the persisted revision idempotency key; failed/pending can
+ *   be retried, while sent channels stay deduped (already_completed).
+ * - Discord is NOT retried here: there is no durable Discord idempotency key.
+ *   If Discord failed on the original reschedule it remains unsent — this action
+ *   must not be reported as a full side-effect success that includes Discord.
  * - Admin retry UI is not shipped; this action is the supported server path.
  */
 export async function adminRetryCoachingRescheduleSideEffects(
@@ -741,9 +744,11 @@ export async function adminRetryCoachingRescheduleSideEffects(
     ? coachRel[0]?.name ?? '担当講師'
     : coachRel?.name ?? '担当講師'
 
-  const warnings: string[] = []
+  const warnings: string[] = [
+    // Always surface: Discord is out of scope for retry and may remain unsent.
+    'Discord通知は再送しません（初回失敗時は未送信のまま）',
+  ]
 
-  // Discord has no durable idempotency key — skip on retry to avoid duplicate channel spam.
   // Student Push/email reuse schedule_revision idempotency; GWS uses etag + revision CAS.
 
   try {
@@ -787,14 +792,11 @@ export async function adminRetryCoachingRescheduleSideEffects(
 
   revalidateCoachingPaths()
 
-  if (warnings.length > 0) {
-    return {
-      success: true,
-      successMessage: `通知再送を実行しました（${warnings.join('／')}）`,
-    }
+  // Not a full side-effect success: Discord is never covered by this path.
+  return {
+    success: true,
+    successMessage: `カレンダー／生徒通知の再試行を実行しました（${warnings.join('／')}）`,
   }
-
-  return { success: true, successMessage: '通知再送を実行しました' }
 }
 
 type RescheduleCoreSuccess = {

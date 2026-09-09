@@ -21,6 +21,9 @@ describe('performCoachingReschedule concurrency guards', () => {
     const retryFn = source.slice(start, end === -1 ? undefined : end)
     expect(retryFn).toContain('changeRevision: booking.schedule_revision')
     expect(retryFn).not.toContain('performCoachingReschedule')
+    expect(retryFn).toContain('Discord通知は再送しません')
+    expect(retryFn).toContain('初回失敗時は未送信のまま')
+    expect(retryFn).not.toContain('notifyCoachingBookingRescheduled')
   })
 
   it('keeps student auth gate separate from admin', () => {

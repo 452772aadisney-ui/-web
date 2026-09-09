@@ -114,6 +114,7 @@ export type CoachingCalendarUpdateResult =
   | { status: 'skipped' }
   | { status: 'failed' }
   | { status: 'precondition_failed' }
+  | { status: 'missing_etag' }
 
 function isPreconditionFailed(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
@@ -121,6 +122,16 @@ function isPreconditionFailed(error: unknown): boolean {
   return err.code === 412 || err.status === 412 || err.response?.status === 412
 }
 
+function isNotFound(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const err = error as { code?: number; status?: number; response?: { status?: number } }
+  return err.code === 404 || err.status === 404 || err.response?.status === 404
+}
+
+/**
+ * Existing events must always be patched with If-Match.
+ * Callers obtain an etag via fetch (or DB) first — never fall back to unconditional patch.
+ */
 export async function updateCoachingBookingCalendarEvent(input: {
   eventId: string
   studentId: string
@@ -128,11 +139,14 @@ export async function updateCoachingBookingCalendarEvent(input: {
   startsAt: string
   endsAt: string
   studentNote: string
-  /** When set, patch uses If-Match so a newer GWS write wins with 412. */
-  ifMatchEtag?: string | null
+  /** Required. Unconditional patches are rejected. */
+  ifMatchEtag: string
 }): Promise<CoachingCalendarUpdateResult> {
   const trimmed = input.eventId.trim()
   if (!trimmed) return { status: 'skipped' }
+
+  const ifMatch = input.ifMatchEtag?.trim() || ''
+  if (!ifMatch) return { status: 'missing_etag' }
 
   const client = getGoogleCalendarClient()
   if (!client) {
@@ -157,7 +171,6 @@ export async function updateCoachingBookingCalendarEvent(input: {
 
   const studentName = student ? getPersonName(student) : '生徒'
   const coachName = coach?.name ?? '未設定'
-  const ifMatch = input.ifMatchEtag?.trim() || null
 
   try {
     const response = await client.calendar.events.patch(
@@ -177,17 +190,15 @@ export async function updateCoachingBookingCalendarEvent(input: {
           },
         },
       },
-      ifMatch
-        ? {
-            headers: {
-              'If-Match': ifMatch,
-            },
-          }
-        : undefined,
+      {
+        headers: {
+          'If-Match': ifMatch,
+        },
+      },
     )
     return { status: 'updated', etag: response.data.etag ?? null }
   } catch (error) {
-    if (ifMatch && isPreconditionFailed(error)) {
+    if (isPreconditionFailed(error)) {
       return { status: 'precondition_failed' }
     }
     console.error('[google-calendar] event patch failed:', error)
@@ -195,25 +206,41 @@ export async function updateCoachingBookingCalendarEvent(input: {
   }
 }
 
-export async function fetchCoachingBookingCalendarEventEtag(
+export type FetchCalendarEventResult =
+  | { status: 'ok'; etag: string | null }
+  | { status: 'not_found' }
+  | { status: 'unconfigured' }
+  | { status: 'failed' }
+
+export async function fetchCoachingBookingCalendarEvent(
   eventId: string,
-): Promise<{ ok: true; etag: string | null } | { ok: false }> {
+): Promise<FetchCalendarEventResult> {
   const trimmed = eventId.trim()
-  if (!trimmed) return { ok: false }
+  if (!trimmed) return { status: 'failed' }
 
   const client = getGoogleCalendarClient()
-  if (!client) return { ok: false }
+  if (!client) return { status: 'unconfigured' }
 
   try {
     const response = await client.calendar.events.get({
       calendarId: client.calendarId,
       eventId: trimmed,
     })
-    return { ok: true, etag: response.data.etag ?? null }
+    return { status: 'ok', etag: response.data.etag ?? null }
   } catch (error) {
+    if (isNotFound(error)) return { status: 'not_found' }
     console.error('[google-calendar] event get failed:', error)
-    return { ok: false }
+    return { status: 'failed' }
   }
+}
+
+/** @deprecated Prefer fetchCoachingBookingCalendarEvent for not_found handling. */
+export async function fetchCoachingBookingCalendarEventEtag(
+  eventId: string,
+): Promise<{ ok: true; etag: string | null } | { ok: false }> {
+  const result = await fetchCoachingBookingCalendarEvent(eventId)
+  if (result.status === 'ok') return { ok: true, etag: result.etag }
+  return { ok: false }
 }
 
 function buildQuizEventDescription(input: {

@@ -153,6 +153,21 @@ async function markDeliveriesFailed(
   return !error
 }
 
+/** Clears failed email rows so an explicit admin retry can reclaim the channel. */
+async function deleteFailedEmailDeliveries(
+  admin: AdminClient,
+  eventId: string,
+): Promise<boolean> {
+  const { error } = await admin
+    .from('notification_deliveries')
+    .delete()
+    .eq('event_id', eventId)
+    .eq('channel', 'email')
+    .eq('status', 'failed')
+
+  return !error
+}
+
 async function claimEmailDeliveryPending(
   admin: AdminClient,
   eventId: string,
@@ -335,14 +350,36 @@ export async function processCoachingReminderNewPath(params: {
     const listed = await listDeliveries(admin, existingEvent.eventId)
     if (!listed.ok) return 'failed'
 
-    const classified = classifyExistingDeliveries(
+    let classified = classifyExistingDeliveries(
       listed.rows,
       nowMs,
       COACHING_REMINDER_PENDING_STALE_MS,
     )
+
     if (classified.gate === 'already_completed') return 'already_completed'
     if (classified.gate === 'in_progress') return 'in_progress'
-    if (classified.gate === 'email_terminal') return 'email_failed'
+
+    if (classified.gate === 'email_terminal') {
+      // Cron must not loop on terminal email failure. Admin reschedule retry is
+      // explicit: clear failed email delivery and resend without changing the key.
+      if (params.kind !== 'admin_reschedule') return 'email_failed'
+      const cleared = await deleteFailedEmailDeliveries(admin, existingEvent.eventId)
+      if (!cleared) return 'failed'
+      return tryEmailFallback({
+        admin,
+        userId: params.studentUserId,
+        idempotencyKey: params.idempotencyKey,
+        kind: params.kind,
+        title: COACHING_REMINDER_PUSH_TITLE,
+        body: params.pushBody,
+        email: params.email,
+        hm: params.hm,
+        coachName: params.coachName,
+        datetimeLabel: params.datetimeLabel,
+        deadlineMs: params.deadlineMs,
+        eventMetadata,
+      })
+    }
 
     if (classified.gate === 'stale_pending') {
       const marked = await markDeliveriesFailed(
@@ -351,7 +388,18 @@ export async function processCoachingReminderNewPath(params: {
         'stale_pending',
       )
       if (!marked) return 'failed'
-      return 'stale_pending'
+      // Cron reports stale_pending; admin reschedule retry continues after clearing.
+      if (params.kind !== 'admin_reschedule') return 'stale_pending'
+
+      const relisted = await listDeliveries(admin, existingEvent.eventId)
+      if (!relisted.ok) return 'failed'
+      classified = classifyExistingDeliveries(
+        relisted.rows,
+        nowMs,
+        COACHING_REMINDER_PENDING_STALE_MS,
+      )
+      if (classified.gate === 'already_completed') return 'already_completed'
+      if (classified.gate === 'in_progress') return 'in_progress'
     }
 
     if (classified.hasFailedPushOnly) {
