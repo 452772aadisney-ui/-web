@@ -144,6 +144,8 @@ export default async function AdminCoachingBookingsPage({
           pastBookings={pastResult.bookings}
           pastTotalCount={pastResult.totalCount}
           pastRangeLabel={pastRangeLabel}
+          coaches={coaches}
+          weekStart={weekStart}
           pastSearchForm={
             <form
               method="get"

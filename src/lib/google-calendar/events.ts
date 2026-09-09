@@ -102,6 +102,8 @@ export async function deleteCoachingBookingCalendarEvent(
   }
 }
 
+export type CoachingCalendarUpdateResult = 'updated' | 'skipped' | 'failed'
+
 export async function updateCoachingBookingCalendarEvent(input: {
   eventId: string
   studentId: string
@@ -109,14 +111,14 @@ export async function updateCoachingBookingCalendarEvent(input: {
   startsAt: string
   endsAt: string
   studentNote: string
-}): Promise<void> {
+}): Promise<CoachingCalendarUpdateResult> {
   const trimmed = input.eventId.trim()
-  if (!trimmed) return
+  if (!trimmed) return 'skipped'
 
   const client = getGoogleCalendarClient()
   if (!client) {
     console.warn('[google-calendar] credentials are not configured; update skipped')
-    return
+    return 'skipped'
   }
 
   const supabase = await createClient()
@@ -154,8 +156,10 @@ export async function updateCoachingBookingCalendarEvent(input: {
         },
       },
     })
+    return 'updated'
   } catch (error) {
     console.error('[google-calendar] event patch failed:', error)
+    return 'failed'
   }
 }
 

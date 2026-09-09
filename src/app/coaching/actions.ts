@@ -9,6 +9,8 @@ import {
   deleteCoachingBookingCalendarEvent,
   updateCoachingBookingCalendarEvent,
 } from '@/lib/google-calendar/events'
+import { getGoogleCalendarClient } from '@/lib/google-calendar/config'
+import { notifyStudentOfAdminCoachingReschedule } from '@/lib/coaching/admin-reschedule-notify'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
@@ -30,6 +32,8 @@ import type { AvailableCoachingSlot } from '@/types/coaching'
 export type CoachingActionState = {
   error?: string
   success?: boolean
+  /** Shown via toast when success is true but sync/notify partially failed. */
+  successMessage?: string
   unlockedAchievements?: UnlockedAchievement[]
 }
 
@@ -535,6 +539,208 @@ export async function rescheduleCoachingBooking(
     return { error: '予約または日時を選択してください' }
   }
 
+  const core = await performCoachingReschedule({
+    bookingId,
+    newSlotId,
+    studentNote,
+    actor: 'student',
+    actorUserId: studentResult.userId,
+  })
+  if ('error' in core) return { error: core.error }
+
+  try {
+    await notifyCoachingBookingRescheduled({
+      studentId: core.studentId,
+      oldSlotId: core.oldSlotId,
+      newSlotId: core.newSlotId,
+      oldCoachId: core.oldCoachId,
+      newCoachId: core.newCoachId,
+      oldStartsAt: core.oldStartsAt,
+      newStartsAt: core.newStartsAt,
+      studentNote: core.studentNote,
+      rescheduledBy: 'student',
+    })
+
+    if (core.googleCalendarEventId) {
+      await updateCoachingBookingCalendarEvent({
+        eventId: core.googleCalendarEventId,
+        studentId: core.studentId,
+        coachId: core.newCoachId,
+        startsAt: core.newStartsAt,
+        endsAt: core.newEndsAt,
+        studentNote: core.studentNote,
+      })
+    } else {
+      const calendarEventId = await createCoachingBookingCalendarEvent({
+        studentId: core.studentId,
+        slotId: core.newSlotId,
+        coachId: core.newCoachId,
+        startsAt: core.newStartsAt,
+        studentNote: core.studentNote,
+      })
+
+      if (calendarEventId) {
+        const supabase = await createClient()
+        await supabase
+          .from('coaching_bookings')
+          .update({ google_calendar_event_id: calendarEventId })
+          .eq('id', bookingId)
+      }
+    }
+  } catch (notificationError) {
+    console.error('[coaching] reschedule notification failed:', notificationError)
+  }
+
+  revalidateCoachingPaths()
+  return { success: true }
+}
+
+export async function adminRescheduleCoachingBooking(
+  _prev: CoachingActionState,
+  formData: FormData,
+): Promise<CoachingActionState> {
+  const authError = await assertAdmin()
+  if (authError) return { error: authError }
+
+  const bookingId = String(formData.get('bookingId') ?? '').trim()
+  const newSlotId = String(formData.get('slotId') ?? '').trim()
+
+  if (!bookingId || !newSlotId) {
+    return { error: '予約または日時を選択してください' }
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { error: 'ログインが必要です' }
+
+  const core = await performCoachingReschedule({
+    bookingId,
+    newSlotId,
+    studentNote: null,
+    actor: 'admin',
+    actorUserId: user.id,
+  })
+  if ('error' in core) return { error: core.error }
+
+  const warnings: string[] = []
+
+  try {
+    await notifyCoachingBookingRescheduled({
+      studentId: core.studentId,
+      oldSlotId: core.oldSlotId,
+      newSlotId: core.newSlotId,
+      oldCoachId: core.oldCoachId,
+      newCoachId: core.newCoachId,
+      oldStartsAt: core.oldStartsAt,
+      newStartsAt: core.newStartsAt,
+      studentNote: core.studentNote,
+      rescheduledBy: 'admin',
+    })
+  } catch (discordError) {
+    console.error('[coaching] admin reschedule discord failed:', discordError)
+    warnings.push('Discord通知に失敗しました')
+  }
+
+  try {
+    if (core.googleCalendarEventId) {
+      const calendarResult = await updateCoachingBookingCalendarEvent({
+        eventId: core.googleCalendarEventId,
+        studentId: core.studentId,
+        coachId: core.newCoachId,
+        startsAt: core.newStartsAt,
+        endsAt: core.newEndsAt,
+        studentNote: core.studentNote,
+      })
+      if (calendarResult === 'failed') {
+        warnings.push('Googleカレンダーの更新に失敗しました')
+      }
+    } else {
+      const calendarEventId = await createCoachingBookingCalendarEvent({
+        studentId: core.studentId,
+        slotId: core.newSlotId,
+        coachId: core.newCoachId,
+        startsAt: core.newStartsAt,
+        studentNote: core.studentNote,
+      })
+
+      if (calendarEventId) {
+        await supabase
+          .from('coaching_bookings')
+          .update({ google_calendar_event_id: calendarEventId })
+          .eq('id', bookingId)
+      } else if (getGoogleCalendarClient()) {
+        warnings.push('Googleカレンダーへの登録に失敗しました')
+      }
+    }
+  } catch (calendarError) {
+    console.error('[coaching] admin reschedule calendar failed:', calendarError)
+    warnings.push('Googleカレンダーの同期に失敗しました')
+  }
+
+  try {
+    const { data: coach } = await supabase
+      .from('coaching_coaches')
+      .select('name')
+      .eq('id', core.newCoachId)
+      .maybeSingle<{ name: string }>()
+
+    const studentNotify = await notifyStudentOfAdminCoachingReschedule({
+      studentId: core.studentId,
+      coachName: coach?.name ?? '担当講師',
+      startsAt: core.newStartsAt,
+      endsAt: core.newEndsAt,
+      slotDate: core.newSlotDate,
+      startTime: core.newStartTime,
+      bookingId: core.bookingId,
+      oldStartsAt: core.oldStartsAt,
+      newStartsAt: core.newStartsAt,
+    })
+    if (studentNotify === 'failed') {
+      warnings.push('生徒への通知に失敗しました')
+    }
+  } catch (notifyError) {
+    console.error('[coaching] admin reschedule student notify failed:', notifyError)
+    warnings.push('生徒への通知に失敗しました')
+  }
+
+  revalidateCoachingPaths()
+
+  if (warnings.length > 0) {
+    return {
+      success: true,
+      successMessage: `予約を変更しました（${warnings.join('／')}）`,
+    }
+  }
+
+  return { success: true, successMessage: '予約を変更しました' }
+}
+
+type RescheduleCoreSuccess = {
+  bookingId: string
+  studentId: string
+  oldSlotId: string
+  newSlotId: string
+  oldCoachId: string
+  newCoachId: string
+  oldStartsAt: string
+  newStartsAt: string
+  newEndsAt: string
+  newSlotDate: string | null
+  newStartTime: string | null
+  studentNote: string
+  googleCalendarEventId: string | null
+}
+
+async function performCoachingReschedule(params: {
+  bookingId: string
+  newSlotId: string
+  /** null keeps the existing note (admin path). */
+  studentNote: string | null
+  actor: 'student' | 'admin'
+  actorUserId: string
+}): Promise<{ error: string } | RescheduleCoreSuccess> {
   const supabase = await createClient()
 
   const { data: booking, error: bookingError } = await supabase
@@ -542,7 +748,7 @@ export async function rescheduleCoachingBooking(
     .select(
       'id, student_id, coach_id, slot_id, student_note, status, google_calendar_event_id, coaching_slots(starts_at, ends_at, slot_date, start_time)',
     )
-    .eq('id', bookingId)
+    .eq('id', params.bookingId)
     .maybeSingle<{
       id: string
       student_id: string
@@ -561,7 +767,7 @@ export async function rescheduleCoachingBooking(
 
   if (bookingError || !booking) return { error: '予約が見つかりません' }
 
-  if (booking.student_id !== studentResult.userId) {
+  if (params.actor === 'student' && booking.student_id !== params.actorUserId) {
     return { error: '権限がありません' }
   }
 
@@ -573,20 +779,22 @@ export async function rescheduleCoachingBooking(
     return { error: '開始済みの予約は変更できません' }
   }
 
-  if (booking.slot_id === newSlotId) {
+  if (booking.slot_id === params.newSlotId) {
     return { error: '別の日時を選んでください' }
   }
 
   const { data: newSlot, error: slotError } = await supabase
     .from('coaching_slots')
-    .select('id, coach_id, starts_at, ends_at, is_open')
-    .eq('id', newSlotId)
+    .select('id, coach_id, starts_at, ends_at, is_open, slot_date, start_time')
+    .eq('id', params.newSlotId)
     .maybeSingle<{
       id: string
       coach_id: string
       starts_at: string
       ends_at: string
       is_open: boolean
+      slot_date: string | null
+      start_time: string | null
     }>()
 
   if (slotError || !newSlot) return { error: '予約枠が見つかりません' }
@@ -595,78 +803,45 @@ export async function rescheduleCoachingBooking(
     return { error: 'この予約枠は既に過ぎています' }
   }
 
-  if (await isCoachingSlotOccupied(newSlotId)) {
+  // Re-validate vacancy immediately before commit.
+  if (await isCoachingSlotOccupied(params.newSlotId)) {
     return { error: 'この予約枠は既に埋まっています' }
   }
 
-  const { data: slotBooking } = await supabase
-    .from('coaching_bookings')
-    .select('id, status')
-    .eq('slot_id', newSlotId)
-    .eq('student_id', studentResult.userId)
-    .maybeSingle<{ id: string; status: string }>()
+  const nextNote =
+    params.studentNote === null ? booking.student_note : params.studentNote || booking.student_note
 
-  const nextNote = studentNote || booking.student_note
-  const oldSlotId = booking.slot_id
-  const oldCoachId = booking.coach_id
-  const oldStartsAt = booking.coaching_slots.starts_at
+  const writeDb =
+    params.actor === 'admin' ? await getCoachingBookingWriteClient(booking.student_id) : supabase
 
-  const { error: updateError } = await supabase
+  const { error: updateError } = await writeDb
     .from('coaching_bookings')
     .update({
-      slot_id: newSlotId,
+      slot_id: params.newSlotId,
       coach_id: newSlot.coach_id,
       student_note: nextNote,
       booked_at: new Date().toISOString(),
     })
-    .eq('id', bookingId)
+    .eq('id', params.bookingId)
+    .eq('status', 'scheduled')
 
   if (updateError) return { error: '予約の変更に失敗しました' }
 
-  try {
-    await notifyCoachingBookingRescheduled({
-      studentId: booking.student_id,
-      oldSlotId,
-      newSlotId,
-      oldCoachId,
-      newCoachId: newSlot.coach_id,
-      oldStartsAt,
-      newStartsAt: newSlot.starts_at,
-      studentNote: nextNote,
-      rescheduledBy: 'student',
-    })
-
-    if (booking.google_calendar_event_id) {
-      await updateCoachingBookingCalendarEvent({
-        eventId: booking.google_calendar_event_id,
-        studentId: booking.student_id,
-        coachId: newSlot.coach_id,
-        startsAt: newSlot.starts_at,
-        endsAt: newSlot.ends_at,
-        studentNote: nextNote,
-      })
-    } else {
-      const calendarEventId = await createCoachingBookingCalendarEvent({
-        studentId: booking.student_id,
-        slotId: newSlotId,
-        coachId: newSlot.coach_id,
-        startsAt: newSlot.starts_at,
-        studentNote: nextNote,
-      })
-
-      if (calendarEventId) {
-        await supabase
-          .from('coaching_bookings')
-          .update({ google_calendar_event_id: calendarEventId })
-          .eq('id', bookingId)
-      }
-    }
-  } catch (notificationError) {
-    console.error('[coaching] reschedule notification failed:', notificationError)
+  return {
+    bookingId: booking.id,
+    studentId: booking.student_id,
+    oldSlotId: booking.slot_id,
+    newSlotId: params.newSlotId,
+    oldCoachId: booking.coach_id,
+    newCoachId: newSlot.coach_id,
+    oldStartsAt: booking.coaching_slots.starts_at,
+    newStartsAt: newSlot.starts_at,
+    newEndsAt: newSlot.ends_at,
+    newSlotDate: newSlot.slot_date,
+    newStartTime: newSlot.start_time,
+    studentNote: nextNote,
+    googleCalendarEventId: booking.google_calendar_event_id,
   }
-
-  revalidateCoachingPaths()
-  return { success: true }
 }
 
 export async function cancelCoachingBooking(formData: FormData): Promise<void> {

@@ -8,11 +8,15 @@ import { COACHING_REMINDER_PENDING_STALE_MS } from '@/lib/coaching/coaching-remi
 import {
   COACHING_REMINDER_PUSH_PATH,
   COACHING_REMINDER_PUSH_TITLE,
+  sendAdminRescheduleEmail,
   sendBookingPromptEmail,
   sendSessionPreviousDayEmail,
 } from '@/lib/coaching/coaching-reminder-email'
 
-export type CoachingReminderKind = 'booking_prompt' | 'session_previous_day'
+export type CoachingReminderKind =
+  | 'booking_prompt'
+  | 'session_previous_day'
+  | 'admin_reschedule'
 
 export type CoachingReminderNewPathOutcome =
   | 'push_sent'
@@ -197,6 +201,8 @@ async function tryEmailFallback(params: {
   body: string
   email: string | null
   hm?: string
+  coachName?: string
+  datetimeLabel?: string
   deadlineMs?: number
   eventMetadata?: Record<string, unknown>
 }): Promise<CoachingReminderNewPathOutcome> {
@@ -237,11 +243,18 @@ async function tryEmailFallback(params: {
           to: params.email,
           deadlineMs: params.deadlineMs,
         })
-      : await sendSessionPreviousDayEmail({
-          to: params.email,
-          hm: params.hm ?? '00:00',
-          deadlineMs: params.deadlineMs,
-        })
+      : params.kind === 'admin_reschedule'
+        ? await sendAdminRescheduleEmail({
+            to: params.email,
+            coachName: params.coachName ?? '担当講師',
+            datetimeLabel: params.datetimeLabel ?? '',
+            deadlineMs: params.deadlineMs,
+          })
+        : await sendSessionPreviousDayEmail({
+            to: params.email,
+            hm: params.hm ?? '00:00',
+            deadlineMs: params.deadlineMs,
+          })
 
   if (sendResult.ok) {
     const finalized = await finalizeEmailDelivery(params.admin, event.eventId, {
@@ -286,6 +299,9 @@ export async function processCoachingReminderNewPath(params: {
   pushBody: string
   /** For session email body time; omit for booking prompt. */
   hm?: string
+  /** For admin reschedule email body. */
+  coachName?: string
+  datetimeLabel?: string
   tag: string
   /** Merged into event metadata (admin tests override `kind` for ops distinction). */
   eventMetadata?: Record<string, unknown>
@@ -348,6 +364,8 @@ export async function processCoachingReminderNewPath(params: {
         body: params.pushBody,
         email: params.email,
         hm: params.hm,
+        coachName: params.coachName,
+        datetimeLabel: params.datetimeLabel,
         deadlineMs: params.deadlineMs,
         eventMetadata,
       })
@@ -398,6 +416,8 @@ export async function processCoachingReminderNewPath(params: {
     body: params.pushBody,
     email: params.email,
     hm: params.hm,
+    coachName: params.coachName,
+    datetimeLabel: params.datetimeLabel,
     deadlineMs: params.deadlineMs,
     eventMetadata,
   })

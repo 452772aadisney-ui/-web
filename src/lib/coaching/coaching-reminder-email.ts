@@ -11,12 +11,29 @@ export const BOOKING_PROMPT_EMAIL_BODY =
 
 export const SESSION_PREVIOUS_DAY_EMAIL_SUBJECT = '明日のコーチングのお知らせ'
 
+export const ADMIN_RESCHEDULE_PUSH_BODY =
+  'コーチングの予約が変更されました。内容を確認してください。'
+export const ADMIN_RESCHEDULE_EMAIL_SUBJECT = 'コーチングの予約が変更されました'
+
 export function sessionPreviousDayPushBody(hm: string): string {
   return `明日${hm}からコーチングです。`
 }
 
 export function sessionPreviousDayEmailBody(hm: string): string {
   return `明日${hm}からコーチングです。`
+}
+
+export function adminRescheduleEmailBody(coachName: string, datetimeLabel: string): string {
+  return `コーチングの予約が変更されました。\n担当: ${coachName}\n日時: ${datetimeLabel}`
+}
+
+/** Same before→after change retries share a key; a later re-change uses a new key. */
+export function adminRescheduleIdempotencyKey(
+  bookingId: string,
+  oldStartsAt: string,
+  newStartsAt: string,
+): string {
+  return `admin-reschedule:${bookingId}:${oldStartsAt}:${newStartsAt}`
 }
 
 /** Monday JST date of the target week. */
@@ -59,6 +76,26 @@ export async function sendSessionPreviousDayEmail(params: {
     to: params.to,
     subject: SESSION_PREVIOUS_DAY_EMAIL_SUBJECT,
     text: [sessionPreviousDayEmailBody(params.hm), '', ctaBlock()].join('\n'),
+    omitRecipientFromLogs: true,
+    pace: true,
+    deadlineMs: params.deadlineMs,
+  })
+}
+
+export async function sendAdminRescheduleEmail(params: {
+  to: string
+  coachName: string
+  datetimeLabel: string
+  deadlineMs?: number
+}): Promise<SendEmailResult & { httpStatus?: number | null }> {
+  return sendEmail({
+    to: params.to,
+    subject: ADMIN_RESCHEDULE_EMAIL_SUBJECT,
+    text: [
+      adminRescheduleEmailBody(params.coachName, params.datetimeLabel),
+      '',
+      ctaBlock(),
+    ].join('\n'),
     omitRecipientFromLogs: true,
     pace: true,
     deadlineMs: params.deadlineMs,

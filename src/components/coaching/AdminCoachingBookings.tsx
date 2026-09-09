@@ -13,6 +13,7 @@ import {
   completeCoachingBooking,
   markCoachingBookingNoShow,
 } from '@/app/coaching/actions'
+import { AdminCoachingRescheduleModal } from '@/components/coaching/AdminCoachingRescheduleModal'
 import {
   formatCoachingBookingActionTarget,
   formatCoachingDateLabel,
@@ -28,6 +29,7 @@ import {
   COACHING_BOOKING_STATUS_LABELS,
   type CoachingBookingStatus,
   type CoachingBookingWithDetails,
+  type CoachingCoach,
 } from '@/types/coaching'
 
 function coachingStatusLabel(status: string): string {
@@ -43,12 +45,15 @@ const actionBlueClass = 'border-primary/30 bg-blue-50 text-primary hover:bg-blue
 /** Shared with legacy キャンセル accent (error red). */
 const actionRedClass = 'border-red-200 bg-red-50 text-error hover:bg-red-100'
 
-/** Future「カルテ」: softer charcoal than pure black. */
+/** Future/today「カルテ」: softer charcoal than pure black. */
 const actionCharcoalClass =
   'border-slate-700 bg-slate-700 text-white hover:border-slate-800 hover:bg-slate-800'
 
 const actionGrayClass =
   'border-zinc-300 bg-zinc-100 text-zinc-800 hover:bg-zinc-200'
+
+const actionPurpleClass =
+  'border-violet-300 bg-violet-50 text-violet-800 hover:bg-violet-100'
 
 function BookingStatusBadge({ status }: { status: string }) {
   const label = coachingStatusLabel(status)
@@ -85,13 +90,18 @@ function formatBookingTimeRange(booking: CoachingBookingWithDetails): string {
 function BookingActionButtons({
   booking,
   appearance,
+  coaches,
+  weekStart,
 }: {
   booking: CoachingBookingWithDetails
-  /** `legacy` = today/past collapsible panel styles; `always` = future row colors. */
+  /** `legacy` = past collapsible panel styles; `always` = today/future row colors. */
   appearance: 'legacy' | 'always'
+  coaches: CoachingCoach[]
+  weekStart: string
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
+  const [rescheduleOpen, setRescheduleOpen] = useState(false)
 
   function runAction(
     event: FormEvent<HTMLFormElement>,
@@ -117,6 +127,7 @@ function BookingActionButtons({
   )
 
   const completeLabel = appearance === 'always' ? '実施済み' : '実施済みにする'
+  const showReschedule = appearance === 'always'
 
   const karteClass =
     appearance === 'always'
@@ -126,78 +137,100 @@ function BookingActionButtons({
     appearance === 'always'
       ? `${actionButtonBaseClass} ${actionBlueClass}`
       : `${actionButtonBaseClass} border-border hover:bg-background`
-  const noShowClass =
-    appearance === 'always'
-      ? `${actionButtonBaseClass} ${actionRedClass}`
-      : `${actionButtonBaseClass} border-border hover:bg-background`
   const cancelClass =
     appearance === 'always'
       ? `${actionButtonBaseClass} ${actionGrayClass}`
       : `${actionButtonBaseClass} ${actionRedClass}`
+  const rescheduleClass = `${actionButtonBaseClass} ${actionPurpleClass}`
+  const noShowClass =
+    appearance === 'always'
+      ? `${actionButtonBaseClass} ${actionRedClass}`
+      : `${actionButtonBaseClass} border-border hover:bg-background`
 
   return (
-    <div
-      className={
-        appearance === 'always'
-          ? 'flex max-w-full flex-wrap justify-end gap-2'
-          : 'flex max-w-full shrink-0 flex-wrap gap-2'
-      }
-    >
-      {booking.student && (
-        <Link
-          href={`/admin/coaching/karte/${booking.student.id}?booking=${booking.id}&coach=${booking.coach_id}`}
-          className={karteClass}
-          aria-label={`${target}のカルテを開く`}
+    <>
+      <div
+        className={
+          appearance === 'always'
+            ? 'flex max-w-full flex-wrap justify-end gap-2'
+            : 'flex max-w-full shrink-0 flex-wrap gap-2'
+        }
+      >
+        {booking.student && (
+          <Link
+            href={`/admin/coaching/karte/${booking.student.id}?booking=${booking.id}&coach=${booking.coach_id}`}
+            className={karteClass}
+            aria-label={`${target}のカルテを開く`}
+          >
+            カルテ
+          </Link>
+        )}
+        <form
+          onSubmit={(event) =>
+            runAction(event, `${target}を実施済みにします。`, completeCoachingBooking)
+          }
         >
-          カルテ
-        </Link>
+          <input type="hidden" name="bookingId" value={booking.id} />
+          <button
+            type="submit"
+            disabled={pending}
+            className={completeClass}
+            aria-label={`${target}を実施済みにする`}
+          >
+            {completeLabel}
+          </button>
+        </form>
+        <form
+          onSubmit={(event) =>
+            runAction(event, `${target}をキャンセルします。`, cancelCoachingBooking)
+          }
+        >
+          <input type="hidden" name="bookingId" value={booking.id} />
+          <button
+            type="submit"
+            disabled={pending}
+            className={cancelClass}
+            aria-label={`${target}をキャンセルする`}
+          >
+            キャンセル
+          </button>
+        </form>
+        {showReschedule && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => setRescheduleOpen(true)}
+            className={rescheduleClass}
+            aria-label={`${target}の予約を変更する`}
+          >
+            予約変更
+          </button>
+        )}
+        <form
+          onSubmit={(event) =>
+            runAction(event, `${target}を無断欠席にします。`, markCoachingBookingNoShow)
+          }
+        >
+          <input type="hidden" name="bookingId" value={booking.id} />
+          <button
+            type="submit"
+            disabled={pending}
+            className={noShowClass}
+            aria-label={`${target}を無断欠席にする`}
+          >
+            無断欠席
+          </button>
+        </form>
+      </div>
+      {rescheduleOpen && (
+        <AdminCoachingRescheduleModal
+          booking={booking}
+          coaches={coaches}
+          weekStart={weekStart}
+          onClose={() => setRescheduleOpen(false)}
+        />
       )}
-      <form
-        onSubmit={(event) =>
-          runAction(event, `${target}を実施済みにします。`, completeCoachingBooking)
-        }
-      >
-        <input type="hidden" name="bookingId" value={booking.id} />
-        <button
-          type="submit"
-          disabled={pending}
-          className={completeClass}
-          aria-label={`${target}を実施済みにする`}
-        >
-          {completeLabel}
-        </button>
-      </form>
-      <form
-        onSubmit={(event) =>
-          runAction(event, `${target}を無断欠席にします。`, markCoachingBookingNoShow)
-        }
-      >
-        <input type="hidden" name="bookingId" value={booking.id} />
-        <button
-          type="submit"
-          disabled={pending}
-          className={noShowClass}
-          aria-label={`${target}を無断欠席にする`}
-        >
-          無断欠席
-        </button>
-      </form>
-      <form
-        onSubmit={(event) =>
-          runAction(event, `${target}をキャンセルします。`, cancelCoachingBooking)
-        }
-      >
-        <input type="hidden" name="bookingId" value={booking.id} />
-        <button
-          type="submit"
-          disabled={pending}
-          className={cancelClass}
-          aria-label={`${target}をキャンセルする`}
-        >
-          キャンセル
-        </button>
-      </form>
-    </div>
+    </>
   )
 }
 
@@ -206,12 +239,16 @@ function BookingRow({
   showPastScheduledHint = false,
   allowEditActions = false,
   actionAppearance = 'legacy',
+  coaches,
+  weekStart,
 }: {
   booking: CoachingBookingWithDetails
   showPastScheduledHint?: boolean
   allowEditActions?: boolean
-  /** Future rows show actions always; today/past keep the edit toggle. */
+  /** Today/future rows show actions always; past keeps the edit toggle. */
   actionAppearance?: 'legacy' | 'always'
+  coaches: CoachingCoach[]
+  weekStart: string
 }) {
   const [editing, setEditing] = useState(false)
   const studentName = booking.student ? getPersonName(booking.student) : '生徒'
@@ -247,7 +284,12 @@ function BookingRow({
         </div>
         {showAlwaysActions && (
           <div className="ml-auto min-w-0 max-w-full">
-            <BookingActionButtons booking={booking} appearance="always" />
+            <BookingActionButtons
+              booking={booking}
+              appearance="always"
+              coaches={coaches}
+              weekStart={weekStart}
+            />
           </div>
         )}
         {showCollapsedToggle && (
@@ -265,7 +307,12 @@ function BookingRow({
       </div>
       {showCollapsedToggle && editing && (
         <div id={`booking-actions-${booking.id}`} className="mt-2">
-          <BookingActionButtons booking={booking} appearance="legacy" />
+          <BookingActionButtons
+            booking={booking}
+            appearance="legacy"
+            coaches={coaches}
+            weekStart={weekStart}
+          />
         </div>
       )}
     </li>
@@ -279,6 +326,8 @@ function DateBookingCards({
   showPastScheduledHint = false,
   dateOrder = 'asc',
   actionAppearance = 'legacy',
+  coaches,
+  weekStart,
 }: {
   bookings: CoachingBookingWithDetails[]
   emptyMessage: string
@@ -286,6 +335,8 @@ function DateBookingCards({
   showPastScheduledHint?: boolean
   dateOrder?: 'asc' | 'desc'
   actionAppearance?: 'legacy' | 'always'
+  coaches: CoachingCoach[]
+  weekStart: string
 }) {
   if (bookings.length === 0) {
     return (
@@ -313,6 +364,8 @@ function DateBookingCards({
                 allowEditActions={allowEditActions}
                 showPastScheduledHint={showPastScheduledHint}
                 actionAppearance={actionAppearance}
+                coaches={coaches}
+                weekStart={weekStart}
               />
             ))}
           </ul>
@@ -330,6 +383,8 @@ interface AdminCoachingBookingsProps {
   pastRangeLabel: string | null
   pastSearchForm: ReactNode
   pastPagination: ReactNode
+  coaches: CoachingCoach[]
+  weekStart: string
 }
 
 export function AdminCoachingBookings({
@@ -340,6 +395,8 @@ export function AdminCoachingBookings({
   pastRangeLabel,
   pastSearchForm,
   pastPagination,
+  coaches,
+  weekStart,
 }: AdminCoachingBookingsProps) {
   return (
     <div className="space-y-10">
@@ -349,7 +406,9 @@ export function AdminCoachingBookings({
           bookings={todayBookings}
           emptyMessage="今日の予約はありません。"
           allowEditActions
-          actionAppearance="legacy"
+          actionAppearance="always"
+          coaches={coaches}
+          weekStart={weekStart}
         />
       </section>
 
@@ -360,6 +419,8 @@ export function AdminCoachingBookings({
           emptyMessage="明日以降の予約はありません。"
           allowEditActions
           actionAppearance="always"
+          coaches={coaches}
+          weekStart={weekStart}
         />
       </section>
 
@@ -390,6 +451,8 @@ export function AdminCoachingBookings({
             showPastScheduledHint
             dateOrder="desc"
             actionAppearance="legacy"
+            coaches={coaches}
+            weekStart={weekStart}
           />
         )}
         {pastPagination}
