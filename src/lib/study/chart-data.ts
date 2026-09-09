@@ -51,6 +51,7 @@ export const SUBJECT_CHART_COLORS: Record<string, string> = {
   政治経済: '#78716c',
   情報: '#0284c7',
   小論文: '#7c3aed',
+  理科: '#7c3aed',
   その他: '#94a3b8',
 }
 

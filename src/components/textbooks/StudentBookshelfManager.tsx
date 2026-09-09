@@ -23,9 +23,9 @@ import {
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Pagination } from '@/components/ui/Pagination'
 import {
-  catalogMatchesCategory,
+  filterTextbooksByStudyCategory,
   getStudySubjectCategoriesForProfile,
-  type TextbookSubjectCategoryLabel,
+  type StudySubjectCategoryLabel,
 } from '@/lib/constants/textbook-subject-categories'
 import {
   APP_TOAST_SAFE_ERROR_MESSAGE,
@@ -49,7 +49,7 @@ interface StudentBookshelfManagerProps {
   catalog: TextbookCatalog[]
   registeredCatalogIds: string[]
   editHref?: string
-  initialSubject: TextbookSubjectCategoryLabel
+  initialSubject: StudySubjectCategoryLabel
   variant: 'list' | 'register' | 'register-create-only'
   totalTextbookCount?: number
   totalAllTextbookCount?: number
@@ -62,9 +62,9 @@ function SubjectCategorySelect({
   selectedSubject,
   onSelect,
 }: {
-  categories: TextbookSubjectCategoryLabel[]
-  selectedSubject: TextbookSubjectCategoryLabel
-  onSelect: (subject: TextbookSubjectCategoryLabel) => void
+  categories: StudySubjectCategoryLabel[]
+  selectedSubject: StudySubjectCategoryLabel
+  onSelect: (subject: StudySubjectCategoryLabel) => void
 }) {
   if (categories.length === 0) return null
 
@@ -73,7 +73,7 @@ function SubjectCategorySelect({
       <span className="mb-1.5 block text-sm font-medium">科目</span>
       <select
         value={selectedSubject}
-        onChange={(event) => onSelect(event.target.value as TextbookSubjectCategoryLabel)}
+        onChange={(event) => onSelect(event.target.value as StudySubjectCategoryLabel)}
         className={selectClass}
       >
         {categories.map((category) => (
@@ -163,7 +163,7 @@ function CatalogRegisterForm({
   profileSubjects: string[]
   catalog: TextbookCatalog[]
   registeredCatalogIds: string[]
-  initialSubject: TextbookSubjectCategoryLabel
+  initialSubject: StudySubjectCategoryLabel
 }) {
   const router = useRouter()
   const availableCategories = getStudySubjectCategoriesForProfile(profileSubjects)
@@ -172,7 +172,7 @@ function CatalogRegisterForm({
     initialState,
   )
   const { dialog: achievementDialog } = useAchievementUnlockDialog(state.unlockedAchievements)
-  const [categoryLabel, setCategoryLabel] = useState<TextbookSubjectCategoryLabel>(() =>
+  const [categoryLabel, setCategoryLabel] = useState<StudySubjectCategoryLabel>(() =>
     availableCategories.includes(initialSubject) ? initialSubject : availableCategories[0]!,
   )
   const [catalogId, setCatalogId] = useState('')
@@ -182,7 +182,7 @@ function CatalogRegisterForm({
     pending,
   })
 
-  function switchSubject(subject: TextbookSubjectCategoryLabel) {
+  function switchSubject(subject: StudySubjectCategoryLabel) {
     setCategoryLabel(subject)
     setCatalogId('')
     const params = new URLSearchParams()
@@ -195,10 +195,10 @@ function CatalogRegisterForm({
     return catalog.filter((item) => {
       if (registered.has(item.id)) return false
       if (item.visibility === 'public' && item.is_searchable !== false) {
-        return catalogMatchesCategory(
-          { subjects: item.subjects, detail_tags: item.detail_tags },
+        return filterTextbooksByStudyCategory(
+          [{ subjects: item.subjects, detail_tags: item.detail_tags }],
           categoryLabel,
-        )
+        ).length > 0
       }
       return false
     })
@@ -393,7 +393,7 @@ function StudentTextbookList({
   studentId: string
   profileSubjects: string[]
   textbooks: Textbook[]
-  selectedSubject: TextbookSubjectCategoryLabel
+  selectedSubject: StudySubjectCategoryLabel
   totalTextbookCount: number
   categoryTextbookCount?: number
 }) {
@@ -482,7 +482,7 @@ function StudentTextbookListWithCategories({
   studentId: string
   profileSubjects: string[]
   textbooks: Textbook[]
-  initialSubject: TextbookSubjectCategoryLabel
+  initialSubject: StudySubjectCategoryLabel
   editHref?: string
   totalTextbookCount?: number
   totalAllTextbookCount?: number
@@ -491,7 +491,7 @@ function StudentTextbookListWithCategories({
 }) {
   const router = useRouter()
   const availableCategories = getStudySubjectCategoriesForProfile(profileSubjects)
-  const [selectedSubject, setSelectedSubject] = useState<TextbookSubjectCategoryLabel>(() =>
+  const [selectedSubject, setSelectedSubject] = useState<StudySubjectCategoryLabel>(() =>
     availableCategories.includes(initialSubject) ? initialSubject : availableCategories[0]!,
   )
 
@@ -504,7 +504,7 @@ function StudentTextbookListWithCategories({
   const categoryTotal = totalTextbookCount ?? textbooks.length
   const allTotal = totalAllTextbookCount ?? categoryTotal
 
-  function switchSubject(subject: TextbookSubjectCategoryLabel) {
+  function switchSubject(subject: StudySubjectCategoryLabel) {
     setSelectedSubject(subject)
     const params = new URLSearchParams()
     params.set('subject', subject)
@@ -569,7 +569,7 @@ function StudentTextbookRegister({
   profileSubjects: string[]
   catalog: TextbookCatalog[]
   registeredCatalogIds: string[]
-  initialSubject: TextbookSubjectCategoryLabel
+  initialSubject: StudySubjectCategoryLabel
   editHref?: string
 }) {
   const [mode, setMode] = useState<RegisterMode>('catalog')

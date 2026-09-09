@@ -66,10 +66,22 @@ async function validateCommonStudyLogFields(formData: FormData) {
   }
 }
 
+function isAllowedStudySubject(
+  subject: string,
+  profileSubjects: string[],
+  options?: { allowLegacyRika?: boolean },
+): boolean {
+  if (!isStudySubjectCategoryLabel(subject)) return false
+  if (profileIncludesStudyCategory(profileSubjects, subject)) return true
+  // Preserve existing 「理科」 rows on edit; never offer it for new logs.
+  return Boolean(options?.allowLegacyRika && subject === '理科')
+}
+
 async function validateSubjectOnlyStudyLog(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   formData: FormData,
+  options?: { allowLegacyRika?: boolean },
 ): Promise<{ error: string } | { data: ResolvedStudyLog }> {
   const subject = String(formData.get('subject') ?? '').trim()
   if (!subject) {
@@ -89,7 +101,7 @@ async function validateSubjectOnlyStudyLog(
 
   const profileSubjects = profile?.subjects ?? []
 
-  if (!isStudySubjectCategoryLabel(subject) || !profileIncludesStudyCategory(profileSubjects, subject)) {
+  if (!isAllowedStudySubject(subject, profileSubjects, options)) {
     return { error: 'プロフィールで選択した科目のみ記録できます' }
   }
 
@@ -107,6 +119,7 @@ async function validateTextbookStudyLog(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   formData: FormData,
+  options?: { allowLegacyRika?: boolean },
 ): Promise<{ error: string } | { data: ResolvedStudyLog }> {
   const subject = String(formData.get('subject') ?? '').trim()
   const textbookId = String(formData.get('textbookId') ?? '').trim()
@@ -131,22 +144,33 @@ async function validateTextbookStudyLog(
 
   const profileSubjects = profile?.subjects ?? []
 
-  if (!isStudySubjectCategoryLabel(subject) || !profileIncludesStudyCategory(profileSubjects, subject)) {
+  if (!isAllowedStudySubject(subject, profileSubjects, options)) {
     return { error: 'プロフィールで選択した科目のみ記録できます' }
   }
 
   const { data: textbook } = await supabase
     .from('textbooks')
-    .select('id, name, subjects, student_id')
+    .select('id, name, subjects, detail_tags, student_id')
     .eq('id', textbookId)
     .eq('student_id', userId)
-    .maybeSingle<{ id: string; name: string; subjects: string[]; student_id: string }>()
+    .maybeSingle<{
+      id: string
+      name: string
+      subjects: string[]
+      detail_tags: string[] | null
+      student_id: string
+    }>()
 
   if (!textbook) {
     return { error: '参考書を正しく選択してください' }
   }
 
-  if (!filterTextbooksByStudyCategory([textbook], subject).length) {
+  const textbookForMatch = {
+    subjects: textbook.subjects,
+    detail_tags: textbook.detail_tags ?? [],
+  }
+
+  if (!filterTextbooksByStudyCategory([textbookForMatch], subject).length) {
     return { error: '選択した科目に対応する参考書を選んでください' }
   }
 
@@ -165,6 +189,7 @@ async function validateAndResolveStudyLog(
   userId: string,
   formData: FormData,
   modeOverride?: StudyLogRegistrationMode,
+  options?: { allowLegacyRika?: boolean },
 ) {
   const mode = modeOverride ?? parseRegistrationMode(formData)
   if (!mode) {
@@ -172,10 +197,10 @@ async function validateAndResolveStudyLog(
   }
 
   if (mode === 'subject') {
-    return validateSubjectOnlyStudyLog(supabase, userId, formData)
+    return validateSubjectOnlyStudyLog(supabase, userId, formData, options)
   }
 
-  return validateTextbookStudyLog(supabase, userId, formData)
+  return validateTextbookStudyLog(supabase, userId, formData, options)
 }
 
 export async function createStudyLog(
@@ -242,17 +267,19 @@ export async function updateStudyLog(
 
   const { data: existingLog } = await supabase
     .from('study_logs')
-    .select('textbook_id')
+    .select('textbook_id, subject')
     .eq('id', logId)
     .eq('student_id', user.id)
-    .maybeSingle<{ textbook_id: string | null }>()
+    .maybeSingle<{ textbook_id: string | null; subject: string }>()
 
   if (!existingLog) {
     return { error: '記録が見つかりません' }
   }
 
   const mode: StudyLogRegistrationMode = existingLog.textbook_id ? 'textbook' : 'subject'
-  const result = await validateAndResolveStudyLog(supabase, user.id, formData, mode)
+  const result = await validateAndResolveStudyLog(supabase, user.id, formData, mode, {
+    allowLegacyRika: existingLog.subject === '理科',
+  })
   if ('error' in result) {
     return { error: result.error }
   }

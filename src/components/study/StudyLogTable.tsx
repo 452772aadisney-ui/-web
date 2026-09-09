@@ -47,6 +47,16 @@ function formatDateTime(iso: string): string {
   })
 }
 
+/** Keep legacy 「理科」 selectable when editing an existing 理科 log. */
+function studySubjectOptionsForEdit(profileSubjects: string[], logSubject: string): string[] {
+  const categories = getStudySubjectCategoriesForProfile(profileSubjects)
+  const resolved = resolveStudySubjectCategory(logSubject)
+  if (resolved === '理科' || logSubject === '理科') {
+    return categories.includes('理科' as never) ? categories : [...categories, '理科']
+  }
+  return categories
+}
+
 function formatTextbookName(name: string): string {
   return name.trim() ? name : '—'
 }
@@ -62,10 +72,11 @@ function StudyLogSubjectEditPanel({
 }) {
   const router = useRouter()
   const [state, formAction, pending] = useActionState(updateStudyLog, initialState)
-  const studySubjectCategories = getStudySubjectCategoriesForProfile(profileSubjects)
+  const studySubjectCategories = studySubjectOptionsForEdit(profileSubjects, log.subject)
   const initialSubject = (() => {
     const resolved = resolveStudySubjectCategory(log.subject)
     if (resolved && studySubjectCategories.includes(resolved)) return resolved
+    if (log.subject === '理科') return '理科'
     return studySubjectCategories[0] ?? ''
   })()
   const todayKey = getJstDateKey()
@@ -170,10 +181,11 @@ function StudyLogTextbookEditPanel({
 }) {
   const router = useRouter()
   const [state, formAction, pending] = useActionState(updateStudyLog, initialState)
-  const studySubjectCategories = getStudySubjectCategoriesForProfile(profileSubjects)
+  const studySubjectCategories = studySubjectOptionsForEdit(profileSubjects, log.subject)
   const initialSubject = (() => {
     const resolved = resolveStudySubjectCategory(log.subject)
     if (resolved && studySubjectCategories.includes(resolved)) return resolved
+    if (log.subject === '理科') return '理科'
     return studySubjectCategories[0] ?? ''
   })()
   const [selectedSubject, setSelectedSubject] = useState<string>(initialSubject)

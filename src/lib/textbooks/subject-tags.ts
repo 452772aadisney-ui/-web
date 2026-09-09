@@ -10,8 +10,52 @@ export const TEXTBOOK_PARENT_GROUP_LABELS = TEXTBOOK_DETAIL_TAG_GROUPS.map(
   (group) => group.label,
 ) as TextbookParentGroupLabel[]
 
+/** Study-log selectable science subjects (not the parent group 「理科」). */
+export const SCIENCE_STUDY_SUBJECTS = ['物理', '化学', '生物', '地学'] as const
+export type ScienceStudySubject = (typeof SCIENCE_STUDY_SUBJECTS)[number]
+
+/**
+ * Ordered study-log / chart labels.
+ * 「理科」 is kept for legacy stored logs only — not offered as a new selection.
+ */
+export const STUDY_SUBJECT_CATEGORY_ORDER = [
+  '英語',
+  '数学',
+  '国語',
+  '物理',
+  '化学',
+  '生物',
+  '地学',
+  '理科',
+  '社会',
+  '情報',
+] as const
+
+export type StudySubjectCategoryLabel = (typeof STUDY_SUBJECT_CATEGORY_ORDER)[number]
+
+const SCIENCE_STUDY_SUBJECT_SET = new Set<string>(SCIENCE_STUDY_SUBJECTS)
+
+const EXAM_TO_SCIENCE_STUDY: Record<string, ScienceStudySubject> = {
+  物理: '物理',
+  物理基礎: '物理',
+  化学: '化学',
+  化学基礎: '化学',
+  生物: '生物',
+  生物基礎: '生物',
+  地学: '地学',
+  地学基礎: '地学',
+}
+
 export function isTextbookParentGroupLabel(value: string): value is TextbookParentGroupLabel {
   return TEXTBOOK_PARENT_GROUP_LABELS.includes(value as TextbookParentGroupLabel)
+}
+
+export function isScienceStudySubject(value: string): value is ScienceStudySubject {
+  return SCIENCE_STUDY_SUBJECT_SET.has(value)
+}
+
+export function isStudySubjectCategoryLabel(value: string): value is StudySubjectCategoryLabel {
+  return (STUDY_SUBJECT_CATEGORY_ORDER as readonly string[]).includes(value)
 }
 
 export function getParentGroupForDetailTag(tag: string): TextbookParentGroupLabel | null {
@@ -63,9 +107,55 @@ const EXAM_SUBJECT_PARENT_GROUP: Record<string, TextbookParentGroupLabel> = Obje
   }),
 )
 
-/** プロフィールの使用科目（大学受験科目）から親グループを解決 */
+/** プロフィールの使用科目（大学受験科目）から親グループを解決（教材タグ用） */
 export function getParentGroupForExamSubject(subject: string): TextbookParentGroupLabel | null {
   return EXAM_SUBJECT_PARENT_GROUP[subject] ?? null
+}
+
+/**
+ * Map a profile exam subject (or stored study label) to a study-log category.
+ * Math stays grouped; science 基礎 folds into 物理/化学/生物/地学.
+ */
+export function normalizeToStudySubjectCategory(subject: string): StudySubjectCategoryLabel | null {
+  const trimmed = subject.trim()
+  if (!trimmed) return null
+
+  if (trimmed.startsWith('数学') || trimmed === '数学') return '数学'
+  if (EXAM_TO_SCIENCE_STUDY[trimmed]) return EXAM_TO_SCIENCE_STUDY[trimmed]
+  if (isScienceStudySubject(trimmed)) return trimmed
+  if (trimmed === '理科') return '理科'
+
+  if (trimmed === '英語' || trimmed === '情報') return trimmed
+  if (['現代文', '古文', '漢文', '小論文'].includes(trimmed)) return '国語'
+  if (['日本史', '世界史', '地理', '倫理', '政治経済'].includes(trimmed)) return '社会'
+
+  if (isTextbookParentGroupLabel(trimmed) && trimmed !== '理科') return trimmed
+
+  const fromDetail = getParentGroupForDetailTag(trimmed)
+  if (fromDetail === '理科') {
+    // Detail tags 物理/化学/… are study subjects themselves
+    if (isScienceStudySubject(trimmed)) return trimmed
+    return null
+  }
+  if (fromDetail) return fromDetail
+
+  return null
+}
+
+/** Selectable study categories for a profile (never offers legacy 「理科」). */
+export function getStudySubjectCategoriesForProfile(
+  profileSubjects: string[],
+): StudySubjectCategoryLabel[] {
+  const selected = new Set<StudySubjectCategoryLabel>()
+  for (const subject of profileSubjects) {
+    const category = normalizeToStudySubjectCategory(subject)
+    if (category && category !== '理科') {
+      selected.add(category)
+    }
+  }
+  return STUDY_SUBJECT_CATEGORY_ORDER.filter(
+    (label) => label !== '理科' && selected.has(label),
+  )
 }
 
 export function getParentGroupsForProfile(profileSubjects: string[]): TextbookParentGroupLabel[] {
@@ -76,9 +166,7 @@ export function getParentGroupsForProfile(profileSubjects: string[]): TextbookPa
       continue
     }
     const parent =
-      getParentGroupForDetailTag(subject) ??
-      getParentGroupForExamSubject(subject) ??
-      resolveStudySubjectCategory(subject)
+      getParentGroupForDetailTag(subject) ?? getParentGroupForExamSubject(subject)
     if (parent) parents.add(parent)
   }
   return TEXTBOOK_PARENT_GROUP_LABELS.filter((label) => parents.has(label))
@@ -101,36 +189,56 @@ export function textbookMatchesParentGroup(
   return false
 }
 
-/** 旧データ（subjects のみ）も親グループに解決 */
-export function resolveStudySubjectCategory(subject: string): TextbookParentGroupLabel | null {
-  if (isTextbookParentGroupLabel(subject)) return subject
-
-  const fromDetail = getParentGroupForDetailTag(subject)
-  if (fromDetail) return fromDetail
-
-  const fromExam = getParentGroupForExamSubject(subject)
-  if (fromExam) return fromExam
-
-  const legacyMap: Record<string, TextbookParentGroupLabel> = {
-    現代文: '国語',
-    '古文/漢文': '国語',
-    小論文: '国語',
-    物理: '理科',
-    化学: '理科',
-    生物: '理科',
-    地学: '理科',
-    日本史: '社会',
-    世界史: '社会',
-    地理: '社会',
-    '公共/倫理/政治経済': '社会',
+/**
+ * Match textbooks for a study category.
+ * Science subjects require an explicit 物理/化学/生物/地学 tag — bare 「理科」 is not guessed.
+ * Legacy 「理科」 (edit-only) matches the parent group so existing logs stay editable.
+ */
+export function textbookMatchesStudyCategory(
+  item: { subjects: string[]; detail_tags?: string[] },
+  categoryLabel: string,
+): boolean {
+  if (isScienceStudySubject(categoryLabel)) {
+    const tags = [...(item.detail_tags ?? []), ...item.subjects]
+    return tags.includes(categoryLabel)
   }
-
-  if (legacyMap[subject]) return legacyMap[subject]
-  if (subject === '英語' || subject === '数学' || subject === '情報') {
-    return subject
+  if (categoryLabel === '理科') {
+    return textbookMatchesParentGroup(item, '理科')
   }
+  if (isTextbookParentGroupLabel(categoryLabel)) {
+    return textbookMatchesParentGroup(item, categoryLabel)
+  }
+  return false
+}
 
-  return null
+/**
+ * Resolve stored study_logs.subject for display / charts.
+ * Keeps legacy 「理科」; maps 基礎 → 4 subjects; does not collapse 物理→理科.
+ */
+export function resolveStudySubjectCategory(subject: string): StudySubjectCategoryLabel | null {
+  return normalizeToStudySubjectCategory(subject)
+}
+
+/** True when label is legacy 理科 or one of the four science study subjects. */
+export function isScienceFamilyStudyLabel(subject: string): boolean {
+  const resolved = resolveStudySubjectCategory(subject) ?? subject
+  return resolved === '理科' || isScienceStudySubject(resolved)
+}
+
+/**
+ * Sum minutes for the science family without double-counting.
+ * Use when a report needs 「理科全体」 across legacy 理科 + 物理/化学/生物/地学.
+ */
+export function sumScienceFamilyMinutes(
+  rows: Array<{ subject: string; minutes: number }>,
+): number {
+  let total = 0
+  for (const row of rows) {
+    if (isScienceFamilyStudyLabel(row.subject)) {
+      total += row.minutes
+    }
+  }
+  return total
 }
 
 export function parseDetailTagsFromForm(formData: FormData): string[] {

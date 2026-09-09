@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import {
   getStudySubjectCategoriesForProfile,
-  type TextbookSubjectCategoryLabel,
+  type StudySubjectCategoryLabel,
 } from '@/lib/constants/textbook-subject-categories'
 import type { StudyTextbookPickerItem } from '@/lib/study/textbook-picker'
 import { TextbookCoverImage } from '@/components/textbooks/TextbookCoverImage'
@@ -74,7 +74,7 @@ export function StudyTextbookPicker({
   recentTextbooks,
 }: StudyTextbookPickerProps) {
   const categories = getStudySubjectCategoriesForProfile(profileSubjects)
-  const [selectedCategory, setSelectedCategory] = useState<TextbookSubjectCategoryLabel | 'all'>(
+  const [selectedCategory, setSelectedCategory] = useState<StudySubjectCategoryLabel | 'all'>(
     categories[0] ?? 'all',
   )
   const [query, setQuery] = useState('')

@@ -3,6 +3,7 @@ import { DEFAULT_PAGE_SIZE, getTotalPages, parsePageParam } from '@/lib/paginati
 import { createClient } from '@/lib/supabase/server'
 import type { StudyLog } from '@/lib/study/chart-data'
 import { computeCurrentStudyStreak } from '@/lib/study/streak'
+import { isScienceStudySubject } from '@/lib/textbooks/subject-tags'
 import type { Textbook } from '@/types/textbook'
 import { fullNameKanaIlikePattern } from '@/lib/profiles/full-name-kana'
 
@@ -18,6 +19,12 @@ function mapTextbook(book: Textbook): Textbook {
 }
 
 function buildTextbookCategoryOrFilter(categoryLabel: string): string {
+  // Science study categories require an explicit 物理/化学/生物/地学 tag — never match bare 「理科」.
+  if (isScienceStudySubject(categoryLabel)) {
+    const quoted = `"${categoryLabel.replace(/"/g, '\\"')}"`
+    return [`detail_tags.cs.{${quoted}}`, `subjects.cs.{${quoted}}`].join(',')
+  }
+
   const tags = getSubjectTagsForCategory(categoryLabel)
   const parts = [`subjects.cs.{"${categoryLabel}"}`]
 
