@@ -75,6 +75,8 @@ function mapBooking(row: BookingRow): CoachingBookingWithDetails {
     student_note: row.student_note ?? '',
     status: row.status,
     google_calendar_event_id: row.google_calendar_event_id ?? null,
+    schedule_revision: row.schedule_revision ?? '',
+    google_calendar_etag: row.google_calendar_etag ?? null,
     booked_at: row.booked_at,
     created_at: row.created_at,
     updated_at: row.updated_at,

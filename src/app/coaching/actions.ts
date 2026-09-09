@@ -449,7 +449,7 @@ async function performCoachingBooking(
       studentNote,
     })
 
-    const calendarEventId = await createCoachingBookingCalendarEvent({
+    const createdEvent = await createCoachingBookingCalendarEvent({
       studentId,
       slotId,
       coachId: slot.coach_id,
@@ -457,10 +457,13 @@ async function performCoachingBooking(
       studentNote,
     })
 
-    if (calendarEventId) {
+    if (createdEvent) {
       await writeClient
         .from('coaching_bookings')
-        .update({ google_calendar_event_id: calendarEventId })
+        .update({
+          google_calendar_event_id: createdEvent.eventId,
+          google_calendar_etag: createdEvent.etag,
+        })
         .eq('id', bookingId)
     }
   } catch (notificationError) {
@@ -684,6 +687,116 @@ export async function adminRescheduleCoachingBooking(
   return { success: true, successMessage: '予約を変更しました' }
 }
 
+/**
+ * Re-run Discord / GWS / student notify for the booking's *current*
+ * schedule_revision without changing slot_id.
+ *
+ * - Does not re-reschedule.
+ * - Push/email use the persisted revision idempotency key (already_completed on retry).
+ * - Discord has no durable idempotency today; callers should avoid blind spam.
+ * - Admin retry UI is not shipped; this action is the supported server path.
+ */
+export async function adminRetryCoachingRescheduleSideEffects(
+  _prev: CoachingActionState,
+  formData: FormData,
+): Promise<CoachingActionState> {
+  const authError = await assertAdmin()
+  if (authError) return { error: authError }
+
+  const bookingId = String(formData.get('bookingId') ?? '').trim()
+  if (!bookingId) return { error: '予約が指定されていません' }
+
+  const supabase = await createClient()
+  const { data: booking, error } = await supabase
+    .from('coaching_bookings')
+    .select(
+      'id, student_id, coach_id, slot_id, student_note, status, schedule_revision, google_calendar_event_id, coaching_slots(starts_at, ends_at, slot_date, start_time), coaching_coaches(name)',
+    )
+    .eq('id', bookingId)
+    .maybeSingle<{
+      id: string
+      student_id: string
+      coach_id: string
+      slot_id: string
+      student_note: string
+      status: string
+      schedule_revision: string
+      google_calendar_event_id: string | null
+      coaching_slots: {
+        starts_at: string
+        ends_at: string
+        slot_date: string | null
+        start_time: string | null
+      }
+      coaching_coaches: { name: string } | { name: string }[] | null
+    }>()
+
+  if (error || !booking) return { error: '予約が見つかりません' }
+  if (booking.status !== 'scheduled') {
+    return { error: '実施前の予約のみ通知を再送できます' }
+  }
+
+  const coachRel = booking.coaching_coaches
+  const coachName = Array.isArray(coachRel)
+    ? coachRel[0]?.name ?? '担当講師'
+    : coachRel?.name ?? '担当講師'
+
+  const warnings: string[] = []
+
+  // Discord has no durable idempotency key — skip on retry to avoid duplicate channel spam.
+  // Student Push/email reuse schedule_revision idempotency; GWS uses etag + revision CAS.
+
+  try {
+    const calendarSync = await syncCalendarAfterCoachingReschedule({
+      bookingId: booking.id,
+      studentId: booking.student_id,
+      newSlotId: booking.slot_id,
+      newCoachId: booking.coach_id,
+      newStartsAt: booking.coaching_slots.starts_at,
+      newEndsAt: booking.coaching_slots.ends_at,
+      studentNote: booking.student_note,
+      googleCalendarEventId: booking.google_calendar_event_id,
+      changeRevision: booking.schedule_revision,
+    })
+    if (calendarSync === 'failed') {
+      warnings.push('Googleカレンダーの同期に失敗しました')
+    }
+  } catch (calendarError) {
+    console.error('[coaching] admin reschedule notify retry calendar failed:', calendarError)
+    warnings.push('Googleカレンダーの同期に失敗しました')
+  }
+
+  try {
+    const studentNotify = await notifyStudentOfAdminCoachingReschedule({
+      studentId: booking.student_id,
+      coachName,
+      startsAt: booking.coaching_slots.starts_at,
+      endsAt: booking.coaching_slots.ends_at,
+      slotDate: booking.coaching_slots.slot_date,
+      startTime: booking.coaching_slots.start_time,
+      bookingId: booking.id,
+      changeRevision: booking.schedule_revision,
+    })
+    if (studentNotify === 'failed') {
+      warnings.push('生徒への通知に失敗しました')
+    }
+  } catch (notifyError) {
+    console.error('[coaching] admin reschedule notify retry student failed:', notifyError)
+    warnings.push('生徒への通知に失敗しました')
+  }
+
+  revalidateCoachingPaths()
+
+  if (warnings.length > 0) {
+    return {
+      success: true,
+      successMessage: `通知再送を実行しました（${warnings.join('／')}）`,
+    }
+  }
+
+  return { success: true, successMessage: '通知再送を実行しました' }
+}
+
 type RescheduleCoreSuccess = {
   bookingId: string
   studentId: string
@@ -698,7 +811,7 @@ type RescheduleCoreSuccess = {
   newStartTime: string | null
   studentNote: string
   googleCalendarEventId: string | null
-  /** Persisted `booked_at` for this successful change (notify/calendar revision). */
+  /** Persisted schedule_revision for this successful change. */
   changeRevision: string
 }
 
@@ -706,6 +819,10 @@ function isUniqueViolation(error: { code?: string; message?: string } | null): b
   if (!error) return false
   if (error.code === '23505') return true
   return Boolean(error.message?.toLowerCase().includes('duplicate'))
+}
+
+function newScheduleRevision(): string {
+  return crypto.randomUUID()
 }
 
 async function performCoachingReschedule(params: {
@@ -721,7 +838,7 @@ async function performCoachingReschedule(params: {
   const { data: booking, error: bookingError } = await supabase
     .from('coaching_bookings')
     .select(
-      'id, student_id, coach_id, slot_id, student_note, status, google_calendar_event_id, booked_at, coaching_slots(starts_at, ends_at, slot_date, start_time)',
+      'id, student_id, coach_id, slot_id, student_note, status, google_calendar_event_id, schedule_revision, coaching_slots(starts_at, ends_at, slot_date, start_time)',
     )
     .eq('id', params.bookingId)
     .maybeSingle<{
@@ -732,7 +849,7 @@ async function performCoachingReschedule(params: {
       student_note: string
       status: string
       google_calendar_event_id: string | null
-      booked_at: string
+      schedule_revision: string
       coaching_slots: {
         starts_at: string
         ends_at: string
@@ -787,26 +904,29 @@ async function performCoachingReschedule(params: {
   const nextNote =
     params.studentNote === null ? booking.student_note : params.studentNote || booking.student_note
 
-  // Persist a unique revision for this successful change (notify idempotency + GWS guard).
-  const changeRevision = new Date().toISOString()
+  const changeRevision = newScheduleRevision()
+  const observedRevision = booking.schedule_revision
+  const bookedAt = new Date().toISOString()
 
   const writeDb =
     params.actor === 'admin' ? await getCoachingBookingWriteClient(booking.student_id) : supabase
 
-  // Optimistic concurrency: only update if this row is still on the observed slot/status.
+  // Optimistic concurrency: observed slot + revision + scheduled must still hold.
   const { data: updated, error: updateError } = await writeDb
     .from('coaching_bookings')
     .update({
       slot_id: params.newSlotId,
       coach_id: newSlot.coach_id,
       student_note: nextNote,
-      booked_at: changeRevision,
+      booked_at: bookedAt,
+      schedule_revision: changeRevision,
     })
     .eq('id', params.bookingId)
     .eq('status', 'scheduled')
     .eq('slot_id', booking.slot_id)
-    .select('id, booked_at')
-    .maybeSingle<{ id: string; booked_at: string }>()
+    .eq('schedule_revision', observedRevision)
+    .select('id, schedule_revision')
+    .maybeSingle<{ id: string; schedule_revision: string }>()
 
   if (isUniqueViolation(updateError)) {
     return { error: 'この予約枠は既に埋まっています' }
@@ -814,7 +934,7 @@ async function performCoachingReschedule(params: {
 
   if (updateError) return { error: '予約の変更に失敗しました' }
 
-  // Another request already moved this booking — leave DB as-is (their write won).
+  // Another request already moved/cancelled this booking — leave DB as-is.
   if (!updated) {
     return { error: '予約は他の操作により変更済みです。最新の内容を確認してください' }
   }
@@ -833,7 +953,7 @@ async function performCoachingReschedule(params: {
     newStartTime: newSlot.start_time,
     studentNote: nextNote,
     googleCalendarEventId: booking.google_calendar_event_id,
-    changeRevision: updated.booked_at || changeRevision,
+    changeRevision: updated.schedule_revision || changeRevision,
   }
 }
 

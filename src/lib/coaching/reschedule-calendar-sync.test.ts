@@ -7,10 +7,17 @@ describe('syncCalendarAfterCoachingReschedule guards', () => {
     join(process.cwd(), 'src/lib/coaching/reschedule-calendar-sync.ts'),
     'utf8',
   )
+  const eventsSource = readFileSync(
+    join(process.cwd(), 'src/lib/google-calendar/events.ts'),
+    'utf8',
+  )
 
-  it('re-reads booking revision before patching or attaching calendar events', () => {
-    expect(source).toContain('booked_at !== params.changeRevision')
-    expect(source).toContain(".eq('booked_at', params.changeRevision)")
+  it('CAS on schedule_revision and uses Google If-Match etags', () => {
+    expect(source).toContain('schedule_revision !== changeRevision')
+    expect(source).toContain(".eq('schedule_revision', params.changeRevision)")
     expect(source).toContain("return 'skipped_stale'")
+    expect(source).toContain('ifMatchEtag')
+    expect(eventsSource).toContain("'If-Match'")
+    expect(eventsSource).toContain('precondition_failed')
   })
 })

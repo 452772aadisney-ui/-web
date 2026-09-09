@@ -13,8 +13,8 @@ export type AdminRescheduleNotifyResult = 'sent' | 'skipped' | 'failed'
  * Push-first / email-fallback student notify after an admin reschedule.
  * Honors coaching_reminder prefs and COACHING_REMINDER_DELIVERY_MODE.
  *
- * Idempotency uses the persisted change revision (`booked_at` written on that
- * successful DB update) — not a request UUID and not a before/after time pair.
+ * Idempotency uses the persisted `schedule_revision` UUID written on that
+ * successful DB update — not a request UUID and not a before/after time pair.
  */
 export async function notifyStudentOfAdminCoachingReschedule(params: {
   studentId: string
@@ -24,7 +24,7 @@ export async function notifyStudentOfAdminCoachingReschedule(params: {
   slotDate: string | null
   startTime: string | null
   bookingId: string
-  /** `booked_at` returned from the successful reschedule update. */
+  /** `schedule_revision` returned from the successful reschedule update. */
   changeRevision: string
   env?: NodeJS.ProcessEnv | Record<string, string | undefined>
 }): Promise<AdminRescheduleNotifyResult> {

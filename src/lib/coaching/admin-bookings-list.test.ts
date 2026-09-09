@@ -21,6 +21,8 @@ function booking(
     student_note: id === 'note' ? '伝言です' : '',
     status: 'scheduled',
     google_calendar_event_id: null,
+    schedule_revision: `rev-${id}`,
+    google_calendar_etag: null,
     booked_at: startsAt,
     created_at: startsAt,
     updated_at: startsAt,

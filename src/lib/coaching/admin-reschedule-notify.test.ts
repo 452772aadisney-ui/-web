@@ -19,16 +19,11 @@ describe('admin coaching reschedule notify helpers', () => {
     )
   })
 
-  it('keys notify by persisted change revision, not a time pair', () => {
-    const firstAb = adminRescheduleIdempotencyKey('b1', '2026-03-10T01:00:00.000Z')
-    const retrySameOp = adminRescheduleIdempotencyKey('b1', '2026-03-10T01:00:00.000Z')
-    // A→B then later A→B again after B→A: each successful DB write has a new booked_at.
-    const laterAbAgain = adminRescheduleIdempotencyKey('b1', '2026-03-12T04:00:00.000Z')
-    // Same datetime, different coach/slot still gets a distinct revision on write.
-    const sameTimeOtherSlot = adminRescheduleIdempotencyKey('b1', '2026-03-10T01:00:01.000Z')
-
-    expect(firstAb).toBe(retrySameOp)
-    expect(laterAbAgain).not.toBe(firstAb)
-    expect(sameTimeOtherSlot).not.toBe(firstAb)
+  it('keys notify by persisted schedule_revision UUID', () => {
+    const first = adminRescheduleIdempotencyKey('b1', '11111111-1111-1111-1111-111111111111')
+    const retry = adminRescheduleIdempotencyKey('b1', '11111111-1111-1111-1111-111111111111')
+    const later = adminRescheduleIdempotencyKey('b1', '22222222-2222-2222-2222-222222222222')
+    expect(first).toBe(retry)
+    expect(later).not.toBe(first)
   })
 })

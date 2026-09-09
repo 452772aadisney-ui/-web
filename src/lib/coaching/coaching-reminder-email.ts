@@ -27,7 +27,7 @@ export function adminRescheduleEmailBody(coachName: string, datetimeLabel: strin
   return `コーチングの予約が変更されました。\n担当: ${coachName}\n日時: ${datetimeLabel}`
 }
 
-/** Persisted change revision (`booked_at` written on successful reschedule). */
+/** Persisted schedule_revision UUID written on each successful reschedule. */
 export function adminRescheduleIdempotencyKey(
   bookingId: string,
   changeRevision: string,

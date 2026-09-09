@@ -42,6 +42,10 @@ export interface CoachingBooking {
   student_note: string
   status: CoachingBookingStatus
   google_calendar_event_id: string | null
+  /** Opaque UUID advanced on every successful schedule change. */
+  schedule_revision: string
+  /** Google Calendar etag for If-Match conditional patches. */
+  google_calendar_etag: string | null
   booked_at: string
   created_at: string
   updated_at: string

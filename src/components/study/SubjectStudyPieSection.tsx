@@ -27,6 +27,10 @@ interface SubjectStudyPieSectionProps {
  * Subject pie with 14-day / all-time toggle.
  * Both datasets are provided up front; switching only updates local state so the
  * surrounding page (scroll position, form drafts, etc.) is not remounted.
+ *
+ * NOTE: The 「理科系合計」 line is a *new* UI addition for science-family totals.
+ * Subject slices themselves already count each minute once under its own label
+ * (legacy 理科 and 物理/化学/生物/地学 stay separate — no double-count in the pie).
  */
 export function SubjectStudyPieSection({
   data14,

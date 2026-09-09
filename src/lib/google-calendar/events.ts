@@ -15,13 +15,18 @@ function buildEventDescription(coachName: string, studentNote: string): string {
   return lines.join('\n')
 }
 
+export type CreatedCalendarEvent = {
+  eventId: string
+  etag: string | null
+}
+
 export async function createCoachingBookingCalendarEvent(input: {
   studentId: string
   slotId: string
   coachId: string
   startsAt: string
   studentNote: string
-}): Promise<string | null> {
+}): Promise<CreatedCalendarEvent | null> {
   const client = getGoogleCalendarClient()
   if (!client) {
     console.warn('[google-calendar] credentials are not configured; event skipped')
@@ -73,7 +78,9 @@ export async function createCoachingBookingCalendarEvent(input: {
       },
     })
 
-    return response.data.id ?? null
+    const eventId = response.data.id
+    if (!eventId) return null
+    return { eventId, etag: response.data.etag ?? null }
   } catch (error) {
     console.error('[google-calendar] event insert failed:', error)
     return null
@@ -102,7 +109,17 @@ export async function deleteCoachingBookingCalendarEvent(
   }
 }
 
-export type CoachingCalendarUpdateResult = 'updated' | 'skipped' | 'failed'
+export type CoachingCalendarUpdateResult =
+  | { status: 'updated'; etag: string | null }
+  | { status: 'skipped' }
+  | { status: 'failed' }
+  | { status: 'precondition_failed' }
+
+function isPreconditionFailed(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const err = error as { code?: number; status?: number; response?: { status?: number } }
+  return err.code === 412 || err.status === 412 || err.response?.status === 412
+}
 
 export async function updateCoachingBookingCalendarEvent(input: {
   eventId: string
@@ -111,14 +128,16 @@ export async function updateCoachingBookingCalendarEvent(input: {
   startsAt: string
   endsAt: string
   studentNote: string
+  /** When set, patch uses If-Match so a newer GWS write wins with 412. */
+  ifMatchEtag?: string | null
 }): Promise<CoachingCalendarUpdateResult> {
   const trimmed = input.eventId.trim()
-  if (!trimmed) return 'skipped'
+  if (!trimmed) return { status: 'skipped' }
 
   const client = getGoogleCalendarClient()
   if (!client) {
     console.warn('[google-calendar] credentials are not configured; update skipped')
-    return 'skipped'
+    return { status: 'skipped' }
   }
 
   const supabase = await createClient()
@@ -138,28 +157,62 @@ export async function updateCoachingBookingCalendarEvent(input: {
 
   const studentName = student ? getPersonName(student) : '生徒'
   const coachName = coach?.name ?? '未設定'
+  const ifMatch = input.ifMatchEtag?.trim() || null
 
   try {
-    await client.calendar.events.patch({
-      calendarId: client.calendarId,
-      eventId: trimmed,
-      requestBody: {
-        summary: `【コーチング】${studentName}さん`,
-        description: buildEventDescription(coachName, input.studentNote),
-        start: {
-          dateTime: input.startsAt,
-          timeZone: 'Asia/Tokyo',
-        },
-        end: {
-          dateTime: input.endsAt,
-          timeZone: 'Asia/Tokyo',
+    const response = await client.calendar.events.patch(
+      {
+        calendarId: client.calendarId,
+        eventId: trimmed,
+        requestBody: {
+          summary: `【コーチング】${studentName}さん`,
+          description: buildEventDescription(coachName, input.studentNote),
+          start: {
+            dateTime: input.startsAt,
+            timeZone: 'Asia/Tokyo',
+          },
+          end: {
+            dateTime: input.endsAt,
+            timeZone: 'Asia/Tokyo',
+          },
         },
       },
-    })
-    return 'updated'
+      ifMatch
+        ? {
+            headers: {
+              'If-Match': ifMatch,
+            },
+          }
+        : undefined,
+    )
+    return { status: 'updated', etag: response.data.etag ?? null }
   } catch (error) {
+    if (ifMatch && isPreconditionFailed(error)) {
+      return { status: 'precondition_failed' }
+    }
     console.error('[google-calendar] event patch failed:', error)
-    return 'failed'
+    return { status: 'failed' }
+  }
+}
+
+export async function fetchCoachingBookingCalendarEventEtag(
+  eventId: string,
+): Promise<{ ok: true; etag: string | null } | { ok: false }> {
+  const trimmed = eventId.trim()
+  if (!trimmed) return { ok: false }
+
+  const client = getGoogleCalendarClient()
+  if (!client) return { ok: false }
+
+  try {
+    const response = await client.calendar.events.get({
+      calendarId: client.calendarId,
+      eventId: trimmed,
+    })
+    return { ok: true, etag: response.data.etag ?? null }
+  } catch (error) {
+    console.error('[google-calendar] event get failed:', error)
+    return { ok: false }
   }
 }
 
