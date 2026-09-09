@@ -7,10 +7,9 @@ import { notifyCoachingBookingCreated, notifyCoachingBookingCancelled, notifyCoa
 import {
   createCoachingBookingCalendarEvent,
   deleteCoachingBookingCalendarEvent,
-  updateCoachingBookingCalendarEvent,
 } from '@/lib/google-calendar/events'
-import { getGoogleCalendarClient } from '@/lib/google-calendar/config'
 import { notifyStudentOfAdminCoachingReschedule } from '@/lib/coaching/admin-reschedule-notify'
+import { syncCalendarAfterCoachingReschedule } from '@/lib/coaching/reschedule-calendar-sync'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
@@ -561,32 +560,17 @@ export async function rescheduleCoachingBooking(
       rescheduledBy: 'student',
     })
 
-    if (core.googleCalendarEventId) {
-      await updateCoachingBookingCalendarEvent({
-        eventId: core.googleCalendarEventId,
-        studentId: core.studentId,
-        coachId: core.newCoachId,
-        startsAt: core.newStartsAt,
-        endsAt: core.newEndsAt,
-        studentNote: core.studentNote,
-      })
-    } else {
-      const calendarEventId = await createCoachingBookingCalendarEvent({
-        studentId: core.studentId,
-        slotId: core.newSlotId,
-        coachId: core.newCoachId,
-        startsAt: core.newStartsAt,
-        studentNote: core.studentNote,
-      })
-
-      if (calendarEventId) {
-        const supabase = await createClient()
-        await supabase
-          .from('coaching_bookings')
-          .update({ google_calendar_event_id: calendarEventId })
-          .eq('id', bookingId)
-      }
-    }
+    await syncCalendarAfterCoachingReschedule({
+      bookingId: core.bookingId,
+      studentId: core.studentId,
+      newSlotId: core.newSlotId,
+      newCoachId: core.newCoachId,
+      newStartsAt: core.newStartsAt,
+      newEndsAt: core.newEndsAt,
+      studentNote: core.studentNote,
+      googleCalendarEventId: core.googleCalendarEventId,
+      changeRevision: core.changeRevision,
+    })
   } catch (notificationError) {
     console.error('[coaching] reschedule notification failed:', notificationError)
   }
@@ -644,35 +628,19 @@ export async function adminRescheduleCoachingBooking(
   }
 
   try {
-    if (core.googleCalendarEventId) {
-      const calendarResult = await updateCoachingBookingCalendarEvent({
-        eventId: core.googleCalendarEventId,
-        studentId: core.studentId,
-        coachId: core.newCoachId,
-        startsAt: core.newStartsAt,
-        endsAt: core.newEndsAt,
-        studentNote: core.studentNote,
-      })
-      if (calendarResult === 'failed') {
-        warnings.push('Googleカレンダーの更新に失敗しました')
-      }
-    } else {
-      const calendarEventId = await createCoachingBookingCalendarEvent({
-        studentId: core.studentId,
-        slotId: core.newSlotId,
-        coachId: core.newCoachId,
-        startsAt: core.newStartsAt,
-        studentNote: core.studentNote,
-      })
-
-      if (calendarEventId) {
-        await supabase
-          .from('coaching_bookings')
-          .update({ google_calendar_event_id: calendarEventId })
-          .eq('id', bookingId)
-      } else if (getGoogleCalendarClient()) {
-        warnings.push('Googleカレンダーへの登録に失敗しました')
-      }
+    const calendarSync = await syncCalendarAfterCoachingReschedule({
+      bookingId: core.bookingId,
+      studentId: core.studentId,
+      newSlotId: core.newSlotId,
+      newCoachId: core.newCoachId,
+      newStartsAt: core.newStartsAt,
+      newEndsAt: core.newEndsAt,
+      studentNote: core.studentNote,
+      googleCalendarEventId: core.googleCalendarEventId,
+      changeRevision: core.changeRevision,
+    })
+    if (calendarSync === 'failed') {
+      warnings.push('Googleカレンダーの同期に失敗しました')
     }
   } catch (calendarError) {
     console.error('[coaching] admin reschedule calendar failed:', calendarError)
@@ -694,8 +662,7 @@ export async function adminRescheduleCoachingBooking(
       slotDate: core.newSlotDate,
       startTime: core.newStartTime,
       bookingId: core.bookingId,
-      oldStartsAt: core.oldStartsAt,
-      newStartsAt: core.newStartsAt,
+      changeRevision: core.changeRevision,
     })
     if (studentNotify === 'failed') {
       warnings.push('生徒への通知に失敗しました')
@@ -731,6 +698,14 @@ type RescheduleCoreSuccess = {
   newStartTime: string | null
   studentNote: string
   googleCalendarEventId: string | null
+  /** Persisted `booked_at` for this successful change (notify/calendar revision). */
+  changeRevision: string
+}
+
+function isUniqueViolation(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false
+  if (error.code === '23505') return true
+  return Boolean(error.message?.toLowerCase().includes('duplicate'))
 }
 
 async function performCoachingReschedule(params: {
@@ -746,7 +721,7 @@ async function performCoachingReschedule(params: {
   const { data: booking, error: bookingError } = await supabase
     .from('coaching_bookings')
     .select(
-      'id, student_id, coach_id, slot_id, student_note, status, google_calendar_event_id, coaching_slots(starts_at, ends_at, slot_date, start_time)',
+      'id, student_id, coach_id, slot_id, student_note, status, google_calendar_event_id, booked_at, coaching_slots(starts_at, ends_at, slot_date, start_time)',
     )
     .eq('id', params.bookingId)
     .maybeSingle<{
@@ -757,6 +732,7 @@ async function performCoachingReschedule(params: {
       student_note: string
       status: string
       google_calendar_event_id: string | null
+      booked_at: string
       coaching_slots: {
         starts_at: string
         ends_at: string
@@ -803,7 +779,7 @@ async function performCoachingReschedule(params: {
     return { error: 'この予約枠は既に過ぎています' }
   }
 
-  // Re-validate vacancy immediately before commit.
+  // Soft check; unique index on scheduled slot_id is the hard guard.
   if (await isCoachingSlotOccupied(params.newSlotId)) {
     return { error: 'この予約枠は既に埋まっています' }
   }
@@ -811,21 +787,37 @@ async function performCoachingReschedule(params: {
   const nextNote =
     params.studentNote === null ? booking.student_note : params.studentNote || booking.student_note
 
+  // Persist a unique revision for this successful change (notify idempotency + GWS guard).
+  const changeRevision = new Date().toISOString()
+
   const writeDb =
     params.actor === 'admin' ? await getCoachingBookingWriteClient(booking.student_id) : supabase
 
-  const { error: updateError } = await writeDb
+  // Optimistic concurrency: only update if this row is still on the observed slot/status.
+  const { data: updated, error: updateError } = await writeDb
     .from('coaching_bookings')
     .update({
       slot_id: params.newSlotId,
       coach_id: newSlot.coach_id,
       student_note: nextNote,
-      booked_at: new Date().toISOString(),
+      booked_at: changeRevision,
     })
     .eq('id', params.bookingId)
     .eq('status', 'scheduled')
+    .eq('slot_id', booking.slot_id)
+    .select('id, booked_at')
+    .maybeSingle<{ id: string; booked_at: string }>()
+
+  if (isUniqueViolation(updateError)) {
+    return { error: 'この予約枠は既に埋まっています' }
+  }
 
   if (updateError) return { error: '予約の変更に失敗しました' }
+
+  // Another request already moved this booking — leave DB as-is (their write won).
+  if (!updated) {
+    return { error: '予約は他の操作により変更済みです。最新の内容を確認してください' }
+  }
 
   return {
     bookingId: booking.id,
@@ -841,6 +833,7 @@ async function performCoachingReschedule(params: {
     newStartTime: newSlot.start_time,
     studentNote: nextNote,
     googleCalendarEventId: booking.google_calendar_event_id,
+    changeRevision: updated.booked_at || changeRevision,
   }
 }
 

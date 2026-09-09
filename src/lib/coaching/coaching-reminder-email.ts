@@ -27,13 +27,12 @@ export function adminRescheduleEmailBody(coachName: string, datetimeLabel: strin
   return `コーチングの予約が変更されました。\n担当: ${coachName}\n日時: ${datetimeLabel}`
 }
 
-/** Same before→after change retries share a key; a later re-change uses a new key. */
+/** Persisted change revision (`booked_at` written on successful reschedule). */
 export function adminRescheduleIdempotencyKey(
   bookingId: string,
-  oldStartsAt: string,
-  newStartsAt: string,
+  changeRevision: string,
 ): string {
-  return `admin-reschedule:${bookingId}:${oldStartsAt}:${newStartsAt}`
+  return `admin-reschedule:${bookingId}:${changeRevision}`
 }
 
 /** Monday JST date of the target week. */
