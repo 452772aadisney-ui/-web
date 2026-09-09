@@ -296,8 +296,7 @@ describe('processCoachingReminderNewPath', () => {
   })
 
   it('admin_reschedule retries failed email without duplicating a sent push', async () => {
-    let emailDeleted = false
-    let emailInsertCount = 0
+    let updateCalls = 0
 
     createAdminClient.mockReturnValue(
       makeAdmin({
@@ -322,58 +321,41 @@ describe('processCoachingReminderNewPath', () => {
         notification_deliveries: {
           select: () => ({
             eq: async () => ({
-              data: emailDeleted
-                ? [
-                    {
-                      id: 'd-push',
-                      channel: 'push',
-                      status: 'failed',
-                      sent_at: null,
-                      created_at: '2026-09-05T12:00:00.000Z',
-                    },
-                  ]
-                : [
-                    {
-                      id: 'd-push',
-                      channel: 'push',
-                      status: 'failed',
-                      sent_at: null,
-                      created_at: '2026-09-05T12:00:00.000Z',
-                    },
-                    {
-                      id: 'd-email',
-                      channel: 'email',
-                      status: 'failed',
-                      sent_at: null,
-                      created_at: '2026-09-05T12:00:00.000Z',
-                    },
-                  ],
+              data: [
+                {
+                  id: 'd-push',
+                  channel: 'push',
+                  status: 'failed',
+                  sent_at: null,
+                  created_at: '2026-09-05T12:00:00.000Z',
+                },
+                {
+                  id: 'd-email',
+                  channel: 'email',
+                  status: 'failed',
+                  sent_at: null,
+                  created_at: '2026-09-05T12:00:00.000Z',
+                },
+              ],
               error: null,
             }),
           }),
-          delete: () => ({
-            eq: () => ({
-              eq: () => ({
-                eq: async () => {
-                  emailDeleted = true
-                  return { error: null }
-                },
-              }),
-            }),
-          }),
-          insert: async () => {
-            emailInsertCount += 1
-            return { error: null }
+          // DELETE/INSERT are not used in this retry flow; we only reclaim by UPDATE.
+          delete: () => {
+            throw new Error('delete() must not be called')
           },
-          update: () => ({
-            eq: () => ({
-              eq: () => ({
-                select: () => ({
-                  maybeSingle: async () => ({ data: { id: 'd-email-new' }, error: null }),
-                }),
-              }),
-            }),
-          }),
+          insert: async () => {
+            throw new Error('insert() must not be called')
+          },
+          update: () => {
+            updateCalls += 1
+            const chain: any = {}
+            chain.eq = () => chain
+            chain.select = () => ({
+              maybeSingle: async () => ({ data: { id: 'd-email-new' }, error: null }),
+            })
+            return chain
+          },
         },
       }),
     )
@@ -393,8 +375,7 @@ describe('processCoachingReminderNewPath', () => {
     })
 
     expect(outcome).toBe('email_sent')
-    expect(emailDeleted).toBe(true)
-    expect(emailInsertCount).toBe(1)
+    expect(updateCalls).toBeGreaterThanOrEqual(2)
     expect(sendAdminRescheduleEmail).toHaveBeenCalledTimes(1)
     expect(sendPushNotification).not.toHaveBeenCalled()
   })

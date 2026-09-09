@@ -41,6 +41,8 @@ export type CalendarRescheduleSyncDeps = {
     slotId: string
     eventId?: string | null
     etag: string | null
+    /** When clearing `google_calendar_event_id`, require current id match CAS. */
+    matchEventId?: string | null
     /** When true, only write event id if still null (create race). */
     requireNullEventId?: boolean
   }) => Promise<'ok' | 'stale' | 'failed'>
@@ -152,6 +154,7 @@ async function patchExistingEvent(args: {
           bookingId,
           changeRevision,
           slotId: live.slotId,
+          matchEventId: eventId,
           eventId: null,
           etag: null,
         })
@@ -197,6 +200,7 @@ async function patchExistingEvent(args: {
           bookingId,
           changeRevision,
           slotId: after412.slotId,
+          matchEventId: eventId,
           eventId: null,
           etag: null,
         })
@@ -276,25 +280,41 @@ async function createNewEvent(args: {
 
   if (persisted === 'ok') return 'created'
 
-  // Lost create race or revision moved — delete orphan to avoid duplicate GWS events.
-  await deps.deleteEvent(created.eventId)
+  // Lost create race / revision moved.
+  // Delete only when our created event was NOT adopted by DB.
+  const again = await deps.loadBooking(bookingId)
+  if (!again) return 'failed'
+  if (!isLatestRevision(again, changeRevision)) return 'skipped_stale'
 
-  if (persisted === 'stale') {
-    const again = await deps.loadBooking(bookingId)
-    if (!again) return 'failed'
-    if (!isLatestRevision(again, changeRevision)) return 'skipped_stale'
-    const peerId = again.googleCalendarEventId?.trim()
-    if (peerId) {
+  const adoptedId = again.googleCalendarEventId?.trim() || null
+  if (adoptedId) {
+    // DB adopted our exact event id: do not delete, just patch it.
+    if (adoptedId === created.eventId) {
       return patchExistingEvent({
         bookingId,
         changeRevision,
-        eventId: peerId,
+        eventId: created.eventId,
         deps,
       })
     }
-    return 'failed'
+
+    // DB adopted a different event id: delete our orphan and verify.
+    await deps.deleteEvent(created.eventId)
+    const afterDelete = await deps.fetchEvent(created.eventId)
+    if (afterDelete.status !== 'not_found') return 'failed'
+
+    return patchExistingEvent({
+      bookingId,
+      changeRevision,
+      eventId: adoptedId,
+      deps,
+    })
   }
 
+  // DB still has no adopted event id: our created one is an orphan.
+  await deps.deleteEvent(created.eventId)
+  const afterDelete = await deps.fetchEvent(created.eventId)
+  if (afterDelete.status !== 'not_found') return 'failed'
   return 'failed'
 }
 
@@ -347,6 +367,7 @@ async function persistCalendarMeta(params: {
   slotId: string
   eventId?: string | null
   etag: string | null
+  matchEventId?: string | null
   requireNullEventId?: boolean
 }): Promise<'ok' | 'stale' | 'failed'> {
   const supabase = await createClient()
@@ -367,6 +388,11 @@ async function persistCalendarMeta(params: {
     .eq('schedule_revision', params.changeRevision)
     .eq('slot_id', params.slotId)
     .eq('status', 'scheduled')
+
+  // CAS for clearing: only clear if the current google_calendar_event_id matches.
+  if (params.matchEventId !== undefined) {
+    query = query.eq('google_calendar_event_id', params.matchEventId)
+  }
 
   if (params.requireNullEventId) {
     query = query.is('google_calendar_event_id', null)

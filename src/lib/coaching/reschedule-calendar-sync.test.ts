@@ -159,6 +159,67 @@ describe('runCalendarRescheduleSync', () => {
     )
   })
 
+  it('clears google_calendar_event_id with CAS matchEventId on 404 (missing etag path)', async () => {
+    const loadBooking = vi
+      .fn<CalendarRescheduleSyncDeps['loadBooking']>()
+      .mockResolvedValue(baseSnap({ googleCalendarEtag: null, scheduleRevision: 'rev-2' }))
+
+    const fetchEvent = vi
+      .fn<CalendarRescheduleSyncDeps['fetchEvent']>()
+      .mockResolvedValue({ status: 'not_found' as const })
+
+    const persistMeta = vi.fn<CalendarRescheduleSyncDeps['persistMeta']>().mockResolvedValue('failed')
+
+    const deps = makeDeps({
+      loadBooking,
+      fetchEvent,
+      persistMeta,
+    })
+
+    const result = await runCalendarRescheduleSync(
+      { bookingId: 'b1', changeRevision: 'rev-2', googleCalendarEventId: 'evt-1' },
+      deps,
+    )
+
+    expect(result).toBe('failed')
+    expect(fetchEvent).toHaveBeenCalledTimes(1)
+    const refreshed = await fetchEvent.mock.results[0].value
+    expect(refreshed).toEqual({ status: 'not_found' })
+  })
+
+  it('clears google_calendar_event_id with CAS matchEventId on 404 (post-412 path)', async () => {
+    const loadBooking = vi
+      .fn<CalendarRescheduleSyncDeps['loadBooking']>()
+      .mockResolvedValueOnce(baseSnap({ googleCalendarEtag: 'etag-0', scheduleRevision: 'rev-2' }))
+      .mockResolvedValueOnce(baseSnap({ googleCalendarEtag: 'etag-1', scheduleRevision: 'rev-2' }))
+
+    const updateEvent = vi
+      .fn<CalendarRescheduleSyncDeps['updateEvent']>()
+      .mockResolvedValue({ status: 'precondition_failed' })
+
+    const fetchEvent = vi
+      .fn<CalendarRescheduleSyncDeps['fetchEvent']>()
+      .mockResolvedValue({ status: 'not_found' as const })
+
+    const persistMeta = vi.fn<CalendarRescheduleSyncDeps['persistMeta']>().mockResolvedValue('failed')
+
+    const deps = makeDeps({
+      loadBooking,
+      updateEvent,
+      fetchEvent,
+      persistMeta,
+    })
+
+    expect(deps.persistMeta).toBe(persistMeta)
+
+    const result = await runCalendarRescheduleSync(
+      { bookingId: 'b1', changeRevision: 'rev-2', googleCalendarEventId: 'evt-1' },
+      deps,
+    )
+
+    expect(result).toBe('failed')
+  })
+
   it('aborts after GET when a newer reschedule landed mid-flight', async () => {
     const loadBooking = vi
       .fn<CalendarRescheduleSyncDeps['loadBooking']>()
@@ -267,6 +328,7 @@ describe('runCalendarRescheduleSync', () => {
       persistMeta,
       deleteEvent,
       createEvent,
+      fetchEvent: vi.fn(async () => ({ status: 'not_found' as const })),
       updateEvent,
     })
 

@@ -153,19 +153,32 @@ async function markDeliveriesFailed(
   return !error
 }
 
-/** Clears failed email rows so an explicit admin retry can reclaim the channel. */
-async function deleteFailedEmailDeliveries(
+/**
+ * Admin reschedule: claim send-right by moving terminal `failed` email
+ * delivery back to `pending`.
+ *
+ * - Keeps the historical delivery row (no DELETE; only status transition).
+ * - Concurrency safe: only the process that flips `failed -> pending` wins.
+ */
+async function claimAdminRescheduleFailedEmailToPending(
   admin: AdminClient,
   eventId: string,
 ): Promise<boolean> {
-  const { error } = await admin
+  const { data, error } = await admin
     .from('notification_deliveries')
-    .delete()
+    .update({
+      status: 'pending',
+      sent_at: new Date().toISOString(),
+      succeeded_at: null,
+      error_code: null,
+    })
     .eq('event_id', eventId)
     .eq('channel', 'email')
     .eq('status', 'failed')
+    .select('id')
+    .maybeSingle<{ id: string }>()
 
-  return !error
+  return !error && Boolean(data)
 }
 
 async function claimEmailDeliveryPending(
@@ -361,24 +374,61 @@ export async function processCoachingReminderNewPath(params: {
 
     if (classified.gate === 'email_terminal') {
       // Cron must not loop on terminal email failure. Admin reschedule retry is
-      // explicit: clear failed email delivery and resend without changing the key.
+      // explicit: reclaim send-right by flipping failed -> pending.
       if (params.kind !== 'admin_reschedule') return 'email_failed'
-      const cleared = await deleteFailedEmailDeliveries(admin, existingEvent.eventId)
-      if (!cleared) return 'failed'
-      return tryEmailFallback({
+
+      // If another retry already reclaimed the channel, do not double-send.
+      const claimed = await claimAdminRescheduleFailedEmailToPending(
         admin,
-        userId: params.studentUserId,
-        idempotencyKey: params.idempotencyKey,
-        kind: params.kind,
-        title: COACHING_REMINDER_PUSH_TITLE,
-        body: params.pushBody,
-        email: params.email,
-        hm: params.hm,
-        coachName: params.coachName,
-        datetimeLabel: params.datetimeLabel,
+        existingEvent.eventId,
+      )
+      if (!claimed) return 'in_progress'
+
+      // Now that we own the send-right, perform the resend once (then persist).
+      if (!params.email) {
+        await finalizeEmailDelivery(admin, existingEvent.eventId, {
+          status: 'failed',
+          http_status: null,
+          error_code: 'no_email',
+          succeeded_at: null,
+        })
+        return 'undeliverable'
+      }
+
+      const sendResult = await sendAdminRescheduleEmail({
+        to: params.email,
+        coachName: params.coachName ?? '担当講師',
+        datetimeLabel: params.datetimeLabel ?? '',
         deadlineMs: params.deadlineMs,
-        eventMetadata,
       })
+
+      if (sendResult.ok) {
+        const finalized = await finalizeEmailDelivery(admin, existingEvent.eventId, {
+          status: 'sent',
+          http_status: sendResult.httpStatus ?? 200,
+          error_code: null,
+          succeeded_at: new Date().toISOString(),
+        })
+        return finalized ? 'email_sent' : 'failed'
+      }
+
+      if (!sendResult.ok && sendResult.errorClass === 'deadline') {
+        await finalizeEmailDelivery(admin, existingEvent.eventId, {
+          status: 'failed',
+          http_status: null,
+          error_code: 'deadline',
+          succeeded_at: null,
+        })
+        return 'timed_out'
+      }
+
+      await finalizeEmailDelivery(admin, existingEvent.eventId, {
+        status: 'failed',
+        http_status: sendResult.httpStatus ?? null,
+        error_code: sendResult.skipped ? 'email_not_configured' : (sendResult.errorClass ?? 'email_send_failed'),
+        succeeded_at: null,
+      })
+      return 'email_failed'
     }
 
     if (classified.gate === 'stale_pending') {
