@@ -65,6 +65,7 @@ import { formatChartDate, getRecentDateKeys, getTodayDateKey } from '@/lib/study
 import {
   getOrderedChartSubjectLabels,
   resolveStudySubjectCategory,
+  sumScienceFamilyMinutes,
 } from '@/lib/constants/textbook-subject-categories'
 
 function getChartSubjectLabel(subject: string): string {
@@ -159,4 +160,14 @@ export function buildSubjectPieDataFromMinutes(
       minutes: totals.get(name) ?? 0,
     }))
     .filter((row) => row.value > 0)
+}
+
+/**
+ * 「理科全体」合計（旧「理科」+ 物理/化学/生物/地学）。
+ * 円グラフは科目別に分けて表示し、各分はここで二重計上しない。
+ */
+export function sumScienceFamilyMinutesFromChartRows(rows: SubjectChartRow[]): number {
+  return sumScienceFamilyMinutes(
+    rows.map((row) => ({ subject: row.name, minutes: row.minutes })),
+  )
 }

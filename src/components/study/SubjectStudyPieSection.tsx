@@ -2,7 +2,11 @@
 
 import { useState } from 'react'
 import { SubjectStudyPieChart } from '@/components/study/SubjectStudyPieChart'
-import type { SubjectChartRow } from '@/lib/study/chart-data'
+import {
+  formatDuration,
+  sumScienceFamilyMinutesFromChartRows,
+  type SubjectChartRow,
+} from '@/lib/study/chart-data'
 import {
   pickSubjectPieData,
   type SubjectPiePeriod,
@@ -32,6 +36,7 @@ export function SubjectStudyPieSection({
 }: SubjectStudyPieSectionProps) {
   const [period, setPeriod] = useState<SubjectPiePeriod>(initialPeriod)
   const pieData = pickSubjectPieData(period, data14, dataAll)
+  const scienceFamilyMinutes = sumScienceFamilyMinutesFromChartRows(pieData)
 
   const toggleClass = (active: boolean) =>
     cn(
@@ -70,6 +75,11 @@ export function SubjectStudyPieSection({
         </div>
       </div>
       <SubjectStudyPieChart data={pieData} />
+      {scienceFamilyMinutes > 0 && (
+        <p className="mt-2 text-xs text-muted">
+          理科系合計（物理・化学・生物・地学・旧「理科」）: {formatDuration(scienceFamilyMinutes)}
+        </p>
+      )}
     </div>
   )
 }
