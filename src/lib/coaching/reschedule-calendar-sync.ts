@@ -9,6 +9,7 @@ import {
   type FetchCalendarEventResult,
 } from '@/lib/google-calendar/events'
 import { getGoogleCalendarClient } from '@/lib/google-calendar/config'
+import { coachingBookingCalendarEventId } from '@/lib/google-calendar/stable-event-id'
 
 export type CalendarRescheduleSyncResult =
   | 'updated'
@@ -57,6 +58,7 @@ export type CalendarRescheduleSyncDeps = {
   }) => Promise<CoachingCalendarUpdateResult>
   fetchEvent: (eventId: string) => Promise<FetchCalendarEventResult>
   createEvent: (input: {
+    bookingId: string
     studentId: string
     slotId: string
     coachId: string
@@ -149,7 +151,8 @@ async function patchExistingEvent(args: {
       const fetched = await deps.fetchEvent(eventId)
       if (fetched.status === 'unconfigured') return 'skipped_unconfigured'
       if (fetched.status === 'not_found') {
-        // Stale id in DB — create a fresh event for this revision.
+        // Event missing at Google: restore via stable booking id (do not clear a
+        // newer peer's event_id). Only CAS-clear when DB still points at this id.
         const cleared = await deps.persistMeta({
           bookingId,
           changeRevision,
@@ -260,7 +263,43 @@ async function createNewEvent(args: {
     })
   }
 
+  let stableId: string
+  try {
+    stableId = coachingBookingCalendarEventId(bookingId)
+  } catch {
+    return 'failed'
+  }
+
+  // Persist stable id before external create so a lost response still points at
+  // the same Google event on retry (requireNullEventId CAS).
+  const claimed = await deps.persistMeta({
+    bookingId,
+    changeRevision,
+    slotId: before.slotId,
+    eventId: stableId,
+    etag: null,
+    requireNullEventId: true,
+  })
+
+  if (claimed === 'stale') {
+    const again = await deps.loadBooking(bookingId)
+    if (!again) return 'failed'
+    if (!isLatestRevision(again, changeRevision)) return 'skipped_stale'
+    const peerId = again.googleCalendarEventId?.trim()
+    if (peerId) {
+      return patchExistingEvent({
+        bookingId,
+        changeRevision,
+        eventId: peerId,
+        deps,
+      })
+    }
+    return 'failed'
+  }
+  if (claimed === 'failed') return 'failed'
+
   const created = await deps.createEvent({
+    bookingId,
     studentId: before.studentId,
     slotId: before.slotId,
     coachId: before.coachId,
@@ -269,53 +308,22 @@ async function createNewEvent(args: {
   })
   if (!created) return 'failed'
 
+  // Stable-id create must return the same id; never delete a peer's event.
+  if (created.eventId !== stableId) {
+    console.error('[coaching] calendar create returned unexpected event id')
+    return 'failed'
+  }
+
   const persisted = await deps.persistMeta({
     bookingId,
     changeRevision,
     slotId: before.slotId,
     eventId: created.eventId,
     etag: created.etag,
-    requireNullEventId: true,
   })
-
-  if (persisted === 'ok') return 'created'
-
-  // Lost create race / revision moved.
-  // Delete only when our created event was NOT adopted by DB.
-  const again = await deps.loadBooking(bookingId)
-  if (!again) return 'failed'
-  if (!isLatestRevision(again, changeRevision)) return 'skipped_stale'
-
-  const adoptedId = again.googleCalendarEventId?.trim() || null
-  if (adoptedId) {
-    // DB adopted our exact event id: do not delete, just patch it.
-    if (adoptedId === created.eventId) {
-      return patchExistingEvent({
-        bookingId,
-        changeRevision,
-        eventId: created.eventId,
-        deps,
-      })
-    }
-
-    // DB adopted a different event id: delete our orphan and verify.
-    await deps.deleteEvent(created.eventId)
-    const afterDelete = await deps.fetchEvent(created.eventId)
-    if (afterDelete.status !== 'not_found') return 'failed'
-
-    return patchExistingEvent({
-      bookingId,
-      changeRevision,
-      eventId: adoptedId,
-      deps,
-    })
-  }
-
-  // DB still has no adopted event id: our created one is an orphan.
-  await deps.deleteEvent(created.eventId)
-  const afterDelete = await deps.fetchEvent(created.eventId)
-  if (afterDelete.status !== 'not_found') return 'failed'
-  return 'failed'
+  if (persisted === 'stale') return 'skipped_stale'
+  if (persisted === 'failed') return 'failed'
+  return 'created'
 }
 
 async function loadBookingSnapshot(

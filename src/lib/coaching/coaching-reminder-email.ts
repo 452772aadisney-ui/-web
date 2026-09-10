@@ -86,6 +86,8 @@ export async function sendAdminRescheduleEmail(params: {
   coachName: string
   datetimeLabel: string
   deadlineMs?: number
+  /** Same Resend Idempotency-Key for retries of this notification (24h window). */
+  idempotencyKey?: string
 }): Promise<SendEmailResult & { httpStatus?: number | null }> {
   return sendEmail({
     to: params.to,
@@ -98,5 +100,6 @@ export async function sendAdminRescheduleEmail(params: {
     omitRecipientFromLogs: true,
     pace: true,
     deadlineMs: params.deadlineMs,
+    idempotencyKey: params.idempotencyKey,
   })
 }

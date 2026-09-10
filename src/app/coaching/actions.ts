@@ -450,6 +450,7 @@ async function performCoachingBooking(
     })
 
     const createdEvent = await createCoachingBookingCalendarEvent({
+      bookingId,
       studentId,
       slotId,
       coachId: slot.coach_id,

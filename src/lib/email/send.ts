@@ -18,10 +18,15 @@ export type SendEmailInput = {
   pace?: boolean
   /** Absolute epoch ms; paced sends after this are skipped (soft timeout). */
   deadlineMs?: number
+  /**
+   * Resend `Idempotency-Key` (1–256 chars). Official retention: 24 hours.
+   * Same key + same payload returns the cached response without re-sending.
+   */
+  idempotencyKey?: string
 }
 
 export type SendEmailResult =
-  | { ok: true; httpStatus?: number }
+  | { ok: true; httpStatus?: number; providerMessageId?: string | null }
   | {
       ok: false
       skipped?: boolean
@@ -33,6 +38,7 @@ export type SendEmailResult =
         | 'network'
         | 'empty_recipient'
         | 'deadline'
+        | 'idempotency_conflict'
     }
 
 function formatResendError(raw: string, to: string): string {
@@ -74,12 +80,18 @@ async function sendEmailOnce(input: SendEmailInput): Promise<SendEmailResult> {
   }
 
   try {
+    const idempotencyKey = input.idempotencyKey?.trim() || ''
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    }
+    if (idempotencyKey) {
+      headers['Idempotency-Key'] = idempotencyKey.slice(0, 256)
+    }
+
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         from,
         to,
@@ -90,8 +102,11 @@ async function sendEmailOnce(input: SendEmailInput): Promise<SendEmailResult> {
     })
 
     if (!response.ok) {
-      const errorClass = classifyResendHttpStatus(response.status)
       const errorBody = await response.text().catch(() => '')
+      const errorClass =
+        response.status === 409
+          ? ('idempotency_conflict' as const)
+          : classifyResendHttpStatus(response.status)
 
       if (input.omitRecipientFromLogs) {
         console.error('[email] send failed:', {
@@ -118,7 +133,15 @@ async function sendEmailOnce(input: SendEmailInput): Promise<SendEmailResult> {
       }
     }
 
-    return { ok: true, httpStatus: response.status }
+    let providerMessageId: string | null = null
+    try {
+      const body = (await response.json()) as { id?: string }
+      providerMessageId = body.id ?? null
+    } catch {
+      providerMessageId = null
+    }
+
+    return { ok: true, httpStatus: response.status, providerMessageId }
   } catch {
     if (input.omitRecipientFromLogs) {
       console.error('[email] send failed:', { errorClass: 'network' })

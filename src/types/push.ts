@@ -15,7 +15,12 @@ export type NotificationPreferenceCategory = Exclude<PushNotificationType, 'test
 
 export type NotificationDeliveryChannel = 'push' | 'email'
 
-export type NotificationDeliveryStatus = 'pending' | 'sent' | 'failed' | 'skipped'
+export type NotificationDeliveryStatus =
+  | 'pending'
+  | 'sent'
+  | 'failed'
+  | 'skipped'
+  | 'unknown'
 
 export interface PushSubscriptionRow {
   id: string

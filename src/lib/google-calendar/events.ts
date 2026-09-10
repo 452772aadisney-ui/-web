@@ -1,5 +1,6 @@
 import { getPersonName } from '@/lib/auth/display-name'
 import { getGoogleCalendarClient } from '@/lib/google-calendar/config'
+import { coachingBookingCalendarEventId } from '@/lib/google-calendar/stable-event-id'
 import { shiftDateKey } from '@/lib/study/dates'
 import { createClient } from '@/lib/supabase/server'
 
@@ -15,12 +16,31 @@ function buildEventDescription(coachName: string, studentNote: string): string {
   return lines.join('\n')
 }
 
+function isOurCoachingCalendarSummary(summary: string | null | undefined): boolean {
+  return Boolean(summary?.startsWith('【コーチング】'))
+}
+
 export type CreatedCalendarEvent = {
   eventId: string
   etag: string | null
 }
 
+function isConflict(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const err = error as { code?: number; status?: number; response?: { status?: number } }
+  return err.code === 409 || err.status === 409 || err.response?.status === 409
+}
+
+/**
+ * Create-or-restore a coaching calendar event using a booking-stable event id.
+ *
+ * - Same booking always targets the same Google event id (lost-response safe).
+ * - 409 / existing / cancelled → GET then patch (never invent a second event).
+ * - Unrelated events that collide on id are not overwritten.
+ * - Deleted ids are not assumed reusable via insert; cancelled events are restored.
+ */
 export async function createCoachingBookingCalendarEvent(input: {
+  bookingId: string
   studentId: string
   slotId: string
   coachId: string
@@ -30,6 +50,14 @@ export async function createCoachingBookingCalendarEvent(input: {
   const client = getGoogleCalendarClient()
   if (!client) {
     console.warn('[google-calendar] credentials are not configured; event skipped')
+    return null
+  }
+
+  let eventId: string
+  try {
+    eventId = coachingBookingCalendarEventId(input.bookingId)
+  } catch (error) {
+    console.error('[google-calendar] invalid booking id for stable event:', error)
     return null
   }
 
@@ -60,29 +88,110 @@ export async function createCoachingBookingCalendarEvent(input: {
 
   const studentName = student ? getPersonName(student) : '生徒'
   const coachName = coach?.name ?? '未設定'
+  const requestBody = {
+    summary: `【コーチング】${studentName}さん`,
+    description: buildEventDescription(coachName, input.studentNote),
+    status: 'confirmed' as const,
+    start: {
+      dateTime: input.startsAt,
+      timeZone: 'Asia/Tokyo',
+    },
+    end: {
+      dateTime: slot.ends_at,
+      timeZone: 'Asia/Tokyo',
+    },
+  }
 
+  const existing = await fetchCoachingBookingCalendarEvent(eventId)
+  if (existing.status === 'ok') {
+    if (!isOurCoachingCalendarSummary(existing.summary) && existing.summary) {
+      console.error('[google-calendar] stable id collision with unrelated event')
+      return null
+    }
+    return patchExistingById({
+      eventId,
+      requestBody,
+      ifMatchEtag: existing.etag,
+    })
+  }
+  if (existing.status === 'unconfigured') return null
+  if (existing.status === 'failed') return null
+
+  // not_found — insert with stable id (do not assume a previously deleted id is free;
+  // if Google still reserves it, insert returns 409 and we GET+patch).
   try {
     const response = await client.calendar.events.insert({
       calendarId: client.calendarId,
       requestBody: {
-        summary: `【コーチング】${studentName}さん`,
-        description: buildEventDescription(coachName, input.studentNote),
-        start: {
-          dateTime: input.startsAt,
-          timeZone: 'Asia/Tokyo',
-        },
-        end: {
-          dateTime: slot.ends_at,
-          timeZone: 'Asia/Tokyo',
-        },
+        id: eventId,
+        ...requestBody,
       },
     })
-
-    const eventId = response.data.id
-    if (!eventId) return null
-    return { eventId, etag: response.data.etag ?? null }
+    const createdId = response.data.id
+    if (!createdId) return null
+    return { eventId: createdId, etag: response.data.etag ?? null }
   } catch (error) {
+    if (isConflict(error)) {
+      const again = await fetchCoachingBookingCalendarEvent(eventId)
+      if (again.status !== 'ok') {
+        console.error('[google-calendar] insert conflict but get failed:', again)
+        return null
+      }
+      if (!isOurCoachingCalendarSummary(again.summary) && again.summary) {
+        console.error('[google-calendar] conflict with unrelated event; refusing overwrite')
+        return null
+      }
+      return patchExistingById({
+        eventId,
+        requestBody,
+        ifMatchEtag: again.etag,
+      })
+    }
     console.error('[google-calendar] event insert failed:', error)
+    return null
+  }
+}
+
+async function patchExistingById(params: {
+  eventId: string
+  requestBody: Record<string, unknown>
+  ifMatchEtag: string | null
+}): Promise<CreatedCalendarEvent | null> {
+  const client = getGoogleCalendarClient()
+  if (!client) return null
+
+  try {
+    const response = await client.calendar.events.patch(
+      {
+        calendarId: client.calendarId,
+        eventId: params.eventId,
+        requestBody: params.requestBody,
+      },
+      params.ifMatchEtag
+        ? { headers: { 'If-Match': params.ifMatchEtag } }
+        : undefined,
+    )
+    return { eventId: params.eventId, etag: response.data.etag ?? null }
+  } catch (error) {
+    if (params.ifMatchEtag && isPreconditionFailed(error)) {
+      const fresh = await fetchCoachingBookingCalendarEvent(params.eventId)
+      if (fresh.status !== 'ok' || !fresh.etag) return null
+      try {
+        const response = await client.calendar.events.patch(
+          {
+            calendarId: client.calendarId,
+            eventId: params.eventId,
+            requestBody: params.requestBody,
+          },
+          { headers: { 'If-Match': fresh.etag } },
+        )
+        return { eventId: params.eventId, etag: response.data.etag ?? null }
+      } catch (retryError) {
+        console.error('[google-calendar] event restore patch retry failed:', retryError)
+        return null
+      }
+    }
+    console.error('[google-calendar] event restore patch failed:', error)
     return null
   }
 }
@@ -207,7 +316,12 @@ export async function updateCoachingBookingCalendarEvent(input: {
 }
 
 export type FetchCalendarEventResult =
-  | { status: 'ok'; etag: string | null }
+  | {
+      status: 'ok'
+      etag: string | null
+      summary: string | null
+      eventStatus: string | null
+    }
   | { status: 'not_found' }
   | { status: 'unconfigured' }
   | { status: 'failed' }
@@ -226,7 +340,12 @@ export async function fetchCoachingBookingCalendarEvent(
       calendarId: client.calendarId,
       eventId: trimmed,
     })
-    return { status: 'ok', etag: response.data.etag ?? null }
+    return {
+      status: 'ok',
+      etag: response.data.etag ?? null,
+      summary: response.data.summary ?? null,
+      eventStatus: response.data.status ?? null,
+    }
   } catch (error) {
     if (isNotFound(error)) return { status: 'not_found' }
     console.error('[google-calendar] event get failed:', error)

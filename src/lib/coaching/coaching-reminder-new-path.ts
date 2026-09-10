@@ -6,6 +6,11 @@ import { isVercelNonProduction } from '@/lib/study/study-reminder-mode'
 import { classifyExistingDeliveries } from '@/lib/study/study-reminder-new-path'
 import { COACHING_REMINDER_PENDING_STALE_MS } from '@/lib/coaching/coaching-reminder-mode'
 import {
+  acceptanceToAttemptStatus,
+  canSafelyRetryUnknownWithResendIdempotency,
+  classifyEmailSendAcceptance,
+} from '@/lib/coaching/email-attempt-outcome'
+import {
   COACHING_REMINDER_PUSH_PATH,
   COACHING_REMINDER_PUSH_TITLE,
   sendAdminRescheduleEmail,
@@ -34,12 +39,19 @@ export type CoachingReminderNewPathOutcome =
 type DeliveryRow = {
   id: string
   channel: 'push' | 'email'
-  status: 'pending' | 'sent' | 'failed' | 'skipped'
+  status: 'pending' | 'sent' | 'failed' | 'skipped' | 'unknown'
   sent_at: string | null
   created_at: string
 }
 
 type AdminClient = NonNullable<ReturnType<typeof createAdminClient>>
+
+type ClaimedEmailAttempt = {
+  deliveryId: string
+  attemptId: string
+  claimToken: string
+  attemptNo: number
+}
 
 export async function getCoachingReminderPreferenceEnabled(
   admin: AdminClient,
@@ -154,31 +166,249 @@ async function markDeliveriesFailed(
 }
 
 /**
- * Admin reschedule: claim send-right by moving terminal `failed` email
- * delivery back to `pending`.
- *
- * - Keeps the historical delivery row (no DELETE; only status transition).
- * - Concurrency safe: only the process that flips `failed -> pending` wins.
+ * Claim a new email send attempt without erasing prior failure rows.
+ * Concurrent retries: unique partial index allows only one pending attempt.
  */
-async function claimAdminRescheduleFailedEmailToPending(
+async function claimEmailDeliveryAttempt(
   admin: AdminClient,
-  eventId: string,
-): Promise<boolean> {
-  const { data, error } = await admin
+  deliveryId: string,
+): Promise<ClaimedEmailAttempt | null> {
+  const { data: latest, error: latestError } = await admin
+    .from('notification_delivery_attempts')
+    .select('attempt_no')
+    .eq('delivery_id', deliveryId)
+    .order('attempt_no', { ascending: false })
+    .limit(1)
+    .maybeSingle<{ attempt_no: number }>()
+
+  if (latestError) return null
+  const nextNo = (latest?.attempt_no ?? 0) + 1
+  const claimToken = crypto.randomUUID()
+
+  const { data: inserted, error } = await admin
+    .from('notification_delivery_attempts')
+    .insert({
+      delivery_id: deliveryId,
+      attempt_no: nextNo,
+      status: 'pending',
+      claim_token: claimToken,
+      started_at: new Date().toISOString(),
+    })
+    .select('id, claim_token, attempt_no')
+    .maybeSingle<{ id: string; claim_token: string; attempt_no: number }>()
+
+  if (error) {
+    // Unique pending or race on attempt_no → another worker owns the send-right
+    if (error.code === '23505') return null
+    return null
+  }
+  if (!inserted) return null
+
+  // Aggregate delivery becomes pending for classify; prior attempt rows keep history.
+  await admin
     .from('notification_deliveries')
     .update({
       status: 'pending',
       sent_at: new Date().toISOString(),
-      succeeded_at: null,
-      error_code: null,
+      attempt_count: nextNo,
     })
+    .eq('id', deliveryId)
+
+  return {
+    deliveryId,
+    attemptId: inserted.id,
+    claimToken: inserted.claim_token,
+    attemptNo: inserted.attempt_no,
+  }
+}
+
+async function findEmailDeliveryId(
+  admin: AdminClient,
+  eventId: string,
+): Promise<string | null> {
+  const { data, error } = await admin
+    .from('notification_deliveries')
+    .select('id')
     .eq('event_id', eventId)
     .eq('channel', 'email')
-    .eq('status', 'failed')
+    .maybeSingle<{ id: string }>()
+  if (error) return null
+  return data?.id ?? null
+}
+
+async function finalizeEmailAttempt(
+  admin: AdminClient,
+  claim: ClaimedEmailAttempt,
+  patch: {
+    status: 'sent' | 'failed' | 'unknown'
+    acceptance: 'not_accepted' | 'accepted' | 'unknown'
+    httpStatus: number | null
+    errorCode: string | null
+    providerMessageId?: string | null
+  },
+): Promise<boolean> {
+  const finishedAt = new Date().toISOString()
+  const { data, error } = await admin
+    .from('notification_delivery_attempts')
+    .update({
+      status: patch.status,
+      acceptance: patch.acceptance,
+      http_status: patch.httpStatus,
+      error_code: patch.errorCode,
+      provider_message_id: patch.providerMessageId ?? null,
+      finished_at: finishedAt,
+    })
+    .eq('id', claim.attemptId)
+    .eq('claim_token', claim.claimToken)
+    .eq('status', 'pending')
     .select('id')
     .maybeSingle<{ id: string }>()
 
-  return !error && Boolean(data)
+  if (error || !data) return false
+
+  const deliveryStatus =
+    patch.status === 'sent'
+      ? 'sent'
+      : patch.status === 'unknown'
+        ? 'unknown'
+        : 'failed'
+
+  const { error: deliveryError } = await admin
+    .from('notification_deliveries')
+    .update({
+      status: deliveryStatus,
+      http_status: patch.httpStatus,
+      // Keep latest summary code only; full history lives on attempts rows.
+      error_code: patch.errorCode,
+      succeeded_at: patch.status === 'sent' ? finishedAt : null,
+      attempt_count: claim.attemptNo,
+    })
+    .eq('id', claim.deliveryId)
+
+  return !deliveryError
+}
+
+async function firstAttemptStartedAtMs(
+  admin: AdminClient,
+  deliveryId: string,
+): Promise<number | null> {
+  const { data, error } = await admin
+    .from('notification_delivery_attempts')
+    .select('started_at')
+    .eq('delivery_id', deliveryId)
+    .order('attempt_no', { ascending: true })
+    .limit(1)
+    .maybeSingle<{ started_at: string }>()
+  if (error || !data?.started_at) return null
+  return Date.parse(data.started_at)
+}
+
+/**
+ * Admin reschedule email retry: preserve failed history via attempt rows;
+ * only the claim holder finalizes that attempt.
+ */
+async function retryAdminRescheduleEmailWithHistory(params: {
+  admin: AdminClient
+  eventId: string
+  email: string | null
+  idempotencyKey: string
+  coachName?: string
+  datetimeLabel?: string
+  deadlineMs?: number
+  nowMs: number
+  deliveryStatus: 'failed' | 'unknown'
+}): Promise<CoachingReminderNewPathOutcome> {
+  const deliveryId = await findEmailDeliveryId(params.admin, params.eventId)
+  if (!deliveryId) return 'failed'
+
+  if (params.deliveryStatus === 'unknown') {
+    const firstStarted = await firstAttemptStartedAtMs(params.admin, deliveryId)
+    if (
+      firstStarted == null ||
+      !canSafelyRetryUnknownWithResendIdempotency({
+        firstAttemptStartedAtMs: firstStarted,
+        nowMs: params.nowMs,
+      })
+    ) {
+      // Outside Resend 24h window (or no attempt history): do not auto-resend.
+      return 'email_failed'
+    }
+  }
+
+  const claim = await claimEmailDeliveryAttempt(params.admin, deliveryId)
+  if (!claim) return 'in_progress'
+
+  if (!params.email) {
+    await finalizeEmailAttempt(params.admin, claim, {
+      status: 'failed',
+      acceptance: 'not_accepted',
+      httpStatus: null,
+      errorCode: 'no_email',
+    })
+    return 'undeliverable'
+  }
+
+  const sendResult = await sendAdminRescheduleEmail({
+    to: params.email,
+    coachName: params.coachName ?? '担当講師',
+    datetimeLabel: params.datetimeLabel ?? '',
+    deadlineMs: params.deadlineMs,
+    // Same notification → same Resend key + same body (24h retention).
+    idempotencyKey: params.idempotencyKey,
+  })
+
+  const acceptance = classifyEmailSendAcceptance({
+    ok: sendResult.ok,
+    errorClass: sendResult.ok ? null : sendResult.errorClass,
+    httpStatus: sendResult.ok ? sendResult.httpStatus ?? 200 : sendResult.httpStatus,
+    skipped: sendResult.ok ? false : sendResult.skipped,
+  })
+  const attemptStatus = acceptanceToAttemptStatus(acceptance)
+
+  if (sendResult.ok) {
+    const finalized = await finalizeEmailAttempt(params.admin, claim, {
+      status: 'sent',
+      acceptance: 'accepted',
+      httpStatus: sendResult.httpStatus ?? 200,
+      errorCode: null,
+      providerMessageId: sendResult.providerMessageId,
+    })
+    // Provider accepted; if aggregate persist fails, attempt row still records sent.
+    return finalized ? 'email_sent' : 'email_sent'
+  }
+
+  if (!sendResult.ok && sendResult.errorClass === 'deadline') {
+    await finalizeEmailAttempt(params.admin, claim, {
+      status: 'failed',
+      acceptance: 'not_accepted',
+      httpStatus: null,
+      errorCode: 'deadline',
+    })
+    return 'timed_out'
+  }
+
+  // concurrent_idempotent_requests (409): treat as unknown / in progress
+  if (!sendResult.ok && sendResult.errorClass === 'idempotency_conflict') {
+    await finalizeEmailAttempt(params.admin, claim, {
+      status: 'unknown',
+      acceptance: 'unknown',
+      httpStatus: sendResult.httpStatus ?? 409,
+      errorCode: 'idempotency_conflict',
+    })
+    return 'in_progress'
+  }
+
+  await finalizeEmailAttempt(params.admin, claim, {
+    status: attemptStatus,
+    acceptance,
+    httpStatus: sendResult.httpStatus ?? null,
+    errorCode: sendResult.skipped
+      ? 'email_not_configured'
+      : (sendResult.errorClass ?? 'email_send_failed'),
+  })
+
+  if (acceptance === 'unknown') return 'failed'
+  return 'email_failed'
 }
 
 async function claimEmailDeliveryPending(
@@ -203,7 +433,7 @@ async function finalizeEmailDelivery(
   admin: AdminClient,
   eventId: string,
   patch: {
-    status: 'sent' | 'failed'
+    status: 'sent' | 'failed' | 'unknown'
     http_status: number | null
     error_code: string | null
     succeeded_at: string | null
@@ -218,6 +448,33 @@ async function finalizeEmailDelivery(
     .maybeSingle<{ id: string }>()
 
   return !error && Boolean(data)
+}
+
+/** After first-time email claim, also write attempt #1 for history. */
+async function recordInitialEmailAttempt(
+  admin: AdminClient,
+  eventId: string,
+  patch: {
+    status: 'sent' | 'failed' | 'unknown'
+    acceptance: 'not_accepted' | 'accepted' | 'unknown'
+    httpStatus: number | null
+    errorCode: string | null
+    providerMessageId?: string | null
+  },
+): Promise<void> {
+  const deliveryId = await findEmailDeliveryId(admin, eventId)
+  if (!deliveryId) return
+  await admin.from('notification_delivery_attempts').insert({
+    delivery_id: deliveryId,
+    attempt_no: 1,
+    status: patch.status,
+    acceptance: patch.acceptance,
+    http_status: patch.httpStatus,
+    error_code: patch.errorCode,
+    provider_message_id: patch.providerMessageId ?? null,
+    started_at: new Date().toISOString(),
+    finished_at: new Date().toISOString(),
+  })
 }
 
 async function tryEmailFallback(params: {
@@ -277,6 +534,7 @@ async function tryEmailFallback(params: {
             coachName: params.coachName ?? '担当講師',
             datetimeLabel: params.datetimeLabel ?? '',
             deadlineMs: params.deadlineMs,
+            idempotencyKey: params.idempotencyKey,
           })
         : await sendSessionPreviousDayEmail({
             to: params.email,
@@ -291,8 +549,23 @@ async function tryEmailFallback(params: {
       error_code: null,
       succeeded_at: new Date().toISOString(),
     })
-    return finalized ? 'email_sent' : 'failed'
+    await recordInitialEmailAttempt(params.admin, event.eventId, {
+      status: 'sent',
+      acceptance: 'accepted',
+      httpStatus: sendResult.httpStatus ?? 200,
+      errorCode: null,
+      providerMessageId: sendResult.providerMessageId,
+    })
+    return finalized ? 'email_sent' : 'email_sent'
   }
+
+  const acceptance = classifyEmailSendAcceptance({
+    ok: false,
+    errorClass: sendResult.errorClass,
+    httpStatus: sendResult.httpStatus,
+    skipped: sendResult.skipped,
+  })
+  const attemptStatus = acceptanceToAttemptStatus(acceptance)
 
   if (!sendResult.ok && sendResult.errorClass === 'deadline') {
     await finalizeEmailDelivery(params.admin, event.eventId, {
@@ -301,18 +574,32 @@ async function tryEmailFallback(params: {
       error_code: 'deadline',
       succeeded_at: null,
     })
+    await recordInitialEmailAttempt(params.admin, event.eventId, {
+      status: 'failed',
+      acceptance: 'not_accepted',
+      httpStatus: null,
+      errorCode: 'deadline',
+    })
     return 'timed_out'
   }
 
   await finalizeEmailDelivery(params.admin, event.eventId, {
-    status: 'failed',
+    status: attemptStatus === 'unknown' ? 'unknown' : 'failed',
     http_status: sendResult.httpStatus ?? null,
     error_code: sendResult.skipped
       ? 'email_not_configured'
       : (sendResult.errorClass ?? 'email_send_failed'),
     succeeded_at: null,
   })
-  return 'email_failed'
+  await recordInitialEmailAttempt(params.admin, event.eventId, {
+    status: attemptStatus,
+    acceptance,
+    httpStatus: sendResult.httpStatus ?? null,
+    errorCode: sendResult.skipped
+      ? 'email_not_configured'
+      : (sendResult.errorClass ?? 'email_send_failed'),
+  })
+  return acceptance === 'unknown' ? 'failed' : 'email_failed'
 }
 
 /**
@@ -364,7 +651,7 @@ export async function processCoachingReminderNewPath(params: {
     if (!listed.ok) return 'failed'
 
     let classified = classifyExistingDeliveries(
-      listed.rows,
+      listed.rows as Parameters<typeof classifyExistingDeliveries>[0],
       nowMs,
       COACHING_REMINDER_PENDING_STALE_MS,
     )
@@ -372,84 +659,84 @@ export async function processCoachingReminderNewPath(params: {
     if (classified.gate === 'already_completed') return 'already_completed'
     if (classified.gate === 'in_progress') return 'in_progress'
 
-    if (classified.gate === 'email_terminal') {
-      // Cron must not loop on terminal email failure. Admin reschedule retry is
-      // explicit: reclaim send-right by flipping failed -> pending.
-      if (params.kind !== 'admin_reschedule') return 'email_failed'
-
-      // If another retry already reclaimed the channel, do not double-send.
-      const claimed = await claimAdminRescheduleFailedEmailToPending(
+    // Push succeeded ⇒ never email (existing policy). already_completed covers this.
+    const emailRow = listed.rows.find((r) => r.channel === 'email')
+    if (emailRow?.status === 'unknown' && params.kind === 'admin_reschedule') {
+      return retryAdminRescheduleEmailWithHistory({
         admin,
-        existingEvent.eventId,
-      )
-      if (!claimed) return 'in_progress'
-
-      // Now that we own the send-right, perform the resend once (then persist).
-      if (!params.email) {
-        await finalizeEmailDelivery(admin, existingEvent.eventId, {
-          status: 'failed',
-          http_status: null,
-          error_code: 'no_email',
-          succeeded_at: null,
-        })
-        return 'undeliverable'
-      }
-
-      const sendResult = await sendAdminRescheduleEmail({
-        to: params.email,
-        coachName: params.coachName ?? '担当講師',
-        datetimeLabel: params.datetimeLabel ?? '',
+        eventId: existingEvent.eventId,
+        email: params.email,
+        idempotencyKey: params.idempotencyKey,
+        coachName: params.coachName,
+        datetimeLabel: params.datetimeLabel,
         deadlineMs: params.deadlineMs,
+        nowMs,
+        deliveryStatus: 'unknown',
       })
+    }
 
-      if (sendResult.ok) {
-        const finalized = await finalizeEmailDelivery(admin, existingEvent.eventId, {
-          status: 'sent',
-          http_status: sendResult.httpStatus ?? 200,
-          error_code: null,
-          succeeded_at: new Date().toISOString(),
-        })
-        return finalized ? 'email_sent' : 'failed'
-      }
-
-      if (!sendResult.ok && sendResult.errorClass === 'deadline') {
-        await finalizeEmailDelivery(admin, existingEvent.eventId, {
-          status: 'failed',
-          http_status: null,
-          error_code: 'deadline',
-          succeeded_at: null,
-        })
-        return 'timed_out'
-      }
-
-      await finalizeEmailDelivery(admin, existingEvent.eventId, {
-        status: 'failed',
-        http_status: sendResult.httpStatus ?? null,
-        error_code: sendResult.skipped ? 'email_not_configured' : (sendResult.errorClass ?? 'email_send_failed'),
-        succeeded_at: null,
+    if (classified.gate === 'email_terminal') {
+      // Cron must not loop on terminal email failure.
+      if (params.kind !== 'admin_reschedule') return 'email_failed'
+      return retryAdminRescheduleEmailWithHistory({
+        admin,
+        eventId: existingEvent.eventId,
+        email: params.email,
+        idempotencyKey: params.idempotencyKey,
+        coachName: params.coachName,
+        datetimeLabel: params.datetimeLabel,
+        deadlineMs: params.deadlineMs,
+        nowMs,
+        deliveryStatus: 'failed',
       })
-      return 'email_failed'
     }
 
     if (classified.gate === 'stale_pending') {
-      const marked = await markDeliveriesFailed(
-        admin,
-        classified.stalePendingIds,
-        'stale_pending',
-      )
-      if (!marked) return 'failed'
-      // Cron reports stale_pending; admin reschedule retry continues after clearing.
-      if (params.kind !== 'admin_reschedule') return 'stale_pending'
+      // Do not assert success or unsent: mark aggregate/attempts as unknown.
+      if (params.kind !== 'admin_reschedule') {
+        const marked = await markDeliveriesFailed(
+          admin,
+          classified.stalePendingIds,
+          'stale_pending',
+        )
+        if (!marked) return 'failed'
+        return 'stale_pending'
+      }
 
-      const relisted = await listDeliveries(admin, existingEvent.eventId)
-      if (!relisted.ok) return 'failed'
-      classified = classifyExistingDeliveries(
-        relisted.rows,
+      for (const id of classified.stalePendingIds) {
+        await admin
+          .from('notification_deliveries')
+          .update({
+            status: 'unknown',
+            error_code: 'stale_pending_unknown',
+            succeeded_at: null,
+          })
+          .eq('id', id)
+          .eq('status', 'pending')
+
+        await admin
+          .from('notification_delivery_attempts')
+          .update({
+            status: 'unknown',
+            acceptance: 'unknown',
+            error_code: 'stale_pending_unknown',
+            finished_at: new Date().toISOString(),
+          })
+          .eq('delivery_id', id)
+          .eq('status', 'pending')
+      }
+
+      return retryAdminRescheduleEmailWithHistory({
+        admin,
+        eventId: existingEvent.eventId,
+        email: params.email,
+        idempotencyKey: params.idempotencyKey,
+        coachName: params.coachName,
+        datetimeLabel: params.datetimeLabel,
+        deadlineMs: params.deadlineMs,
         nowMs,
-        COACHING_REMINDER_PENDING_STALE_MS,
-      )
-      if (classified.gate === 'already_completed') return 'already_completed'
-      if (classified.gate === 'in_progress') return 'in_progress'
+        deliveryStatus: 'unknown',
+      })
     }
 
     if (classified.hasFailedPushOnly) {

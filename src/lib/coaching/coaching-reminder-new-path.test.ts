@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   createAdminClient,
@@ -92,7 +92,7 @@ describe('processCoachingReminderNewPath', () => {
       email: 's@example.com',
       idempotencyKey: 'booking-prompt:2026-09-07',
       kind: 'booking_prompt',
-      pushBody: '今週のコーチングを予約してください。',
+      pushBody: 'booking please',
       tag: 't',
       env: { VERCEL_ENV: 'production' },
     })
@@ -159,7 +159,7 @@ describe('processCoachingReminderNewPath', () => {
       email: 's@example.com',
       idempotencyKey: 'booking-prompt:2026-09-07',
       kind: 'booking_prompt',
-      pushBody: '今週のコーチングを予約してください。',
+      pushBody: 'booking please',
       tag: 't',
       env: { VERCEL_ENV: 'production', PUSH_SENDING_ENABLED: 'true' },
     })
@@ -170,7 +170,7 @@ describe('processCoachingReminderNewPath', () => {
       expect.objectContaining({
         notificationType: 'coaching_reminder',
         title: '受験生web',
-        body: '今週のコーチングを予約してください。',
+        body: 'booking please',
         targetPath: '/dashboard/coaching',
       }),
     )
@@ -219,6 +219,16 @@ describe('processCoachingReminderNewPath', () => {
               }),
             }),
           }),
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                maybeSingle: async () => ({ data: { id: 'd1' }, error: null }),
+              }),
+            }),
+          }),
+        },
+        notification_delivery_attempts: {
+          insert: async () => ({ error: null }),
         },
       }),
     )
@@ -228,7 +238,7 @@ describe('processCoachingReminderNewPath', () => {
       email: 's@example.com',
       idempotencyKey: 'session-previous-day:bk:2026-09-07T01:30:00.000Z',
       kind: 'session_previous_day',
-      pushBody: '明日10:30からコーチングです。',
+      pushBody: 'session tomorrow',
       hm: '10:30',
       tag: 't',
       env: { VERCEL_ENV: 'production' },
@@ -295,70 +305,116 @@ describe('processCoachingReminderNewPath', () => {
     expect(sendBookingPromptEmail).not.toHaveBeenCalled()
   })
 
-  it('admin_reschedule retries failed email without duplicating a sent push', async () => {
-    let updateCalls = 0
+  it('admin_reschedule retries failed email via attempt history (push failed only)', async () => {
+    // Policy: push sent => already_completed (email not retried).
+    // This case is push-failed + email-failed => email retry is correct.
+    let attemptInserts = 0
+    let attemptFinalizes = 0
 
-    createAdminClient.mockReturnValue(
-      makeAdmin({
-        notification_preferences: {
-          select: () => ({
-            eq: () => ({
-              maybeSingle: async () => ({ data: null, error: null }),
+    createAdminClient.mockReturnValue({
+      from(table: string) {
+        if (table === 'notification_preferences') {
+          return {
+            select: () => ({
+              eq: () => ({
+                maybeSingle: async () => ({ data: null, error: null }),
+              }),
             }),
-          }),
-        },
-        notification_events: {
-          select: () => ({
-            eq: () => ({
+          }
+        }
+        if (table === 'notification_events') {
+          return {
+            select: () => ({
               eq: () => ({
                 eq: () => ({
-                  maybeSingle: async () => ({ data: { id: 'evt-1' }, error: null }),
+                  eq: () => ({
+                    maybeSingle: async () => ({ data: { id: 'evt-1' }, error: null }),
+                  }),
                 }),
               }),
             }),
-          }),
-        },
-        notification_deliveries: {
-          select: () => ({
-            eq: async () => ({
-              data: [
-                {
-                  id: 'd-push',
-                  channel: 'push',
-                  status: 'failed',
-                  sent_at: null,
-                  created_at: '2026-09-05T12:00:00.000Z',
-                },
-                {
-                  id: 'd-email',
-                  channel: 'email',
-                  status: 'failed',
-                  sent_at: null,
-                  created_at: '2026-09-05T12:00:00.000Z',
-                },
-              ],
-              error: null,
+          }
+        }
+        if (table === 'notification_deliveries') {
+          return {
+            select: () => ({
+              eq: (col: string) => {
+                if (col === 'event_id') {
+                  const rows = [
+                    {
+                      id: 'd-push',
+                      channel: 'push',
+                      status: 'failed',
+                      sent_at: null,
+                      created_at: '2026-09-05T12:00:00.000Z',
+                    },
+                    {
+                      id: 'd-email',
+                      channel: 'email',
+                      status: 'failed',
+                      sent_at: null,
+                      created_at: '2026-09-05T12:00:00.000Z',
+                    },
+                  ]
+                  return {
+                    data: rows,
+                    error: null,
+                    eq: () => ({
+                      maybeSingle: async () => ({ data: { id: 'd-email' }, error: null }),
+                    }),
+                    then: (resolve: (v: unknown) => unknown) =>
+                      Promise.resolve(resolve({ data: rows, error: null })),
+                  }
+                }
+                return {
+                  eq: () => ({
+                    maybeSingle: async () => ({ data: { id: 'd-email' }, error: null }),
+                  }),
+                }
+              },
             }),
-          }),
-          // DELETE/INSERT are not used in this retry flow; we only reclaim by UPDATE.
-          delete: () => {
-            throw new Error('delete() must not be called')
-          },
-          insert: async () => {
-            throw new Error('insert() must not be called')
-          },
-          update: () => {
-            updateCalls += 1
-            const chain: any = {}
-            chain.eq = () => chain
-            chain.select = () => ({
-              maybeSingle: async () => ({ data: { id: 'd-email-new' }, error: null }),
-            })
-            return chain
-          },
-        },
-      }),
-    )
+            update: () => ({
+              eq: async () => ({ error: null }),
+            }),
+          }
+        }
+        if (table === 'notification_delivery_attempts') {
+          return {
+            select: () => ({
+              eq: () => ({
+                order: () => ({
+                  limit: () => ({
+                    maybeSingle: async () => ({ data: { attempt_no: 1 }, error: null }),
+                  }),
+                }),
+              }),
+            }),
+            insert: () => {
+              attemptInserts += 1
+              return {
+                select: () => ({
+                  maybeSingle: async () => ({
+                    data: { id: 'att-2', claim_token: 'tok-2', attempt_no: 2 },
+                    error: null,
+                  }),
+                }),
+              }
+            },
+            update: () => {
+              attemptFinalizes += 1
+              const c: Record<string, unknown> = {}
+              const self = () => c
+              c.eq = self
+              c.select = () => ({
+                maybeSingle: async () => ({ data: { id: 'att-2' }, error: null }),
+              })
+              return c
+            },
+          }
+        }
+        throw new Error(`unexpected table ${table}`)
+      },
+    })
 
     isPushSendingAvailable.mockReturnValue(false)
 
@@ -367,20 +423,25 @@ describe('processCoachingReminderNewPath', () => {
       email: 's@example.com',
       idempotencyKey: 'admin-reschedule:b1:11111111-1111-1111-1111-111111111111',
       kind: 'admin_reschedule',
-      pushBody: 'コーチングの予約が変更されました。内容を確認してください。',
-      coachName: '山田',
-      datetimeLabel: '3月10日 10:00〜10:50',
+      pushBody: 'reschedule body',
+      coachName: 'Yamada',
+      datetimeLabel: 'Mar 10 10:00',
       tag: 't',
       env: { VERCEL_ENV: 'production' },
     })
 
     expect(outcome).toBe('email_sent')
-    expect(updateCalls).toBeGreaterThanOrEqual(2)
-    expect(sendAdminRescheduleEmail).toHaveBeenCalledTimes(1)
+    expect(attemptInserts).toBe(1)
+    expect(attemptFinalizes).toBe(1)
+    expect(sendAdminRescheduleEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idempotencyKey: 'admin-reschedule:b1:11111111-1111-1111-1111-111111111111',
+      }),
+    )
     expect(sendPushNotification).not.toHaveBeenCalled()
   })
 
-  it('keeps already_completed when push was sent (no duplicate channel send)', async () => {
+  it('keeps already_completed when push was sent (no email retry)', async () => {
     createAdminClient.mockReturnValue(
       makeAdmin({
         notification_preferences: {
@@ -426,7 +487,7 @@ describe('processCoachingReminderNewPath', () => {
       idempotencyKey: 'admin-reschedule:b1:11111111-1111-1111-1111-111111111111',
       kind: 'admin_reschedule',
       pushBody: 'x',
-      coachName: '山田',
+      coachName: 'Yamada',
       datetimeLabel: 'x',
       tag: 't',
       env: { VERCEL_ENV: 'production' },
