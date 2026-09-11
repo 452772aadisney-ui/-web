@@ -36,6 +36,7 @@ function makeDeps(over: Partial<CalendarRescheduleSyncDeps> = {}): CalendarResch
       etag: 'etag-fresh',
       summary: '【コーチング】x',
       eventStatus: 'confirmed',
+      privateBookingId: null,
     })),
     createEvent: vi.fn(async (input) => ({
       eventId: coachingBookingCalendarEventId(
@@ -66,7 +67,13 @@ describe('runCalendarRescheduleSync', () => {
 
     const fetchEvent = vi
       .fn<CalendarRescheduleSyncDeps['fetchEvent']>()
-      .mockResolvedValue({ status: 'ok', etag: 'etag-1', summary: null, eventStatus: 'confirmed' })
+      .mockResolvedValue({
+        status: 'ok',
+        etag: 'etag-1',
+        summary: null,
+        eventStatus: 'confirmed',
+        privateBookingId: null,
+      })
 
     const persistMeta = vi.fn<CalendarRescheduleSyncDeps['persistMeta']>(async (p) => {
       storedEtag = p.etag
@@ -155,7 +162,13 @@ describe('runCalendarRescheduleSync', () => {
 
     const fetchEvent = vi
       .fn<CalendarRescheduleSyncDeps['fetchEvent']>()
-      .mockResolvedValue({ status: 'ok', etag: 'etag-from-get', summary: null, eventStatus: 'confirmed' })
+      .mockResolvedValue({
+        status: 'ok',
+        etag: 'etag-from-get',
+        summary: null,
+        eventStatus: 'confirmed',
+        privateBookingId: null,
+      })
 
     const updateEvent = vi
       .fn<CalendarRescheduleSyncDeps['updateEvent']>()
@@ -245,7 +258,13 @@ describe('runCalendarRescheduleSync', () => {
 
     const fetchEvent = vi
       .fn<CalendarRescheduleSyncDeps['fetchEvent']>()
-      .mockResolvedValue({ status: 'ok', etag: 'etag-x', summary: null, eventStatus: 'confirmed' })
+      .mockResolvedValue({
+        status: 'ok',
+        etag: 'etag-x',
+        summary: null,
+        eventStatus: 'confirmed',
+        privateBookingId: null,
+      })
 
     const updateEvent = vi.fn<CalendarRescheduleSyncDeps['updateEvent']>()
 
@@ -280,7 +299,13 @@ describe('runCalendarRescheduleSync', () => {
     const deps = makeDeps({
       loadBooking,
       updateEvent,
-      fetchEvent: vi.fn(async () => ({ status: 'ok' as const, etag: 'etag-1', summary: null, eventStatus: 'confirmed' })),
+      fetchEvent: vi.fn(async () => ({
+        status: 'ok' as const,
+        etag: 'etag-1',
+        summary: null,
+        eventStatus: 'confirmed',
+        privateBookingId: null,
+      })),
     })
 
     await runCalendarRescheduleSync(
@@ -299,7 +324,13 @@ describe('runCalendarRescheduleSync', () => {
 
     const deps = makeDeps({
       updateEvent,
-      fetchEvent: vi.fn(async () => ({ status: 'ok' as const, etag: 'etag-moving', summary: null, eventStatus: 'confirmed' })),
+      fetchEvent: vi.fn(async () => ({
+        status: 'ok' as const,
+        etag: 'etag-moving',
+        summary: null,
+        eventStatus: 'confirmed',
+        privateBookingId: null,
+      })),
     })
 
     const result = await runCalendarRescheduleSync(
@@ -396,5 +427,61 @@ describe('runCalendarRescheduleSync', () => {
     expect(updateEvent).toHaveBeenCalledWith(
       expect.objectContaining({ eventId: stableId, ifMatchEtag: 'etag-peer' }),
     )
+  })
+
+  it('on ownership_mismatch clears DB event id and creates stable-id event', async () => {
+    const stableId = coachingBookingCalendarEventId(BOOKING_ID)
+    const loadBooking = vi
+      .fn<CalendarRescheduleSyncDeps['loadBooking']>()
+      .mockResolvedValueOnce(
+        baseSnap({ googleCalendarEventId: 'legacy-evt', scheduleRevision: 'rev-2' }),
+      )
+      .mockResolvedValue(
+        baseSnap({
+          googleCalendarEventId: null,
+          googleCalendarEtag: null,
+          scheduleRevision: 'rev-2',
+        }),
+      )
+
+    const updateEvent = vi
+      .fn<CalendarRescheduleSyncDeps['updateEvent']>()
+      .mockResolvedValue({ status: 'ownership_mismatch' })
+
+    const persistMeta = vi.fn<CalendarRescheduleSyncDeps['persistMeta']>().mockResolvedValue('ok')
+    const createEvent = vi.fn<CalendarRescheduleSyncDeps['createEvent']>().mockResolvedValue({
+      eventId: stableId,
+      etag: 'etag-new',
+    })
+
+    const deps = makeDeps({ loadBooking, updateEvent, persistMeta, createEvent })
+
+    const result = await runCalendarRescheduleSync(
+      { bookingId: BOOKING_ID, changeRevision: 'rev-2', googleCalendarEventId: 'legacy-evt' },
+      deps,
+    )
+
+    expect(result).toBe('created')
+    expect(persistMeta).toHaveBeenCalledWith(
+      expect.objectContaining({
+        matchEventId: 'legacy-evt',
+        eventId: null,
+      }),
+    )
+    expect(createEvent).toHaveBeenCalled()
+  })
+
+  it('skips calendar sync when booking is no longer scheduled', async () => {
+    const loadBooking = vi
+      .fn<CalendarRescheduleSyncDeps['loadBooking']>()
+      .mockResolvedValue(baseSnap({ status: 'cancelled', scheduleRevision: 'rev-2' }))
+
+    const deps = makeDeps({ loadBooking })
+    const result = await runCalendarRescheduleSync(
+      { bookingId: BOOKING_ID, changeRevision: 'rev-2', googleCalendarEventId: 'evt-1' },
+      deps,
+    )
+    expect(result).toBe('skipped_stale')
+    expect(deps.updateEvent).not.toHaveBeenCalled()
   })
 })

@@ -36,7 +36,8 @@ export type StudyReminderCandidate = {
 type DeliveryRow = {
   id: string
   channel: 'push' | 'email'
-  status: 'pending' | 'sent' | 'failed' | 'skipped'
+  /** After 061, deliveries may also be `unknown` (old classify ignores it → proceed). */
+  status: 'pending' | 'sent' | 'failed' | 'skipped' | 'unknown'
   sent_at: string | null
   created_at: string
 }

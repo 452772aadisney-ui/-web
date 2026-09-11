@@ -86,7 +86,13 @@ export async function sendAdminRescheduleEmail(params: {
   coachName: string
   datetimeLabel: string
   deadlineMs?: number
-  /** Same Resend Idempotency-Key for retries of this notification (24h window). */
+  /**
+   * Same Resend Idempotency-Key for retries of this notification (24h window).
+   * Payload identity for retries: from=EMAIL_FROM (getEmailFrom), to, subject=
+   * ADMIN_RESCHEDULE_EMAIL_SUBJECT, text=adminRescheduleEmailBody(coach,datetime)+CTA.
+   * Retry callers must pass the same to/coachName/datetimeLabel/key — never a new key
+   * on payload mismatch.
+   */
   idempotencyKey?: string
 }): Promise<SendEmailResult & { httpStatus?: number | null }> {
   return sendEmail({

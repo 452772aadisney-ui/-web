@@ -39,7 +39,35 @@ export type SendEmailResult =
         | 'empty_recipient'
         | 'deadline'
         | 'idempotency_conflict'
+        | 'idempotency_concurrent'
+        | 'idempotency_payload_mismatch'
     }
+
+/** Resend 409: payload mismatch vs concurrent same-key requests. */
+export function classifyResendIdempotencyConflict(
+  errorBody: string,
+): 'idempotency_payload_mismatch' | 'idempotency_concurrent' | 'idempotency_conflict' {
+  const raw = errorBody || ''
+  try {
+    const parsed = JSON.parse(raw) as { name?: string; message?: string }
+    const hay = `${parsed.name ?? ''} ${parsed.message ?? ''}`.toLowerCase()
+    if (hay.includes('invalid_idempotent_request')) {
+      return 'idempotency_payload_mismatch'
+    }
+    if (hay.includes('concurrent_idempotent_requests')) {
+      return 'idempotency_concurrent'
+    }
+  } catch {
+    const lower = raw.toLowerCase()
+    if (lower.includes('invalid_idempotent_request')) {
+      return 'idempotency_payload_mismatch'
+    }
+    if (lower.includes('concurrent_idempotent_requests')) {
+      return 'idempotency_concurrent'
+    }
+  }
+  return 'idempotency_conflict'
+}
 
 function formatResendError(raw: string, to: string): string {
   try {
@@ -105,7 +133,7 @@ async function sendEmailOnce(input: SendEmailInput): Promise<SendEmailResult> {
       const errorBody = await response.text().catch(() => '')
       const errorClass =
         response.status === 409
-          ? ('idempotency_conflict' as const)
+          ? classifyResendIdempotencyConflict(errorBody)
           : classifyResendHttpStatus(response.status)
 
       if (input.omitRecipientFromLogs) {

@@ -1,5 +1,9 @@
 import { getPersonName } from '@/lib/auth/display-name'
 import { getGoogleCalendarClient } from '@/lib/google-calendar/config'
+import {
+  buildCoachingCalendarExtendedProperties,
+  resolveCoachingCalendarEventOwnership,
+} from '@/lib/google-calendar/coaching-event-ownership'
 import { coachingBookingCalendarEventId } from '@/lib/google-calendar/stable-event-id'
 import { shiftDateKey } from '@/lib/study/dates'
 import { createClient } from '@/lib/supabase/server'
@@ -16,10 +20,6 @@ function buildEventDescription(coachName: string, studentNote: string): string {
   return lines.join('\n')
 }
 
-function isOurCoachingCalendarSummary(summary: string | null | undefined): boolean {
-  return Boolean(summary?.startsWith('【コーチング】'))
-}
-
 export type CreatedCalendarEvent = {
   eventId: string
   etag: string | null
@@ -31,13 +31,27 @@ function isConflict(error: unknown): boolean {
   return err.code === 409 || err.status === 409 || err.response?.status === 409
 }
 
+function isPreconditionFailed(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const err = error as { code?: number; status?: number; response?: { status?: number } }
+  return err.code === 412 || err.status === 412 || err.response?.status === 412
+}
+
+function isNotFound(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const err = error as { code?: number; status?: number; response?: { status?: number } }
+  return err.code === 404 || err.status === 404 || err.response?.status === 404
+}
+
 /**
  * Create-or-restore a coaching calendar event using a booking-stable event id.
  *
- * - Same booking always targets the same Google event id (lost-response safe).
- * - 409 / existing / cancelled → GET then patch (never invent a second event).
- * - Unrelated events that collide on id are not overwritten.
- * - Deleted ids are not assumed reusable via insert; cancelled events are restored.
+ * Ownership is proven by private extendedProperties.coachingBookingId and/or the
+ * stable event id. Summary text alone is never sufficient.
+ *
+ * Cancelled events (Google): only `id` is guaranteed; private props may be gone.
+ * Restore requires strong ownership (private prop or stable id). Legacy db-only
+ * links are not enough to resurrect a cancelled event.
  */
 export async function createCoachingBookingCalendarEvent(input: {
   bookingId: string
@@ -46,6 +60,8 @@ export async function createCoachingBookingCalendarEvent(input: {
   coachId: string
   startsAt: string
   studentNote: string
+  /** When set, used as legacy ownership hint (must match this booking's DB id). */
+  dbEventId?: string | null
 }): Promise<CreatedCalendarEvent | null> {
   const client = getGoogleCalendarClient()
   if (!client) {
@@ -62,6 +78,18 @@ export async function createCoachingBookingCalendarEvent(input: {
   }
 
   const supabase = await createClient()
+
+  // Refuse create/restore when the booking is no longer scheduled (stale sync).
+  const { data: bookingRow } = await supabase
+    .from('coaching_bookings')
+    .select('status, google_calendar_event_id')
+    .eq('id', input.bookingId)
+    .maybeSingle<{ status: string; google_calendar_event_id: string | null }>()
+  if (!bookingRow || bookingRow.status !== 'scheduled') {
+    console.warn('[google-calendar] skip create/restore: booking not scheduled')
+    return null
+  }
+  const dbEventId = input.dbEventId ?? bookingRow.google_calendar_event_id
 
   const [{ data: student }, { data: coach }, { data: slot }] = await Promise.all([
     supabase
@@ -88,10 +116,12 @@ export async function createCoachingBookingCalendarEvent(input: {
 
   const studentName = student ? getPersonName(student) : '生徒'
   const coachName = coach?.name ?? '未設定'
+  const extendedProperties = buildCoachingCalendarExtendedProperties(input.bookingId)
   const requestBody = {
     summary: `【コーチング】${studentName}さん`,
     description: buildEventDescription(coachName, input.studentNote),
     status: 'confirmed' as const,
+    extendedProperties,
     start: {
       dateTime: input.startsAt,
       timeZone: 'Asia/Tokyo',
@@ -104,8 +134,16 @@ export async function createCoachingBookingCalendarEvent(input: {
 
   const existing = await fetchCoachingBookingCalendarEvent(eventId)
   if (existing.status === 'ok') {
-    if (!isOurCoachingCalendarSummary(existing.summary) && existing.summary) {
-      console.error('[google-calendar] stable id collision with unrelated event')
+    const ownership = resolveCoachingCalendarEventOwnership({
+      bookingId: input.bookingId,
+      eventId,
+      privateBookingId: existing.privateBookingId,
+      dbEventId,
+      eventStatus: existing.eventStatus,
+      requireStrongOwnership: existing.eventStatus === 'cancelled',
+    })
+    if (!ownership.ok) {
+      console.error('[google-calendar] refuse patch/restore:', ownership.reason)
       return null
     }
     return patchExistingById({
@@ -117,8 +155,6 @@ export async function createCoachingBookingCalendarEvent(input: {
   if (existing.status === 'unconfigured') return null
   if (existing.status === 'failed') return null
 
-  // not_found — insert with stable id (do not assume a previously deleted id is free;
-  // if Google still reserves it, insert returns 409 and we GET+patch).
   try {
     const response = await client.calendar.events.insert({
       calendarId: client.calendarId,
@@ -137,8 +173,16 @@ export async function createCoachingBookingCalendarEvent(input: {
         console.error('[google-calendar] insert conflict but get failed:', again)
         return null
       }
-      if (!isOurCoachingCalendarSummary(again.summary) && again.summary) {
-        console.error('[google-calendar] conflict with unrelated event; refusing overwrite')
+      const ownership = resolveCoachingCalendarEventOwnership({
+        bookingId: input.bookingId,
+        eventId,
+        privateBookingId: again.privateBookingId,
+        dbEventId,
+        eventStatus: again.eventStatus,
+        requireStrongOwnership: again.eventStatus === 'cancelled',
+      })
+      if (!ownership.ok) {
+        console.error('[google-calendar] 409 get ownership failed:', ownership.reason)
         return null
       }
       return patchExistingById({
@@ -224,25 +268,16 @@ export type CoachingCalendarUpdateResult =
   | { status: 'failed' }
   | { status: 'precondition_failed' }
   | { status: 'missing_etag' }
-
-function isPreconditionFailed(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false
-  const err = error as { code?: number; status?: number; response?: { status?: number } }
-  return err.code === 412 || err.status === 412 || err.response?.status === 412
-}
-
-function isNotFound(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false
-  const err = error as { code?: number; status?: number; response?: { status?: number } }
-  return err.code === 404 || err.status === 404 || err.response?.status === 404
-}
+  | { status: 'ownership_mismatch' }
 
 /**
  * Existing events must always be patched with If-Match.
  * Callers obtain an etag via fetch (or DB) first — never fall back to unconditional patch.
+ * Summary text alone never proves ownership; private props / stable id / DB link do.
  */
 export async function updateCoachingBookingCalendarEvent(input: {
   eventId: string
+  bookingId: string
   studentId: string
   coachId: string
   startsAt: string
@@ -250,6 +285,8 @@ export async function updateCoachingBookingCalendarEvent(input: {
   studentNote: string
   /** Required. Unconditional patches are rejected. */
   ifMatchEtag: string
+  /** DB google_calendar_event_id for this booking (legacy ownership). */
+  dbEventId?: string | null
 }): Promise<CoachingCalendarUpdateResult> {
   const trimmed = input.eventId.trim()
   if (!trimmed) return { status: 'skipped' }
@@ -263,7 +300,35 @@ export async function updateCoachingBookingCalendarEvent(input: {
     return { status: 'skipped' }
   }
 
+  const fetched = await fetchCoachingBookingCalendarEvent(trimmed)
+  if (fetched.status === 'unconfigured') return { status: 'skipped' }
+  if (fetched.status === 'not_found') return { status: 'failed' }
+  if (fetched.status !== 'ok') return { status: 'failed' }
+
+  const ownership = resolveCoachingCalendarEventOwnership({
+    bookingId: input.bookingId,
+    eventId: trimmed,
+    privateBookingId: fetched.privateBookingId,
+    dbEventId: input.dbEventId ?? trimmed,
+    eventStatus: fetched.eventStatus,
+    requireStrongOwnership: fetched.eventStatus === 'cancelled',
+  })
+  if (!ownership.ok) {
+    console.error('[google-calendar] refuse update:', ownership.reason)
+    return { status: 'ownership_mismatch' }
+  }
+
   const supabase = await createClient()
+
+  const { data: bookingRow } = await supabase
+    .from('coaching_bookings')
+    .select('status')
+    .eq('id', input.bookingId)
+    .maybeSingle<{ status: string }>()
+  if (!bookingRow || bookingRow.status !== 'scheduled') {
+    console.warn('[google-calendar] skip update: booking not scheduled')
+    return { status: 'skipped' }
+  }
 
   const [{ data: student }, { data: coach }] = await Promise.all([
     supabase
@@ -280,6 +345,7 @@ export async function updateCoachingBookingCalendarEvent(input: {
 
   const studentName = student ? getPersonName(student) : '生徒'
   const coachName = coach?.name ?? '未設定'
+  const extendedProperties = buildCoachingCalendarExtendedProperties(input.bookingId)
 
   try {
     const response = await client.calendar.events.patch(
@@ -289,6 +355,8 @@ export async function updateCoachingBookingCalendarEvent(input: {
         requestBody: {
           summary: `【コーチング】${studentName}さん`,
           description: buildEventDescription(coachName, input.studentNote),
+          status: 'confirmed',
+          extendedProperties,
           start: {
             dateTime: input.startsAt,
             timeZone: 'Asia/Tokyo',
@@ -321,6 +389,7 @@ export type FetchCalendarEventResult =
       etag: string | null
       summary: string | null
       eventStatus: string | null
+      privateBookingId: string | null
     }
   | { status: 'not_found' }
   | { status: 'unconfigured' }
@@ -340,11 +409,17 @@ export async function fetchCoachingBookingCalendarEvent(
       calendarId: client.calendarId,
       eventId: trimmed,
     })
+    const privateProps = response.data.extendedProperties?.private ?? null
+    const privateBookingId =
+      typeof privateProps?.coachingBookingId === 'string'
+        ? privateProps.coachingBookingId
+        : null
     return {
       status: 'ok',
       etag: response.data.etag ?? null,
       summary: response.data.summary ?? null,
       eventStatus: response.data.status ?? null,
+      privateBookingId,
     }
   } catch (error) {
     if (isNotFound(error)) return { status: 'not_found' }

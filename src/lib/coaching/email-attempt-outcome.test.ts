@@ -43,6 +43,39 @@ describe('email attempt outcome', () => {
       }),
     ).toBe(false)
   })
+
+  it('treats payload-mismatch 409 as not_accepted (no new-key retry)', () => {
+    expect(
+      classifyEmailSendAcceptance({
+        ok: false,
+        errorClass: 'idempotency_payload_mismatch',
+        httpStatus: 409,
+      }),
+    ).toBe('not_accepted')
+    expect(
+      classifyEmailSendAcceptance({
+        ok: false,
+        errorClass: 'idempotency_concurrent',
+        httpStatus: 409,
+      }),
+    ).toBe('unknown')
+  })
+})
+
+describe('classifyResendIdempotencyConflict', () => {
+  it('distinguishes Resend 409 names', async () => {
+    const { classifyResendIdempotencyConflict } = await import('@/lib/email/send')
+    expect(
+      classifyResendIdempotencyConflict(
+        JSON.stringify({ name: 'invalid_idempotent_request', message: 'x' }),
+      ),
+    ).toBe('idempotency_payload_mismatch')
+    expect(
+      classifyResendIdempotencyConflict(
+        JSON.stringify({ name: 'concurrent_idempotent_requests', message: 'x' }),
+      ),
+    ).toBe('idempotency_concurrent')
+  })
 })
 
 describe('coachingBookingCalendarEventId', () => {

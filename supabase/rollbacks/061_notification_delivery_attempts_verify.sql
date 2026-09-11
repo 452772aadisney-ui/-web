@@ -39,4 +39,37 @@ select
     ) then 'PASS'
     else 'FAIL'
   end,
-  'one_pending_uidx'::text;
+  'one_pending_uidx'::text
+
+union all
+
+select
+  'notification_delivery_attempts_rls_enabled'::text,
+  case
+    when exists (
+      select 1 from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public'
+        and c.relname = 'notification_delivery_attempts'
+        and c.relrowsecurity
+    ) then 'PASS'
+    else 'FAIL'
+  end,
+  'rls'::text
+
+union all
+
+select
+  'notification_delivery_attempts_no_anon_grants'::text,
+  case
+    when not exists (
+      select 1
+      from information_schema.role_table_grants
+      where table_schema = 'public'
+        and table_name = 'notification_delivery_attempts'
+        and grantee in ('anon', 'authenticated')
+        and privilege_type in ('SELECT', 'INSERT', 'UPDATE', 'DELETE')
+    ) then 'PASS'
+    else 'FAIL'
+  end,
+  'revoke_anon_authenticated'::text;

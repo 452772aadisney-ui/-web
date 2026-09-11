@@ -2,7 +2,30 @@
 -- Supabase Dashboard > SQL Editor で実行してください
 --
 -- 適用順: 060_coaching_schedule_revision.sql の後
--- RLS / GRANT は緩めない（Admin Client のみ）
+-- precheck: supabase/rollbacks/061_notification_delivery_attempts_precheck.sql
+-- verify:   supabase/rollbacks/061_notification_delivery_attempts_verify.sql
+-- rollback: supabase/rollbacks/061_notification_delivery_attempts_rollback.sql
+--           （通常復旧: DROP せず履歴保持。アプリ戻しが基本）
+-- destructive purge（履歴削除・通常ではない）:
+--   supabase/rollbacks/061_notification_delivery_attempts_destructive_purge.sql
+-- rollout:  supabase/rollbacks/060_061_coaching_reschedule_notify_rollout.md
+--
+-- RLS / GRANT は緩めない（Admin Client / service_role のみ）。関数は追加しない。
+-- 既存 notification_deliveries 行は削除・更新しない（attempts 表の追加のみ）。
+--
+-- enum 'unknown':
+--   ADD VALUE のみ。本ファイル内では新 enum 値を列制約や UPDATE で使わない
+--   （同一トランザクション内で新値を参照すると環境によって適用エラーになるため）。
+--   attempts.status は text。アプリが deliveries.status='unknown' を書くのは
+--   本 migration コミット後。
+--
+-- 旧アプリと unknown:
+--   classifyExistingDeliveries は unknown を sent/failed/pending と見ない → proceed。
+--   既存 email 行があると claim が unique 衝突し already_completed と誤判定し得る。
+--   「enum が残るだけで旧アプリ互換」とは断定しない（rollout / rollback 参照）。
+--
+-- 切り替え中: 060→061 適用後〜新アプリ確認完了まで予約変更を控える（rollout md）。
+-- 「予約変更の完全停止は不要」とは保証しない。停止用の新機能は実装しない。
 
 -- delivery 集約ステータスに unknown（受付済みか不明）を追加
 do $$

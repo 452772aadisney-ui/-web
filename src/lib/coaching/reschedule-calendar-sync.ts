@@ -49,12 +49,14 @@ export type CalendarRescheduleSyncDeps = {
   }) => Promise<'ok' | 'stale' | 'failed'>
   updateEvent: (input: {
     eventId: string
+    bookingId: string
     studentId: string
     coachId: string
     startsAt: string
     endsAt: string
     studentNote: string
     ifMatchEtag: string
+    dbEventId?: string | null
   }) => Promise<CoachingCalendarUpdateResult>
   fetchEvent: (eventId: string) => Promise<FetchCalendarEventResult>
   createEvent: (input: {
@@ -64,6 +66,7 @@ export type CalendarRescheduleSyncDeps = {
     coachId: string
     startsAt: string
     studentNote: string
+    dbEventId?: string | null
   }) => Promise<CreatedCalendarEvent | null>
   deleteEvent: (eventId: string) => Promise<void>
   isConfigured: () => boolean
@@ -178,17 +181,35 @@ async function patchExistingEvent(args: {
 
     const result = await deps.updateEvent({
       eventId,
+      bookingId,
       studentId: live.studentId,
       coachId: live.coachId,
       startsAt: live.startsAt,
       endsAt: live.endsAt,
       studentNote: live.studentNote,
       ifMatchEtag: ifMatch,
+      // Legacy ownership: only the event_id stored on this booking row.
+      dbEventId: live.googleCalendarEventId,
     })
 
     if (result.status === 'skipped') return 'skipped_unconfigured'
     if (result.status === 'failed') return 'failed'
     if (result.status === 'missing_etag') return 'failed'
+    if (result.status === 'ownership_mismatch') {
+      // Do not patch/restore an unproven event (e.g. cancelled without private props).
+      // Clear our DB link (CAS) and create a booking-owned stable-id event instead.
+      const cleared = await deps.persistMeta({
+        bookingId,
+        changeRevision,
+        slotId: live.slotId,
+        matchEventId: eventId,
+        eventId: null,
+        etag: null,
+      })
+      if (cleared === 'stale') return 'skipped_stale'
+      if (cleared === 'failed') return 'failed'
+      return createNewEvent({ bookingId, changeRevision, deps })
+    }
 
     if (result.status === 'precondition_failed') {
       // Another writer beat us. Only retry if we are still the latest revision.
@@ -305,6 +326,7 @@ async function createNewEvent(args: {
     coachId: before.coachId,
     startsAt: before.startsAt,
     studentNote: before.studentNote,
+    dbEventId: before.googleCalendarEventId,
   })
   if (!created) return 'failed'
 

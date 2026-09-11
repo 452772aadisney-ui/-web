@@ -161,4 +161,23 @@ describe('classifyExistingDeliveries', () => {
       ).gate,
     ).toBe('email_terminal')
   })
+
+  it('does not treat unknown as failed or sent (old-app gate becomes proceed)', () => {
+    // Documented cutover risk: old classifyExistingDeliveries ignores unknown,
+    // so gate is proceed (not email_terminal / already_completed).
+    expect(
+      classifyExistingDeliveries(
+        [
+          {
+            id: '1',
+            channel: 'email',
+            status: 'unknown',
+            sent_at: '2026-09-05T12:00:00.000Z',
+            created_at: '2026-09-05T12:00:00.000Z',
+          },
+        ],
+        now,
+      ).gate,
+    ).toBe('proceed')
+  })
 })

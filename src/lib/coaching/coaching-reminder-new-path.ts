@@ -168,11 +168,16 @@ async function markDeliveriesFailed(
 /**
  * Claim a new email send attempt without erasing prior failure rows.
  * Concurrent retries: unique partial index allows only one pending attempt.
+ *
+ * Pre-061 failed deliveries: seed a synthetic attempt_no=1 from the delivery
+ * row so existing error_code/http_status stay in history before retry.
  */
 async function claimEmailDeliveryAttempt(
   admin: AdminClient,
   deliveryId: string,
 ): Promise<ClaimedEmailAttempt | null> {
+  await seedLegacyAttemptHistoryIfNeeded(admin, deliveryId)
+
   const { data: latest, error: latestError } = await admin
     .from('notification_delivery_attempts')
     .select('attempt_no')
@@ -204,7 +209,7 @@ async function claimEmailDeliveryAttempt(
   }
   if (!inserted) return null
 
-  // Aggregate delivery becomes pending for classify; prior attempt rows keep history.
+  // Aggregate becomes pending; do not clear error_code (legacy visibility until finalize).
   await admin
     .from('notification_deliveries')
     .update({
@@ -213,6 +218,7 @@ async function claimEmailDeliveryAttempt(
       attempt_count: nextNo,
     })
     .eq('id', deliveryId)
+    .neq('status', 'sent')
 
   return {
     deliveryId,
@@ -220,6 +226,44 @@ async function claimEmailDeliveryAttempt(
     claimToken: inserted.claim_token,
     attemptNo: inserted.attempt_no,
   }
+}
+
+async function seedLegacyAttemptHistoryIfNeeded(
+  admin: AdminClient,
+  deliveryId: string,
+): Promise<void> {
+  const { count, error: countError } = await admin
+    .from('notification_delivery_attempts')
+    .select('id', { count: 'exact', head: true })
+    .eq('delivery_id', deliveryId)
+  if (countError || (count ?? 0) > 0) return
+
+  const { data: delivery } = await admin
+    .from('notification_deliveries')
+    .select('status, error_code, http_status, created_at, sent_at')
+    .eq('id', deliveryId)
+    .maybeSingle<{
+      status: string
+      error_code: string | null
+      http_status: number | null
+      created_at: string
+      sent_at: string | null
+    }>()
+
+  if (!delivery) return
+  if (delivery.status !== 'failed' && delivery.status !== 'unknown') return
+
+  const finishedAt = delivery.sent_at ?? delivery.created_at
+  await admin.from('notification_delivery_attempts').insert({
+    delivery_id: deliveryId,
+    attempt_no: 1,
+    status: delivery.status === 'unknown' ? 'unknown' : 'failed',
+    acceptance: delivery.status === 'unknown' ? 'unknown' : 'not_accepted',
+    http_status: delivery.http_status,
+    error_code: delivery.error_code,
+    started_at: finishedAt,
+    finished_at: finishedAt,
+  })
 }
 
 async function findEmailDeliveryId(
@@ -273,7 +317,8 @@ async function finalizeEmailAttempt(
         ? 'unknown'
         : 'failed'
 
-  const { error: deliveryError } = await admin
+  // Attempt CAS already won; still never let a late failed/unknown overwrite sent.
+  let deliveryQuery = admin
     .from('notification_deliveries')
     .update({
       status: deliveryStatus,
@@ -284,6 +329,14 @@ async function finalizeEmailAttempt(
       attempt_count: claim.attemptNo,
     })
     .eq('id', claim.deliveryId)
+
+  if (patch.status === 'sent') {
+    deliveryQuery = deliveryQuery.in('status', ['pending', 'failed', 'unknown'])
+  } else {
+    deliveryQuery = deliveryQuery.neq('status', 'sent')
+  }
+
+  const { error: deliveryError } = await deliveryQuery
 
   return !deliveryError
 }
@@ -387,13 +440,28 @@ async function retryAdminRescheduleEmailWithHistory(params: {
     return 'timed_out'
   }
 
-  // concurrent_idempotent_requests (409): treat as unknown / in progress
-  if (!sendResult.ok && sendResult.errorClass === 'idempotency_conflict') {
+  // Payload mismatch (409 invalid_idempotent_request): investigate; never mint a new key.
+  if (!sendResult.ok && sendResult.errorClass === 'idempotency_payload_mismatch') {
+    await finalizeEmailAttempt(params.admin, claim, {
+      status: 'failed',
+      acceptance: 'not_accepted',
+      httpStatus: sendResult.httpStatus ?? 409,
+      errorCode: 'idempotency_payload_mismatch',
+    })
+    return 'email_failed'
+  }
+
+  // concurrent_idempotent_requests (or undifferentiated 409): treat as in-flight.
+  if (
+    !sendResult.ok &&
+    (sendResult.errorClass === 'idempotency_concurrent' ||
+      sendResult.errorClass === 'idempotency_conflict')
+  ) {
     await finalizeEmailAttempt(params.admin, claim, {
       status: 'unknown',
       acceptance: 'unknown',
       httpStatus: sendResult.httpStatus ?? 409,
-      errorCode: 'idempotency_conflict',
+      errorCode: sendResult.errorClass,
     })
     return 'in_progress'
   }

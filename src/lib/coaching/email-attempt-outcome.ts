@@ -26,9 +26,19 @@ export function classifyEmailSendAcceptance(params: {
     params.skipped ||
     params.errorClass === 'empty_recipient' ||
     params.errorClass === 'deadline' ||
-    params.errorClass === 'email_not_configured'
+    params.errorClass === 'email_not_configured' ||
+    // Same Idempotency-Key with a different payload — investigate; do not mint a new key.
+    params.errorClass === 'idempotency_payload_mismatch'
   ) {
     return 'not_accepted'
+  }
+
+  // Concurrent same-key request, or undifferentiated 409: may still be in flight.
+  if (
+    params.errorClass === 'idempotency_concurrent' ||
+    params.errorClass === 'idempotency_conflict'
+  ) {
+    return 'unknown'
   }
 
   // Network / no HTTP status → unknown whether Resend accepted
