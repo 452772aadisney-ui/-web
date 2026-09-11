@@ -7,29 +7,29 @@ continue freely during cutover.
 
 ## Production order
 
-1. **Announce freeze (ops)**  
+1. **Announce freeze (ops)**
    From DB apply through new-app verify, ask **students and admins** to avoid
    coaching booking create / change / cancel. Old tabs left open can still
    submit; after cutover, ask users to **reload the page**.
 
-2. **Precheck 060** (read-only):  
+2. **Precheck 060** (read-only):
    `supabase/rollbacks/060_coaching_schedule_revision_precheck.sql`
 
-3. **Apply 060**:  
+3. **Apply 060**:
    `supabase/migrations/060_coaching_schedule_revision.sql`
 
-4. **Verify 060**:  
-   `supabase/rollbacks/060_coaching_schedule_revision_verify.sql`  
+4. **Verify 060**:
+   `supabase/rollbacks/060_coaching_schedule_revision_verify.sql`
    Expect PASS (columns present, no null `schedule_revision`).
 
-5. **Precheck 061** (read-only; expects 060 present):  
+5. **Precheck 061** (read-only; expects 060 present):
    `supabase/rollbacks/061_notification_delivery_attempts_precheck.sql`
 
-6. **Apply 061**:  
+6. **Apply 061**:
    `supabase/migrations/061_notification_delivery_attempts.sql`
 
-7. **Verify 061**:  
-   `supabase/rollbacks/061_notification_delivery_attempts_verify.sql`  
+7. **Verify 061**:
+   `supabase/rollbacks/061_notification_delivery_attempts_verify.sql`
    Expect PASS (table, enum `unknown`, pending unique index, RLS, no anon/auth grants).
 
 8. **Deploy new app** (revision lock, If-Match, attempts, GWS ownership, email idempotency).
@@ -42,8 +42,8 @@ continue freely during cutover.
 
 1. Revert **app** to previous release.
 2. **Do not** drop `notification_delivery_attempts` or 060 columns by default.
-3. Run guidance only:  
-   `supabase/rollbacks/061_notification_delivery_attempts_rollback.sql`  
+3. Run guidance only:
+   `supabase/rollbacks/061_notification_delivery_attempts_rollback.sql`
    (no DROP).
 4. Optional data hygiene before/while on old app: rows with
    `notification_deliveries.status = 'unknown'` may be misread by old
@@ -55,10 +55,10 @@ continue freely during cutover.
 
 ## Destructive purge (separate)
 
-Only with explicit approval — erases attempt history:  
+Only with explicit approval — erases attempt history:
 `supabase/rollbacks/061_notification_delivery_attempts_destructive_purge.sql`
 
-060 column drop (also destructive; avoid while any app may read them):  
+060 column drop (also destructive; avoid while any app may read them):
 `supabase/rollbacks/060_coaching_schedule_revision_rollback.sql`
 
 ## Cutover constraints (no new freeze feature)
