@@ -42,6 +42,7 @@ async function countUnreadForThread(
     .select('*', { count: 'exact', head: true })
     .eq('student_id', studentId)
     .neq('sender_id', viewerId)
+    .eq('message_kind', 'user')
     .gt('created_at', since)
 
   return count ?? 0

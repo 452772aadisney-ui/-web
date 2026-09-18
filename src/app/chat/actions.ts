@@ -5,6 +5,11 @@ import { evaluateAndUnlockAchievements, type UnlockedAchievement } from '@/lib/a
 import { notifyStudentChatMessage } from '@/lib/discord/notifications'
 import { notifyChatMessageReceived } from '@/lib/email/notifications'
 import { deliverStudentMessageNotification } from '@/lib/chat/message-orchestrator'
+import {
+  HUMAN_CHAT_MESSAGE_KIND,
+  isHumanChatMessageKind,
+  normalizeChatMessageKind,
+} from '@/lib/chat/message-kind'
 import { createClient } from '@/lib/supabase/server'
 import { fetchStudentsWithoutCoachingBookingThisWeek } from '@/lib/coaching/queries'
 import { fetchChatMessagesPage } from '@/lib/chat/queries'
@@ -28,7 +33,10 @@ const DEFAULT_COACHING_BOOKING_REMINDER =
   '今週のコーチング予約が入っていません。マイページの「コーチング予約」から，早急に予約してください。今週が難しい場合は，必ず担当者に個別で相談してください。'
 
 export type SendChatMessageOptions = {
-  /** Defaults to 'user'. Only admins may set coaching_booking_reminder. */
+  /**
+   * Defaults to 'user'. Only admins may set system kinds such as
+   * coaching_booking_reminder. Students are forced to user (app + DB trigger).
+   */
   messageKind?: ChatMessageKind
 }
 
@@ -42,10 +50,13 @@ export async function sendChatMessage(
   if (trimmed.length > 2000) return { error: 'メッセージが長すぎます' }
   if (!studentId) return { error: '送信先が不正です' }
 
-  const requestedKind: ChatMessageKind = options?.messageKind ?? 'user'
+  const requestedKind = normalizeChatMessageKind(options?.messageKind)
+  // Reject unknown kinds early (normalize maps unknowns to user; only allow
+  // explicitly requested system kinds that we understand).
   if (
-    requestedKind !== 'user' &&
-    requestedKind !== 'coaching_booking_reminder'
+    options?.messageKind != null &&
+    options.messageKind !== 'user' &&
+    options.messageKind !== 'coaching_booking_reminder'
   ) {
     return { error: '送信に失敗しました' }
   }
@@ -83,9 +94,9 @@ export async function sendChatMessage(
     return { error: '送信権限がありません' }
   }
 
-  // Students cannot create coaching reminder kind.
+  // Students cannot create system kinds (DB trigger also forces user).
   const messageKind: ChatMessageKind =
-    profile.role === 'admin' ? requestedKind : 'user'
+    profile.role === 'admin' ? requestedKind : HUMAN_CHAT_MESSAGE_KIND
 
   const { data: message, error: insertError } = await supabase
     .from('chat_messages')
@@ -124,6 +135,7 @@ export async function sendChatMessage(
         cannotDeliver: summary.cannotDeliver,
         failed: summary.failed,
         legacyEmailSent: summary.legacyEmailSent,
+        humanKind: isHumanChatMessageKind(message.message_kind ?? messageKind),
       })
     } else {
       // Student → admins: unchanged email + Discord (not under MESSAGE_DELIVERY_MODE).

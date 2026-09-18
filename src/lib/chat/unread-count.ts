@@ -29,6 +29,7 @@ export const fetchUnreadChatCount = cache(async (userId: string): Promise<number
       .select('*', { count: 'exact', head: true })
       .eq('student_id', userId)
       .neq('sender_id', userId)
+      .eq('message_kind', 'user')
       .gt('created_at', since)
 
     return count ?? 0
@@ -38,6 +39,7 @@ export const fetchUnreadChatCount = cache(async (userId: string): Promise<number
     .from('chat_messages')
     .select('student_id')
     .neq('sender_id', userId)
+    .eq('message_kind', 'user')
 
   const studentIds = [...new Set((threads ?? []).map((row) => row.student_id as string))]
   if (studentIds.length === 0) return 0
@@ -52,6 +54,7 @@ export const fetchUnreadChatCount = cache(async (userId: string): Promise<number
         .select('*', { count: 'exact', head: true })
         .eq('student_id', studentId)
         .neq('sender_id', userId)
+        .eq('message_kind', 'user')
         .gt('created_at', since)
       return count ?? 0
     }),

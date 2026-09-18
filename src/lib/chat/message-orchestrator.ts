@@ -13,6 +13,7 @@ import { sendStudentMessageEmail } from '@/lib/chat/message-email'
 import { isPushSendingAvailable } from '@/lib/push/send-config'
 import { DEFAULT_NOTIFICATION_PREFERENCES } from '@/types/push'
 import type { ChatMessageKind } from '@/types/chat'
+import { isHumanChatMessageKind } from '@/lib/chat/message-kind'
 
 export type MessageDeliverySummary = {
   ok: boolean
@@ -169,7 +170,7 @@ export async function deliverStudentMessageNotification(input: {
     summary.skippedReason = 'self_send'
     return summary
   }
-  if (input.messageKind !== 'user') {
+  if (!isHumanChatMessageKind(input.messageKind)) {
     summary.skippedReason = 'excluded_kind'
     return summary
   }
