@@ -86,7 +86,16 @@ export default async function StudentStudyHistoryPage({
     <StudentPageShell title="学習履歴" backHref="/dashboard" backLabel="マイページ">
       <div className="space-y-6">
         <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <h2 className="mb-2 text-lg font-bold">記録一覧</h2>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-lg font-bold">記録一覧</h2>
+            <Link
+              href="/dashboard/study/history/comments"
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              新着コメント一覧
+              {unreadFeedbackDates.size > 0 ? `（未読 ${unreadFeedbackDates.size}）` : ''}
+            </Link>
+          </div>
           <StudyLogDayNav
             selectedDate={selectedDate}
             dayTotalMinutes={dayMinutes}

@@ -3,6 +3,11 @@ import { createClient } from '@/lib/supabase/server'
 import type { StudyLog } from '@/lib/study/chart-data'
 import { getPersonName } from '@/lib/auth/display-name'
 import type { StudyDayFeedback } from '@/lib/study/feedback'
+import {
+  hasReadableStudyFeedbackComment,
+  isStudyFeedbackUnread,
+} from '@/lib/study/feedback-unread'
+import { getTotalPages, parsePageParam } from '@/lib/pagination'
 
 export type StudentDailyStudySummary = {
   student: {
@@ -15,6 +20,30 @@ export type StudentDailyStudySummary = {
   logs: StudyLog[]
   totalMinutes: number
   feedback: StudyDayFeedback | null
+}
+
+export type StudyFeedbackCommentListItem = {
+  feedbackId: string
+  studiedOn: string
+  comment: string
+  stamp: StudyDayFeedback['stamp']
+  updatedAt: string
+  isUnread: boolean
+  /** Distinct subjects from that day's study logs (may be empty). */
+  subjects: string[]
+  /** Distinct textbook names from that day's study logs (may be empty). */
+  textbookNames: string[]
+}
+
+export type StudyFeedbackCommentFilter = 'unread' | 'all'
+
+export type StudyFeedbackCommentPage = {
+  items: StudyFeedbackCommentListItem[]
+  totalCount: number
+  page: number
+  pageSize: number
+  filter: StudyFeedbackCommentFilter
+  unreadCount: number
 }
 
 export async function fetchStudyDayFeedback(
@@ -138,8 +167,12 @@ export const fetchUnreadStudyFeedbackDates = cache(
     const unreadDates = new Set<string>()
 
     for (const row of feedbackRows ?? []) {
-      const comment = String(row.comment ?? '').trim()
-      if (comment.length > 0 && !readIds.has(row.id as string)) {
+      if (
+        isStudyFeedbackUnread({
+          comment: row.comment as string,
+          hasRead: readIds.has(row.id as string),
+        })
+      ) {
         unreadDates.add(row.studied_on as string)
       }
     }
@@ -153,16 +186,211 @@ export const fetchUnreadStudyFeedbackCount = cache(async (studentId: string): Pr
   return unreadDates.size
 })
 
+/** Snapshot of unread feedback ids for this student (shared badge definition). */
+export async function listUnreadStudyFeedbackIds(
+  studentId: string,
+): Promise<string[]> {
+  const supabase = await createClient()
+
+  const [{ data: feedbackRows, error: feedbackError }, { data: readRows, error: readError }] =
+    await Promise.all([
+      supabase
+        .from('study_day_feedback')
+        .select('id, comment')
+        .eq('student_id', studentId),
+      supabase
+        .from('study_day_feedback_reads')
+        .select('feedback_id')
+        .eq('student_id', studentId),
+    ])
+
+  if (feedbackError || readError) return []
+
+  const readIds = new Set((readRows ?? []).map((row) => row.feedback_id as string))
+  return (feedbackRows ?? [])
+    .filter((row) =>
+      isStudyFeedbackUnread({
+        comment: row.comment as string,
+        hasRead: readIds.has(row.id as string),
+      }),
+    )
+    .map((row) => row.id as string)
+}
+
+export async function fetchStudyFeedbackCommentsPage(params: {
+  studentId: string
+  filter: StudyFeedbackCommentFilter
+  page?: number
+  pageSize?: number
+}): Promise<StudyFeedbackCommentPage> {
+  const pageSize = params.pageSize ?? 15
+  const supabase = await createClient()
+
+  const [{ data: feedbackRows, error: feedbackError }, { data: readRows, error: readError }] =
+    await Promise.all([
+      supabase
+        .from('study_day_feedback')
+        .select('id, student_id, studied_on, stamp, comment, updated_at, created_at')
+        .eq('student_id', params.studentId)
+        .order('updated_at', { ascending: false }),
+      supabase
+        .from('study_day_feedback_reads')
+        .select('feedback_id')
+        .eq('student_id', params.studentId),
+    ])
+
+  if (feedbackError || readError) {
+    return {
+      items: [],
+      totalCount: 0,
+      page: 1,
+      pageSize,
+      filter: params.filter,
+      unreadCount: 0,
+    }
+  }
+
+  const readIds = new Set((readRows ?? []).map((row) => row.feedback_id as string))
+
+  const withComment = ((feedbackRows ?? []) as StudyDayFeedback[]).filter((row) =>
+    hasReadableStudyFeedbackComment(row.comment),
+  )
+
+  const annotated = withComment.map((row) => ({
+    feedback: row,
+    isUnread: isStudyFeedbackUnread({
+      comment: row.comment,
+      hasRead: readIds.has(row.id),
+    }),
+  }))
+
+  const unreadCount = annotated.filter((row) => row.isUnread).length
+  const filtered =
+    params.filter === 'unread' ? annotated.filter((row) => row.isUnread) : annotated
+
+  const totalCount = filtered.length
+  const totalPages = getTotalPages(totalCount, pageSize)
+  const page = parsePageParam(
+    params.page != null ? String(params.page) : undefined,
+    totalPages,
+  )
+  const start = (page - 1) * pageSize
+  const pageRows = filtered.slice(start, start + pageSize)
+
+  const studiedOns = [...new Set(pageRows.map((row) => row.feedback.studied_on))]
+  const contextByDate = await fetchStudyDayContextLabels(params.studentId, studiedOns)
+
+  return {
+    items: pageRows.map(({ feedback, isUnread }) => {
+      const ctx = contextByDate.get(feedback.studied_on) ?? {
+        subjects: [] as string[],
+        textbookNames: [] as string[],
+      }
+      return {
+        feedbackId: feedback.id,
+        studiedOn: feedback.studied_on,
+        comment: feedback.comment.trim(),
+        stamp: feedback.stamp,
+        updatedAt: feedback.updated_at,
+        isUnread,
+        subjects: ctx.subjects,
+        textbookNames: ctx.textbookNames,
+      }
+    }),
+    totalCount,
+    page,
+    pageSize,
+    filter: params.filter,
+    unreadCount,
+  }
+}
+
+async function fetchStudyDayContextLabels(
+  studentId: string,
+  studiedOns: string[],
+): Promise<Map<string, { subjects: string[]; textbookNames: string[] }>> {
+  const map = new Map<string, { subjects: string[]; textbookNames: string[] }>()
+  if (studiedOns.length === 0) return map
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('study_logs')
+    .select('studied_on, subject, textbook_name')
+    .eq('student_id', studentId)
+    .in('studied_on', studiedOns)
+
+  if (error || !data) return map
+
+  for (const row of data) {
+    const date = String(row.studied_on)
+    const entry = map.get(date) ?? { subjects: [], textbookNames: [] }
+    const subject = String(row.subject ?? '').trim()
+    const textbook = String(row.textbook_name ?? '').trim()
+    if (subject && !entry.subjects.includes(subject)) entry.subjects.push(subject)
+    if (textbook && !entry.textbookNames.includes(textbook)) {
+      entry.textbookNames.push(textbook)
+    }
+    map.set(date, entry)
+  }
+
+  return map
+}
+
+/**
+ * Mark feedback as read for the owning student only.
+ * Returns ok:false on authz/ownership/write failure (callers must not ignore).
+ */
 export async function markStudyFeedbackAsRead(
   feedbackId: string,
   studentId: string,
-): Promise<void> {
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const trimmedId = feedbackId.trim()
+  if (!trimmedId) return { ok: false, reason: 'invalid_id' }
+
   const supabase = await createClient()
-  await supabase.from('study_day_feedback_reads').upsert(
+  const { data: feedback, error: feedbackError } = await supabase
+    .from('study_day_feedback')
+    .select('id, student_id, comment')
+    .eq('id', trimmedId)
+    .maybeSingle<{ id: string; student_id: string; comment: string }>()
+
+  if (feedbackError || !feedback) return { ok: false, reason: 'not_found' }
+  if (feedback.student_id !== studentId) return { ok: false, reason: 'forbidden' }
+  if (!hasReadableStudyFeedbackComment(feedback.comment)) {
+    return { ok: true }
+  }
+
+  const { error } = await supabase.from('study_day_feedback_reads').upsert(
     {
-      feedback_id: feedbackId,
+      feedback_id: feedback.id,
       student_id: studentId,
+      read_at: new Date().toISOString(),
     },
     { onConflict: 'feedback_id,student_id' },
   )
+
+  if (error) {
+    console.error('[study-feedback] mark read failed:', error.message)
+    return { ok: false, reason: 'write_failed' }
+  }
+  return { ok: true }
+}
+
+/**
+ * Mark only the provided feedback ids (snapshot). Ignores ids that are not
+ * owned by the student. Does not expand to newly arrived unread rows.
+ */
+export async function markStudyFeedbackIdsAsRead(
+  feedbackIds: string[],
+  studentId: string,
+): Promise<{ marked: number; failed: number }> {
+  const uniqueIds = [...new Set(feedbackIds.map((id) => id.trim()).filter(Boolean))]
+  let marked = 0
+  let failed = 0
+  for (const id of uniqueIds) {
+    const result = await markStudyFeedbackAsRead(id, studentId)
+    if (result.ok) marked += 1
+    else failed += 1
+  }
+  return { marked, failed }
 }
