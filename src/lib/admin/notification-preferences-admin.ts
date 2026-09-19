@@ -4,8 +4,12 @@
  * Students cannot mutate these rows after migration 051.
  */
 
+import {
+  assertAdminCanAccessStudent,
+  requireAdminAccess,
+  type AdminAccessOk,
+} from '@/lib/auth/admin-access'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createClient } from '@/lib/supabase/server'
 import {
   defaultNotificationPreferences,
   isNotificationPreferenceCategory,
@@ -13,7 +17,6 @@ import {
 } from '@/lib/push/preferences'
 import { ensurePreferencesRowThenUpdateCategory } from '@/lib/push/preferences-write'
 import type { NotificationPreferenceCategory } from '@/types/push'
-import type { Profile } from '@/types/database'
 
 export type AdminNotificationPrefsSnapshot = {
   preferences: NotificationPreferencesView
@@ -36,40 +39,26 @@ export type AdminPreferenceUpdateResult =
         | 'save_failed'
     }
 
-async function requireAdminUserId(): Promise<
-  | { ok: true; adminUserId: string }
+async function requireAdminActor(): Promise<
+  | { ok: true; access: AdminAccessOk }
   | { ok: false; code: 'unauthorized' | 'forbidden' }
 > {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { ok: false, code: 'unauthorized' }
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle<Pick<Profile, 'role'>>()
-
-  if (!profile || profile.role !== 'admin') {
-    return { ok: false, code: 'forbidden' }
+  const access = await requireAdminAccess()
+  if (!access.ok) {
+    return {
+      ok: false,
+      code: access.error === 'ログインが必要です' ? 'unauthorized' : 'forbidden',
+    }
   }
-
-  return { ok: true, adminUserId: user.id }
+  return { ok: true, access }
 }
 
-async function assertStudentTarget(
-  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+async function assertAccessibleStudentTarget(
   studentUserId: string,
+  access: AdminAccessOk,
 ): Promise<boolean> {
-  const { data, error } = await admin
-    .from('profiles')
-    .select('id, role')
-    .eq('id', studentUserId)
-    .maybeSingle<{ id: string; role: string }>()
-
-  return !error && Boolean(data) && data!.role === 'student'
+  const result = await assertAdminCanAccessStudent(studentUserId, access)
+  return result.ok
 }
 
 function toView(row: {
@@ -230,13 +219,13 @@ export async function getAdminStudentNotificationPrefs(
   | { ok: true; snapshot: AdminNotificationPrefsSnapshot }
   | { ok: false; code: 'unauthorized' | 'forbidden' | 'invalid_target' | 'admin_unavailable' }
 > {
-  const auth = await requireAdminUserId()
+  const auth = await requireAdminActor()
   if (!auth.ok) return { ok: false, code: auth.code }
 
   const admin = createAdminClient()
   if (!admin) return { ok: false, code: 'admin_unavailable' }
 
-  if (!(await assertStudentTarget(admin, studentUserId))) {
+  if (!(await assertAccessibleStudentTarget(studentUserId, auth.access))) {
     return { ok: false, code: 'invalid_target' }
   }
 
@@ -251,7 +240,7 @@ export async function updateAdminStudentNotificationPreference(params: {
   category: string
   enabled: boolean
 }): Promise<AdminPreferenceUpdateResult> {
-  const auth = await requireAdminUserId()
+  const auth = await requireAdminActor()
   if (!auth.ok) return { ok: false, code: auth.code }
 
   if (!isNotificationPreferenceCategory(params.category)) {
@@ -264,7 +253,7 @@ export async function updateAdminStudentNotificationPreference(params: {
   const admin = createAdminClient()
   if (!admin) return { ok: false, code: 'admin_unavailable' }
 
-  if (!(await assertStudentTarget(admin, params.studentUserId))) {
+  if (!(await assertAccessibleStudentTarget(params.studentUserId, auth.access))) {
     return { ok: false, code: 'invalid_target' }
   }
 
@@ -290,7 +279,7 @@ export async function updateAdminStudentNotificationPreference(params: {
   const audited = await insertAuditChange({
     admin,
     targetUserId: params.studentUserId,
-    adminUserId: auth.adminUserId,
+    adminUserId: auth.access.profile.id,
     category: params.category,
     previousValue,
     newValue: params.enabled,
@@ -311,7 +300,7 @@ export async function updateAdminStudentNotificationPreferencesBulk(params: {
   studentUserId: string
   enabled: boolean
 }): Promise<AdminPreferenceUpdateResult> {
-  const auth = await requireAdminUserId()
+  const auth = await requireAdminActor()
   if (!auth.ok) return { ok: false, code: auth.code }
   if (typeof params.enabled !== 'boolean') {
     return { ok: false, code: 'invalid_input' }
@@ -320,7 +309,7 @@ export async function updateAdminStudentNotificationPreferencesBulk(params: {
   const admin = createAdminClient()
   if (!admin) return { ok: false, code: 'admin_unavailable' }
 
-  if (!(await assertStudentTarget(admin, params.studentUserId))) {
+  if (!(await assertAccessibleStudentTarget(params.studentUserId, auth.access))) {
     return { ok: false, code: 'invalid_target' }
   }
 

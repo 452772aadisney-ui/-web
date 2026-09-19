@@ -1,11 +1,16 @@
 import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { getDashboardPathForRole } from '@/lib/auth/routes'
+import { isSuperAdminProfile } from '@/lib/auth/admin-access'
 import { fetchStudentLastAccessMap } from '@/lib/auth/last-access'
 import { AdminPageShell } from '@/components/layout/AdminPageShell'
 import { AdminStudentsList } from '@/components/admin/AdminStudentsList'
 import { Pagination } from '@/components/ui/Pagination'
-import { GRADE_TAG_NAMES, groupStudentsByGrade } from '@/lib/tags/grade-order'
+import {
+  GRADE_TAG_NAMES,
+  KISOTSU_GRADE_TAG,
+  groupStudentsByGrade,
+} from '@/lib/tags/grade-order'
 import { fetchGradeTagNamesByStudentId } from '@/lib/tags/queries'
 import {
   parsePushRegistrationFilter,
@@ -40,10 +45,17 @@ export default async function AdminStudentsPage({
     redirect(getDashboardPathForRole('student'))
   }
 
+  const superAdmin = isSuperAdminProfile(profile)
+  const visibleGradeNames = superAdmin
+    ? GRADE_TAG_NAMES
+    : GRADE_TAG_NAMES.filter((name) => name !== KISOTSU_GRADE_TAG)
+
   const params = await searchParams
   const pageNumber = params.studentsPage ? parseInt(params.studentsPage, 10) : 1
   const query = params.q?.trim() ?? ''
-  const grade = params.grade?.trim() ?? ''
+  const rawGrade = params.grade?.trim() ?? ''
+  const grade =
+    !superAdmin && rawGrade === KISOTSU_GRADE_TAG ? '' : rawGrade
   const pushFilter = parsePushRegistrationFilter(params.push)
 
   const [pageResult, lastAccessByStudentId] = await Promise.all([
@@ -134,7 +146,7 @@ export default async function AdminStudentsPage({
           >
             すべて
           </Link>
-          {GRADE_TAG_NAMES.map((gradeName) => (
+          {visibleGradeNames.map((gradeName) => (
             <Link
               key={gradeName}
               href={buildFilterHref({ grade: gradeName })}

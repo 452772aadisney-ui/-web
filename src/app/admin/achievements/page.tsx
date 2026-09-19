@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { fetchAdminAchievementOverview } from '@/lib/achievements/admin-queries'
+import { isSuperAdminProfile } from '@/lib/auth/admin-access'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { getDashboardPathForRole } from '@/lib/auth/routes'
 import { AdminPageShell } from '@/components/layout/AdminPageShell'
@@ -18,7 +19,9 @@ export default async function AdminAchievementsPage() {
     redirect(getDashboardPathForRole('student'))
   }
 
-  const overview = await fetchAdminAchievementOverview()
+  const overview = await fetchAdminAchievementOverview({
+    isSuperAdmin: isSuperAdminProfile(profile),
+  })
 
   return (
     <AdminPageShell title="実績・ランキング" backHref="/admin" backLabel="管理画面">

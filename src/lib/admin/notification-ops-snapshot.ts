@@ -322,6 +322,7 @@ function buildModeCards(
 
 async function loadSubscriptionAggregate(
   admin: AdminClient,
+  options?: { isSuperAdmin?: boolean },
 ): Promise<NotificationOpsSubscriptionAggregate> {
   const { data: students, error: studentsError } = await admin
     .from('profiles')
@@ -333,9 +334,31 @@ async function loadSubscriptionAggregate(
 
   const studentRows = (students ?? []) as Array<{ id: string; email: string | null }>
   const queryTruncated = studentRows.length >= NOTIFICATION_OPS_DELIVERY_SCAN_LIMIT
-  const studentIds = studentRows.map((s) => s.id)
+  let studentIds = studentRows.map((s) => s.id)
+
+  if (!options?.isSuperAdmin) {
+    // service_role bypasses RLS — resolve 既卒 ids via admin client, not user-scoped helpers.
+    const { data: kisotsuTag } = await admin
+      .from('student_tags')
+      .select('id')
+      .eq('category', '学年')
+      .eq('name', '既卒')
+      .maybeSingle<{ id: string }>()
+
+    if (kisotsuTag?.id) {
+      const { data: assignments } = await admin
+        .from('profile_student_tags')
+        .select('profile_id')
+        .eq('tag_id', kisotsuTag.id)
+      const kisotsu = new Set((assignments ?? []).map((row) => String(row.profile_id)))
+      studentIds = studentIds.filter((id) => !kisotsu.has(id))
+    }
+  }
+
   const emailById = new Map(
-    studentRows.map((s) => [s.id, Boolean(s.email?.trim())] as const),
+    studentRows
+      .filter((s) => studentIds.includes(s.id))
+      .map((s) => [s.id, Boolean(s.email?.trim())] as const),
   )
 
   const { data: activeSubs, error: activeError } = await admin
@@ -346,12 +369,25 @@ async function loadSubscriptionAggregate(
 
   if (activeError) throw new Error('active_subs')
 
-  const { count: disabledCount, error: disabledError } = await admin
-    .from('push_subscriptions')
-    .select('id', { count: 'exact', head: true })
-    .not('disabled_at', 'is', null)
+  let disabledSubscriptionCount = 0
+  if (options?.isSuperAdmin) {
+    const { count: disabledCount, error: disabledError } = await admin
+      .from('push_subscriptions')
+      .select('id', { count: 'exact', head: true })
+      .not('disabled_at', 'is', null)
 
-  if (disabledError) throw new Error('disabled_subs')
+    if (disabledError) throw new Error('disabled_subs')
+    disabledSubscriptionCount = disabledCount ?? 0
+  } else if (studentIds.length > 0) {
+    const { count: disabledCount, error: disabledError } = await admin
+      .from('push_subscriptions')
+      .select('id', { count: 'exact', head: true })
+      .in('user_id', studentIds)
+      .not('disabled_at', 'is', null)
+
+    if (disabledError) throw new Error('disabled_subs')
+    disabledSubscriptionCount = disabledCount ?? 0
+  }
 
   const activeRows = (activeSubs ?? []) as Array<{ id: string; user_id: string }>
   const activeTruncated = activeRows.length >= NOTIFICATION_OPS_DELIVERY_SCAN_LIMIT
@@ -410,10 +446,9 @@ async function loadSubscriptionAggregate(
     studentCount: studentIds.length,
     studentsWithActivePush,
     studentsWithoutActivePush,
-    // Row count from the (possibly truncated) active scan — same as before.
-    activeSubscriptionCount: activeRows.length,
+    activeSubscriptionCount,
     multiDeviceStudentCount,
-    disabledSubscriptionCount: disabledCount ?? 0,
+    disabledSubscriptionCount,
     preferenceDisabled,
     possiblyUndeliverable,
     queryTruncated: queryTruncated || activeTruncated,
@@ -596,6 +631,7 @@ async function loadRecentFailures(admin: AdminClient): Promise<RecentFailureRow[
 export async function loadNotificationOpsSnapshot(params?: {
   env?: NodeJS.ProcessEnv | Record<string, string | undefined>
   nowMs?: number
+  isSuperAdmin?: boolean
 }): Promise<
   | { ok: true; snapshot: NotificationOpsSnapshot }
   | { ok: false; code: 'admin_unavailable' }
@@ -603,6 +639,7 @@ export async function loadNotificationOpsSnapshot(params?: {
   const startedAt = params?.nowMs ?? Date.now()
   const deadline = startedAt + NOTIFICATION_OPS_SOFT_TIMEOUT_MS
   const env = params?.env ?? process.env
+  const isSuperAdmin = params?.isSuperAdmin === true
 
   const admin = createAdminClient()
   if (!admin) return { ok: false, code: 'admin_unavailable' }
@@ -631,6 +668,11 @@ export async function loadNotificationOpsSnapshot(params?: {
       '10分超の pending は要確認（この画面から自動再送しない）。',
       'Cronの最終実行は Vercel Logs で確認（推測表示しない）。',
       '秘密情報・allowlist ID・endpointをチャットやチケットに貼らない。',
+          ...(isSuperAdmin
+            ? []
+            : [
+                '購読集計は在学生のみ（既卒を除外）。配信履歴・pending・失敗一覧は大管理者向けのため非表示です。',
+              ]),
     ],
   }
 
@@ -638,7 +680,7 @@ export async function loadNotificationOpsSnapshot(params?: {
 
   try {
     if (!pastDeadline()) {
-      snapshot.subscriptions = await loadSubscriptionAggregate(admin)
+      snapshot.subscriptions = await loadSubscriptionAggregate(admin, { isSuperAdmin })
     } else {
       snapshot.timedOut = true
     }
@@ -646,46 +688,49 @@ export async function loadNotificationOpsSnapshot(params?: {
     snapshot.subscriptionsError = true
   }
 
-  try {
-    if (!pastDeadline()) {
-      const since24 = new Date(startedAt - 24 * 60 * 60 * 1000).toISOString()
-      snapshot.deliveries24h = await scanDeliveriesWindow(admin, '24h', since24)
-    } else {
-      snapshot.timedOut = true
+  // Delivery / pending / failure rows mix graduate user_ids; not safely separable for regular admins.
+  if (isSuperAdmin) {
+    try {
+      if (!pastDeadline()) {
+        const since24 = new Date(startedAt - 24 * 60 * 60 * 1000).toISOString()
+        snapshot.deliveries24h = await scanDeliveriesWindow(admin, '24h', since24)
+      } else {
+        snapshot.timedOut = true
+      }
+    } catch {
+      snapshot.deliveriesError = true
     }
-  } catch {
-    snapshot.deliveriesError = true
-  }
 
-  try {
-    if (!pastDeadline()) {
-      const since7 = new Date(startedAt - 7 * 24 * 60 * 60 * 1000).toISOString()
-      snapshot.deliveries7d = await scanDeliveriesWindow(admin, '7d', since7)
-    } else {
-      snapshot.timedOut = true
+    try {
+      if (!pastDeadline()) {
+        const since7 = new Date(startedAt - 7 * 24 * 60 * 60 * 1000).toISOString()
+        snapshot.deliveries7d = await scanDeliveriesWindow(admin, '7d', since7)
+      } else {
+        snapshot.timedOut = true
+      }
+    } catch {
+      snapshot.deliveriesError = true
     }
-  } catch {
-    snapshot.deliveriesError = true
-  }
 
-  try {
-    if (!pastDeadline()) {
-      snapshot.pending = await loadPendingMonitor(admin, startedAt)
-    } else {
-      snapshot.timedOut = true
+    try {
+      if (!pastDeadline()) {
+        snapshot.pending = await loadPendingMonitor(admin, startedAt)
+      } else {
+        snapshot.timedOut = true
+      }
+    } catch {
+      snapshot.pendingError = true
     }
-  } catch {
-    snapshot.pendingError = true
-  }
 
-  try {
-    if (!pastDeadline()) {
-      snapshot.recentFailures = await loadRecentFailures(admin)
-    } else {
-      snapshot.timedOut = true
+    try {
+      if (!pastDeadline()) {
+        snapshot.recentFailures = await loadRecentFailures(admin)
+      } else {
+        snapshot.timedOut = true
+      }
+    } catch {
+      snapshot.recentFailuresError = true
     }
-  } catch {
-    snapshot.recentFailuresError = true
   }
 
   snapshot.durationMs = Date.now() - startedAt

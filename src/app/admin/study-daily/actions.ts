@@ -1,6 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import {
+  assertAdminCanAccessStudent,
+  requireAdminAccess,
+} from '@/lib/auth/admin-access'
 import { notifyStudyFeedbackReceived } from '@/lib/email/notifications'
 import { isStudyFeedbackStampId } from '@/lib/study/feedback'
 import { createClient } from '@/lib/supabase/server'
@@ -10,36 +14,13 @@ export type StudyDailyFeedbackActionState = {
   success?: boolean
 }
 
-async function assertAdmin(): Promise<{ error: string } | { userId: string }> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    return { error: 'ログインが必要です' }
-  }
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle<{ role: string }>()
-
-  if (profile?.role !== 'admin') {
-    return { error: '管理者権限が必要です' }
-  }
-
-  return { userId: user.id }
-}
-
 export async function upsertStudyDayFeedback(
   _prev: StudyDailyFeedbackActionState,
   formData: FormData,
 ): Promise<StudyDailyFeedbackActionState> {
-  const auth = await assertAdmin()
-  if ('error' in auth) {
-    return { error: auth.error }
+  const access = await requireAdminAccess()
+  if (!access.ok) {
+    return { error: access.error }
   }
 
   const studentId = String(formData.get('studentId') ?? '').trim()
@@ -49,6 +30,11 @@ export async function upsertStudyDayFeedback(
 
   if (!studentId || !studiedOn) {
     return { error: '生徒または日付が指定されていません' }
+  }
+
+  const canAccess = await assertAdminCanAccessStudent(studentId, access)
+  if (!canAccess.ok) {
+    return { error: canAccess.error }
   }
 
   if (!isStudyFeedbackStampId(stamp)) {
@@ -69,7 +55,7 @@ export async function upsertStudyDayFeedback(
     studied_on: studiedOn,
     stamp,
     comment,
-    admin_id: auth.userId,
+    admin_id: access.profile.id,
   }
 
   const { error } = existing

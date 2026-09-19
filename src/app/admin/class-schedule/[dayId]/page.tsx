@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { requireAdminOrRedirect } from '@/lib/class-schedule/access'
+import { requireSuperAdminOrRedirect } from '@/lib/class-schedule/access'
 import { fetchClassScheduleDayById } from '@/lib/class-schedule/queries'
 import { AdminPageShell } from '@/components/layout/AdminPageShell'
 import { AdminNarrowContent } from '@/components/layout/AdminNarrowContent'
@@ -15,16 +15,16 @@ export default async function AdminClassScheduleDayPage({
 }: {
   params: Promise<{ dayId: string }>
 }) {
-  await requireAdminOrRedirect()
+  await requireSuperAdminOrRedirect()
   const { dayId } = await params
   const day = await fetchClassScheduleDayById(dayId)
   if (!day) notFound()
 
   return (
     <AdminPageShell
-      title="授業予定の編集"
+      title="???????"
       backHref="/admin/class-schedule"
-      backLabel="授業予定一覧"
+      backLabel="??????"
     >
       <AdminNarrowContent>
         <AdminClassScheduleEditPage day={day} />

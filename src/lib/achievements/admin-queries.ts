@@ -6,6 +6,7 @@ import {
 } from '@/lib/achievements/definitions'
 import { computeStarRank } from '@/lib/achievements/ranking'
 import { getPersonName } from '@/lib/auth/display-name'
+import { fetchAllKisotsuStudentIds } from '@/lib/auth/admin-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export type AdminStudentRankingRow = {
@@ -61,26 +62,30 @@ function buildStarTotalsByStudent(
   return starTotals
 }
 
-export async function fetchAdminAchievementOverview(): Promise<AdminAchievementOverview | null> {
+export async function fetchAdminAchievementOverview(options?: {
+  isSuperAdmin?: boolean
+}): Promise<AdminAchievementOverview | null> {
   const supabase = createAdminClient()
   if (!supabase) return null
 
-  const [{ count: registeredStudentCount }, { data: students }, { data: achievementRows }] =
-    await Promise.all([
-      supabase
-        .from('profiles')
-        .select('id', { count: 'exact', head: true })
-        .eq('role', 'student'),
-      supabase.from('profiles').select('id, full_name, display_name').eq('role', 'student'),
-      supabase
-        .from('student_achievements')
-        .select('student_id, achievement_id, unlocked_at')
-        .order('unlocked_at', { ascending: false }),
-    ])
+  const isSuperAdmin = options?.isSuperAdmin === true
 
-  const studentList = students ?? []
+  const [{ data: students }, { data: achievementRows }, kisotsuIds] = await Promise.all([
+    supabase.from('profiles').select('id, full_name, display_name').eq('role', 'student'),
+    supabase
+      .from('student_achievements')
+      .select('student_id, achievement_id, unlocked_at')
+      .order('unlocked_at', { ascending: false }),
+    isSuperAdmin ? Promise.resolve([] as string[]) : fetchAllKisotsuStudentIds(),
+  ])
+
+  const kisotsuSet = new Set(kisotsuIds)
+  const studentList = (students ?? []).filter(
+    (student) => isSuperAdmin || !kisotsuSet.has(String(student.id)),
+  )
   const studentIds = studentList.map((student) => String(student.id))
-  const studentCount = registeredStudentCount ?? studentIds.length
+  const studentIdSet = new Set(studentIds)
+  const studentCount = studentIds.length
   const rankingPoolSize = studentCount + 10
   const nameById = new Map(
     studentList.map((student) => [
@@ -92,7 +97,9 @@ export async function fetchAdminAchievementOverview(): Promise<AdminAchievementO
     ]),
   )
 
-  const rows = achievementRows ?? []
+  const rows = (achievementRows ?? []).filter((row) =>
+    studentIdSet.has(String(row.student_id)),
+  )
   const starTotals = buildStarTotalsByStudent(
     studentIds,
     rows.map((row) => ({

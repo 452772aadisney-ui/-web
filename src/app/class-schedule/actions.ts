@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { requireAdmin } from '@/lib/class-schedule/access'
+import { requireSuperAdmin } from '@/lib/class-schedule/access'
 import {
   CLASS_SCHEDULE_MAX_SESSIONS_PER_DAY,
   isWithinSessionLimit,
@@ -307,7 +307,7 @@ export async function updateClassScheduleDay(
   _prev: ClassScheduleActionState,
   formData: FormData,
 ): Promise<ClassScheduleActionState> {
-  const access = await requireAdmin()
+  const access = await requireSuperAdmin()
   if (!access.ok) return { error: access.error }
 
   const dayId = String(formData.get('dayId') ?? '').trim()
@@ -376,7 +376,7 @@ export async function addClassScheduleSession(
   _prev: ClassScheduleActionState,
   formData: FormData,
 ): Promise<ClassScheduleActionState> {
-  const access = await requireAdmin()
+  const access = await requireSuperAdmin()
   if (!access.ok) return { error: access.error }
 
   const dayId = String(formData.get('dayId') ?? '').trim()
@@ -442,7 +442,7 @@ export async function updateClassScheduleSession(
   _prev: ClassScheduleActionState,
   formData: FormData,
 ): Promise<ClassScheduleActionState> {
-  const access = await requireAdmin()
+  const access = await requireSuperAdmin()
   if (!access.ok) return { error: access.error }
 
   const sessionId = String(formData.get('sessionId') ?? '').trim()
@@ -522,7 +522,7 @@ export async function updateClassScheduleSession(
 export async function cancelClassScheduleDay(
   formData: FormData,
 ): Promise<ClassScheduleActionState> {
-  const access = await requireAdmin()
+  const access = await requireSuperAdmin()
   if (!access.ok) return { error: access.error }
 
   const dayId = String(formData.get('dayId') ?? '').trim()
@@ -573,7 +573,7 @@ export async function cancelClassScheduleDay(
 export async function uncancelClassScheduleDay(
   formData: FormData,
 ): Promise<ClassScheduleActionState> {
-  const access = await requireAdmin()
+  const access = await requireSuperAdmin()
   if (!access.ok) return { error: access.error }
 
   const dayId = String(formData.get('dayId') ?? '').trim()
@@ -631,7 +631,7 @@ export async function uncancelClassScheduleDay(
 export async function cancelClassScheduleSession(
   formData: FormData,
 ): Promise<ClassScheduleActionState> {
-  const access = await requireAdmin()
+  const access = await requireSuperAdmin()
   if (!access.ok) return { error: access.error }
 
   const sessionId = String(formData.get('sessionId') ?? '').trim()
@@ -682,7 +682,7 @@ export async function cancelClassScheduleSession(
 export async function uncancelClassScheduleSession(
   formData: FormData,
 ): Promise<ClassScheduleActionState> {
-  const access = await requireAdmin()
+  const access = await requireSuperAdmin()
   if (!access.ok) return { error: access.error }
 
   const sessionId = String(formData.get('sessionId') ?? '').trim()
@@ -751,7 +751,7 @@ export async function uncancelClassScheduleSession(
 export async function deleteClassScheduleDay(
   formData: FormData,
 ): Promise<ClassScheduleActionState> {
-  const access = await requireAdmin()
+  const access = await requireSuperAdmin()
   if (!access.ok) return { error: access.error }
 
   const dayId = String(formData.get('dayId') ?? '').trim()
@@ -771,7 +771,7 @@ export async function deleteClassScheduleDay(
 export async function deleteClassScheduleSession(
   formData: FormData,
 ): Promise<ClassScheduleActionState> {
-  const access = await requireAdmin()
+  const access = await requireSuperAdmin()
   if (!access.ok) return { error: access.error }
 
   const sessionId = String(formData.get('sessionId') ?? '').trim()

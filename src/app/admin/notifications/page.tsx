@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { getDashboardPathForRole } from '@/lib/auth/routes'
+import { isSuperAdminProfile } from '@/lib/auth/admin-access'
 import { AdminPageShell } from '@/components/layout/AdminPageShell'
 import { AdminNarrowContent } from '@/components/layout/AdminNarrowContent'
 import { AdminNotificationOpsClient } from '@/components/admin/AdminNotificationOpsClient'
@@ -26,10 +27,11 @@ export default async function AdminNotificationsOpsPage() {
   if (!profile) redirect('/login')
   if (profile.role !== 'admin') redirect(getDashboardPathForRole('student'))
 
+  const superAdmin = isSuperAdminProfile(profile)
   const availability = resolveAdminNotificationTestAvailability()
   const [listed, ops, unbookedStudents] = await Promise.all([
     listAdminNotificationTestTargets(),
-    loadNotificationOpsSnapshot(),
+    loadNotificationOpsSnapshot({ isSuperAdmin: superAdmin }),
     fetchStudentsWithoutCoachingBookingThisWeek(),
   ])
 

@@ -67,6 +67,17 @@ vi.mock('@/lib/admin/notification-test-message-dry-run', () => ({
   runAdminMessageDeliveryDryRun: vi.fn(),
 }))
 
+vi.mock('@/lib/admin/notification-test-class-schedule-dry-run', () => ({
+  runAdminClassScheduleDeliveryDryRun: vi.fn(),
+}))
+
+vi.mock('@/lib/admin/notification-ops-snapshot', () => ({
+  loadNotificationOpsSnapshot: vi.fn(async () => ({
+    ok: true,
+    snapshot: { evaluatedAt: '2026-01-01T00:00:00.000Z' },
+  })),
+}))
+
 vi.mock('@/lib/admin/notification-test-study-reminder-integration', () => ({
   inspectAdminStudyReminderIntegration: (...args: unknown[]) =>
     inspectAdminStudyReminderIntegration(...args),
@@ -97,7 +108,7 @@ vi.mock('@/lib/admin/notification-test-config', async () => {
 
 import { GET, POST } from '@/app/api/admin/notification-test/route'
 
-function adminAuth() {
+function adminAuth(isSuperAdmin = true) {
   createClient.mockResolvedValue({
     auth: { getUser: async () => ({ data: { user: { id: 'admin-1' } } }) },
     from() {
@@ -106,7 +117,10 @@ function adminAuth() {
           return {
             eq() {
               return {
-                maybeSingle: async () => ({ data: { role: 'admin' }, error: null }),
+                maybeSingle: async () => ({
+                  data: { role: 'admin', is_super_admin: isSuperAdmin },
+                  error: null,
+                }),
               }
             },
           }
@@ -570,6 +584,19 @@ describe('POST /api/admin/notification-test', () => {
     const body = await res.json()
     expect(body.coachingSessionInspect.projectedOutcome).toBe('no_scheduled_booking')
     expect(sendAdminCoachingSessionPreviousDayIntegrationTest).not.toHaveBeenCalled()
+  })
+
+  it('rejects class-schedule-dry-run for regular admins', async () => {
+    adminAuth(false)
+    const res = await POST(
+      new Request('https://app.example/api/admin/notification-test', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://app.example' },
+        body: JSON.stringify({ action: 'class-schedule-dry-run' }),
+      }),
+    )
+    expect(res.status).toBe(403)
+    await expect(res.json()).resolves.toEqual({ error: 'super_admin_required' })
   })
 })
 

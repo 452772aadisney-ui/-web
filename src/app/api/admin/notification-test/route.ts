@@ -29,6 +29,12 @@ import {
   sendAdminCoachingSessionPreviousDayIntegrationTest,
 } from '@/lib/admin/notification-test-coaching-integration'
 import type { Profile } from '@/types/database'
+import {
+  assertAdminCanAccessStudent,
+  isSuperAdminProfile,
+  requireAdminAccess,
+  ADMIN_STUDENT_NOT_FOUND,
+} from '@/lib/auth/admin-access'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -43,8 +49,20 @@ function jsonError(status: number, error: string, extra?: Record<string, unknown
   return NextResponse.json({ error, ...extra }, { status, headers: NO_STORE })
 }
 
+async function denyGraduateTargetIfNeeded(
+  auth: { isSuperAdmin: boolean },
+  targetUserId: string,
+): Promise<NextResponse | null> {
+  if (auth.isSuperAdmin) return null
+  const access = await requireAdminAccess()
+  if (!access.ok) return jsonError(403, 'forbidden')
+  const can = await assertAdminCanAccessStudent(targetUserId, access)
+  if (!can.ok) return jsonError(404, ADMIN_STUDENT_NOT_FOUND)
+  return null
+}
+
 async function requireAdmin(): Promise<
-  | { ok: true; userId: string }
+  | { ok: true; userId: string; isSuperAdmin: boolean }
   | { ok: false; response: NextResponse }
 > {
   const supabase = await createClient()
@@ -58,15 +76,19 @@ async function requireAdmin(): Promise<
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, is_super_admin')
     .eq('id', user.id)
-    .maybeSingle<Pick<Profile, 'role'>>()
+    .maybeSingle<Pick<Profile, 'role' | 'is_super_admin'>>()
 
   if (!profile || profile.role !== 'admin') {
     return { ok: false, response: jsonError(403, 'forbidden') }
   }
 
-  return { ok: true, userId: user.id }
+  return {
+    ok: true,
+    userId: user.id,
+    isSuperAdmin: isSuperAdminProfile(profile),
+  }
 }
 
 /** Bootstrap: feature flags + allowlisted test targets (labels only). */
@@ -81,11 +103,23 @@ export async function GET() {
     return jsonError(500, 'internal_error')
   }
 
+  let targets = listed.featureAvailable ? listed.targets : []
+  if (!auth.isSuperAdmin && targets.length > 0) {
+    const access = await requireAdminAccess()
+    if (!access.ok) return jsonError(403, 'forbidden')
+    const filtered: typeof targets = []
+    for (const t of targets) {
+      const can = await assertAdminCanAccessStudent(t.id, access)
+      if (can.ok) filtered.push(t)
+    }
+    targets = filtered
+  }
+
   return json({
     featureAvailable: listed.featureAvailable,
     disabledReason: listed.featureAvailable ? null : listed.reason,
     flagEnabled: isAdminNotificationTestEnabled(),
-    targets: listed.featureAvailable ? listed.targets : [],
+    targets,
   })
 }
 
@@ -120,7 +154,9 @@ export async function POST(request: Request) {
   const action = body.action
 
   if (action === 'ops-snapshot') {
-    const result = await loadNotificationOpsSnapshot()
+    const result = await loadNotificationOpsSnapshot({
+      isSuperAdmin: auth.isSuperAdmin,
+    })
     if (!result.ok) {
       if (result.code === 'admin_unavailable') return jsonError(503, 'unavailable')
       return jsonError(500, 'ops_snapshot_failed')
@@ -136,6 +172,8 @@ export async function POST(request: Request) {
     const targetUserId =
       typeof body.targetUserId === 'string' ? body.targetUserId.trim() : ''
     if (!targetUserId) return jsonError(400, 'invalid_target')
+    const denied = await denyGraduateTargetIfNeeded(auth, targetUserId)
+    if (denied) return denied
 
     const result = await inspectAdminStudyReminderIntegration({ targetUserId })
     if (!result.ok) {
@@ -152,6 +190,8 @@ export async function POST(request: Request) {
     const targetUserId =
       typeof body.targetUserId === 'string' ? body.targetUserId.trim() : ''
     if (!targetUserId) return jsonError(400, 'invalid_target')
+    const denied = await denyGraduateTargetIfNeeded(auth, targetUserId)
+    if (denied) return denied
 
     const result = await sendAdminStudyReminderIntegrationTest({
       adminUserId: auth.userId,
@@ -196,6 +236,8 @@ export async function POST(request: Request) {
     const targetUserId =
       typeof body.targetUserId === 'string' ? body.targetUserId.trim() : ''
     if (!targetUserId) return jsonError(400, 'invalid_target')
+    const denied = await denyGraduateTargetIfNeeded(auth, targetUserId)
+    if (denied) return denied
 
     const result = await inspectAdminCoachingBookingPromptIntegration({ targetUserId })
     if (!result.ok) {
@@ -212,6 +254,8 @@ export async function POST(request: Request) {
     const targetUserId =
       typeof body.targetUserId === 'string' ? body.targetUserId.trim() : ''
     if (!targetUserId) return jsonError(400, 'invalid_target')
+    const denied = await denyGraduateTargetIfNeeded(auth, targetUserId)
+    if (denied) return denied
 
     const result = await sendAdminCoachingBookingPromptIntegrationTest({
       adminUserId: auth.userId,
@@ -262,6 +306,8 @@ export async function POST(request: Request) {
     const targetUserId =
       typeof body.targetUserId === 'string' ? body.targetUserId.trim() : ''
     if (!targetUserId) return jsonError(400, 'invalid_target')
+    const denied = await denyGraduateTargetIfNeeded(auth, targetUserId)
+    if (denied) return denied
 
     const result = await inspectAdminCoachingSessionPreviousDayIntegration({
       targetUserId,
@@ -280,6 +326,8 @@ export async function POST(request: Request) {
     const targetUserId =
       typeof body.targetUserId === 'string' ? body.targetUserId.trim() : ''
     if (!targetUserId) return jsonError(400, 'invalid_target')
+    const denied = await denyGraduateTargetIfNeeded(auth, targetUserId)
+    if (denied) return denied
 
     const result = await sendAdminCoachingSessionPreviousDayIntegrationTest({
       adminUserId: auth.userId,
@@ -422,6 +470,9 @@ export async function POST(request: Request) {
   }
 
   if (action === 'class-schedule-dry-run') {
+    if (!auth.isSuperAdmin) {
+      return jsonError(403, 'super_admin_required')
+    }
     const result = await runAdminClassScheduleDeliveryDryRun({ adminUserId: auth.userId })
     if (!result.ok) {
       if (result.code === 'rate_limited') {
@@ -452,6 +503,11 @@ export async function POST(request: Request) {
   }
   if (!targetUserId) {
     return jsonError(400, 'invalid_target')
+  }
+
+  {
+    const denied = await denyGraduateTargetIfNeeded(auth, targetUserId)
+    if (denied) return denied
   }
 
   const category =

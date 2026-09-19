@@ -27,7 +27,7 @@ export const ADMIN_HAMBURGER_ITEMS = [
   { href: '/admin/students', label: '生徒一覧' },
   { href: '/admin/study-daily', label: '毎日管理' },
   { href: '/admin/schedule', label: 'スケジュール' },
-  { href: '/admin/class-schedule', label: '既卒生 授業予定' },
+  { href: '/admin/class-schedule', label: '既卒生 授業予定', superAdminOnly: true },
   { href: '/admin/quizzes', label: '小テスト' },
   { href: '/admin/coaching', label: 'コーチング' },
   { href: '/admin/bookshelf', label: '本棚' },
@@ -37,5 +37,16 @@ export const ADMIN_HAMBURGER_ITEMS = [
   { href: '/admin/faq', label: 'FAQ管理' },
   { href: '/admin/tags', label: 'タグ管理' },
   { href: '/admin/notifications', label: '通知運用' },
+  { href: '/admin/privileges', label: '管理者権限', superAdminOnly: true },
   { href: '/admin/profile', label: 'プロフィール' },
 ] as const
+
+export type AdminHamburgerItem = (typeof ADMIN_HAMBURGER_ITEMS)[number] & {
+  superAdminOnly?: boolean
+}
+
+export function getAdminHamburgerItems(isSuperAdmin: boolean): HamburgerMenuItem[] {
+  return ADMIN_HAMBURGER_ITEMS.filter(
+    (item) => !('superAdminOnly' in item && item.superAdminOnly) || isSuperAdmin,
+  ).map(({ href, label }) => ({ href, label }))
+}

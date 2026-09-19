@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { requireAdminOrRedirect } from '@/lib/class-schedule/access'
+import { requireSuperAdminOrRedirect } from '@/lib/class-schedule/access'
 import {
   fetchClassScheduleDaysPaginated,
 } from '@/lib/class-schedule/queries'
@@ -20,7 +20,7 @@ export default async function AdminClassSchedulePage({
 }: {
   searchParams: Promise<{ upcomingPage?: string; pastPage?: string }>
 }) {
-  await requireAdminOrRedirect()
+  await requireSuperAdminOrRedirect()
   const params = await searchParams
   const todayKey = getJstDateKey()
 

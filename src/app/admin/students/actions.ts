@@ -1,6 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import {
+  assertAdminCanAccessStudent,
+  requireAdminAccess,
+} from '@/lib/auth/admin-access'
 import { createClient } from '@/lib/supabase/server'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
 import { parseFullNameKana } from '@/lib/profiles/full-name-kana'
@@ -21,29 +25,12 @@ function parseSubjects(formData: FormData): string[] {
   return EXAM_SUBJECTS.filter((subject) => formData.get(`subject_${subject}`) === 'on')
 }
 
-async function assertAdmin(): Promise<string | null> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return 'ログインが必要です'
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle<{ role: string }>()
-
-  if (profile?.role !== 'admin') return '管理者権限が必要です'
-  return null
-}
-
 export async function updateStudentProfileByAdmin(
   _prev: AdminStudentProfileActionState,
   formData: FormData,
 ): Promise<AdminStudentProfileActionState> {
-  const authError = await assertAdmin()
-  if (authError) return { error: authError }
+  const access = await requireAdminAccess()
+  if (!access.ok) return { error: access.error }
 
   const studentId = String(formData.get('studentId') ?? '').trim()
   const fullName = String(formData.get('fullName') ?? '').trim()
@@ -55,6 +42,9 @@ export async function updateStudentProfileByAdmin(
 
   if (!studentId) return { error: '生徒が指定されていません' }
   if (!fullName) return { error: '氏名を入力してください' }
+
+  const canAccess = await assertAdminCanAccessStudent(studentId, access)
+  if (!canAccess.ok) return { error: canAccess.error }
 
   // Existing students: empty kana clears to null (optional field).
   const kanaParsed = parseFullNameKana(fullNameKanaRaw, { required: false })
@@ -69,7 +59,7 @@ export async function updateStudentProfileByAdmin(
     .maybeSingle<{ id: string; role: string; student_code: string | null }>()
 
   if (!student || student.role !== 'student') {
-    return { error: '生徒が見つかりません' }
+    return { error: '対象が見つかりません' }
   }
 
   if (!studentCode) {

@@ -1,6 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import {
+  filterGraduatesFromStudentIds,
+  requireAdminAccess,
+} from '@/lib/auth/admin-access'
 import { createClient } from '@/lib/supabase/server'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
 import {
@@ -16,20 +20,17 @@ export type ScheduleActionState = {
 }
 
 async function assertAdmin(): Promise<string | null> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return 'ログインが必要です'
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle<{ role: string }>()
-
-  if (profile?.role !== 'admin') return '管理者権限が必要です'
+  const access = await requireAdminAccess()
+  if (!access.ok) return access.error
   return null
+}
+
+async function resolveTargetStudentIds(
+  formData: FormData,
+): Promise<{ error: string } | { studentIds: string[] }> {
+  const parsed = await parseStudentIds(formData)
+  if (!Array.isArray(parsed)) return parsed
+  return { studentIds: parsed }
 }
 
 function revalidateSchedulePaths() {
@@ -50,8 +51,13 @@ function parseReturnOn(formData: FormData, examType: ExamScheduleType): string |
   return raw || null
 }
 
-function parseStudentIds(formData: FormData): string[] {
-  return formData.getAll('targetStudentIds').map(String).filter(Boolean)
+async function parseStudentIds(formData: FormData): Promise<string[] | { error: string }> {
+  const access = await requireAdminAccess()
+  if (!access.ok) return { error: access.error }
+  return filterGraduatesFromStudentIds(
+    formData.getAll('targetStudentIds').map(String).filter(Boolean),
+    access,
+  )
 }
 
 async function syncExamScheduleStudents(
@@ -185,7 +191,9 @@ export async function createExamSchedule(
   const scheduledOn = String(formData.get('scheduledOn') ?? '').trim()
   const returnOn = parseReturnOn(formData, examType)
   const note = String(formData.get('note') ?? '').trim()
-  const studentIds = parseStudentIds(formData)
+  const targets = await resolveTargetStudentIds(formData)
+  if ('error' in targets) return { error: targets.error }
+  const studentIds = targets.studentIds
 
   if (!title || !scheduledOn) {
     return { error: 'タイトルと受験日は必須です' }
@@ -256,7 +264,9 @@ export async function updateExamSchedule(
   const scheduledOn = String(formData.get('scheduledOn') ?? '').trim()
   const returnOn = parseReturnOn(formData, examType)
   const note = String(formData.get('note') ?? '').trim()
-  const studentIds = parseStudentIds(formData)
+  const targets = await resolveTargetStudentIds(formData)
+  if ('error' in targets) return { error: targets.error }
+  const studentIds = targets.studentIds
 
   if (!id || !title || !scheduledOn) {
     return { error: '必須項目を入力してください' }
@@ -348,7 +358,9 @@ export async function createHomeworkTask(
   const subject = String(formData.get('subject') ?? '').trim()
   const dueDate = String(formData.get('dueDate') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim()
-  const studentIds = parseStudentIds(formData)
+  const targets = await resolveTargetStudentIds(formData)
+  if ('error' in targets) return { error: targets.error }
+  const studentIds = targets.studentIds
 
   if (!title || !subject || !dueDate) {
     return { error: 'タイトル・教科・期日は必須です' }
@@ -396,7 +408,9 @@ export async function updateHomeworkTask(
   const subject = String(formData.get('subject') ?? '').trim()
   const dueDate = String(formData.get('dueDate') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim()
-  const studentIds = parseStudentIds(formData)
+  const targets = await resolveTargetStudentIds(formData)
+  if ('error' in targets) return { error: targets.error }
+  const studentIds = targets.studentIds
 
   if (!id || !title || !subject || !dueDate) {
     return { error: '必須項目を入力してください' }
@@ -447,7 +461,9 @@ export async function createApplicationTask(
   const title = String(formData.get('title') ?? '').trim()
   const dueDate = String(formData.get('dueDate') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim()
-  const studentIds = parseStudentIds(formData)
+  const targets = await resolveTargetStudentIds(formData)
+  if ('error' in targets) return { error: targets.error }
+  const studentIds = targets.studentIds
 
   if (!title || !dueDate) {
     return { error: 'タイトルと期日は必須です' }
@@ -489,7 +505,9 @@ export async function updateApplicationTask(
   const title = String(formData.get('title') ?? '').trim()
   const dueDate = String(formData.get('dueDate') ?? '').trim()
   const description = String(formData.get('description') ?? '').trim()
-  const studentIds = parseStudentIds(formData)
+  const targets = await resolveTargetStudentIds(formData)
+  if ('error' in targets) return { error: targets.error }
+  const studentIds = targets.studentIds
 
   if (!id || !title || !dueDate) {
     return { error: '必須項目を入力してください' }

@@ -10,6 +10,11 @@ import {
 } from '@/lib/google-calendar/events'
 import { notifyStudentOfAdminCoachingReschedule } from '@/lib/coaching/admin-reschedule-notify'
 import { syncCalendarAfterCoachingReschedule } from '@/lib/coaching/reschedule-calendar-sync'
+import {
+  assertAdminCanAccessStudent,
+  requireAdminAccess,
+  type AdminAccessOk,
+} from '@/lib/auth/admin-access'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
@@ -349,25 +354,35 @@ export async function toggleCoachingSlot(formData: FormData): Promise<CoachingAc
   return applyCoachingSlotOpenState(coachId, [{ slotDate, startTime }], open)
 }
 
-async function getCoachingBookingWriteClient(studentId: string) {
+async function getCoachingBookingWriteClient(studentId: string): Promise<
+  | { ok: true; client: NonNullable<ReturnType<typeof createAdminClient>> | Awaited<ReturnType<typeof createClient>> }
+  | { ok: false; error: string }
+> {
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user || user.id === studentId) return supabase
+  if (!user) return { ok: false, error: 'ログインが必要です' }
+  if (user.id === studentId) return { ok: true, client: supabase }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle<{ role: string }>()
+  const access = await requireAdminAccess()
+  if (!access.ok) return { ok: false, error: access.error }
 
-  if (profile?.role === 'admin') {
-    const admin = createAdminClient()
-    if (admin) return admin
-  }
+  const canAccess = await assertAdminCanAccessStudent(studentId, access)
+  if (!canAccess.ok) return { ok: false, error: canAccess.error }
 
-  return supabase
+  const admin = createAdminClient()
+  return { ok: true, client: admin ?? supabase }
+}
+
+async function assertAdminCanAccessStudentId(
+  studentId: string,
+): Promise<{ ok: true; access: AdminAccessOk } | { ok: false; error: string }> {
+  const access = await requireAdminAccess()
+  if (!access.ok) return { ok: false, error: access.error }
+  const canAccess = await assertAdminCanAccessStudent(studentId, access)
+  if (!canAccess.ok) return { ok: false, error: canAccess.error }
+  return { ok: true, access }
 }
 
 async function performCoachingBooking(
@@ -376,7 +391,9 @@ async function performCoachingBooking(
   studentNote: string,
 ): Promise<{ error?: string; bookingId?: string }> {
   const supabase = await createClient()
-  const writeClient = await getCoachingBookingWriteClient(studentId)
+  const writeGate = await getCoachingBookingWriteClient(studentId)
+  if (!writeGate.ok) return { error: writeGate.error }
+  const writeClient = writeGate.client
 
   const { data: slot, error: slotError } = await supabase
     .from('coaching_slots')
@@ -498,9 +515,6 @@ export async function adminBookCoachingSlot(
   _prev: CoachingActionState,
   formData: FormData,
 ): Promise<CoachingActionState> {
-  const authError = await assertAdmin()
-  if (authError) return { error: authError }
-
   const studentId = String(formData.get('studentId') ?? '').trim()
   const slotId = String(formData.get('slotId') ?? '').trim()
   const studentNote = String(formData.get('studentNote') ?? '').trim()
@@ -508,16 +522,8 @@ export async function adminBookCoachingSlot(
   if (!studentId) return { error: '生徒を選択してください' }
   if (!slotId) return { error: '予約枠を選択してください' }
 
-  const supabase = await createClient()
-  const { data: studentProfile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', studentId)
-    .maybeSingle<{ role: string }>()
-
-  if (studentProfile?.role !== 'student') {
-    return { error: '有効な生徒が選択されていません' }
-  }
+  const gate = await assertAdminCanAccessStudentId(studentId)
+  if (!gate.ok) return { error: gate.error }
 
   const result = await performCoachingBooking(studentId, slotId, studentNote)
   if (result.error) return { error: result.error }
@@ -740,6 +746,9 @@ export async function adminRetryCoachingRescheduleSideEffects(
     return { error: '実施前の予約のみ通知を再送できます' }
   }
 
+  const gate = await assertAdminCanAccessStudentId(booking.student_id)
+  if (!gate.ok) return { error: gate.error }
+
   const coachRel = booking.coaching_coaches
   const coachName = Array.isArray(coachRel)
     ? coachRel[0]?.name ?? '担当講師'
@@ -911,8 +920,12 @@ async function performCoachingReschedule(params: {
   const observedRevision = booking.schedule_revision
   const bookedAt = new Date().toISOString()
 
-  const writeDb =
-    params.actor === 'admin' ? await getCoachingBookingWriteClient(booking.student_id) : supabase
+  const writeDbGate =
+    params.actor === 'admin'
+      ? await getCoachingBookingWriteClient(booking.student_id)
+      : { ok: true as const, client: supabase }
+  if (!writeDbGate.ok) return { error: writeDbGate.error }
+  const writeDb = writeDbGate.client
 
   // Optimistic concurrency: observed slot + revision + scheduled must still hold.
   const { data: updated, error: updateError } = await writeDb
@@ -1005,6 +1018,11 @@ async function cancelCoachingBookingAction(formData: FormData): Promise<Coaching
     return { error: '権限がありません' }
   }
 
+  if (isAdmin) {
+    const gate = await assertAdminCanAccessStudentId(booking.student_id)
+    if (!gate.ok) return { error: gate.error }
+  }
+
   if (booking.status === 'cancelled') return { success: true }
 
   if (!isAdmin && new Date(booking.coaching_slots.starts_at) <= new Date()) {
@@ -1045,8 +1063,6 @@ export async function markCoachingBookingNoShow(formData: FormData): Promise<voi
 }
 
 async function completeCoachingBookingAction(formData: FormData): Promise<CoachingActionState> {
-  if (await assertAdmin()) return { error: '管理者権限が必要です' }
-
   const bookingId = String(formData.get('bookingId') ?? '').trim()
   if (!bookingId) return { error: '予約が指定されていません' }
 
@@ -1055,9 +1071,12 @@ async function completeCoachingBookingAction(formData: FormData): Promise<Coachi
     .from('coaching_bookings')
     .select('student_id')
     .eq('id', bookingId)
-    .maybeSingle()
+    .maybeSingle<{ student_id: string }>()
 
   if (fetchError || !booking) return { error: '予約が見つかりません' }
+
+  const gate = await assertAdminCanAccessStudentId(booking.student_id)
+  if (!gate.ok) return { error: gate.error }
 
   const { error } = await supabase
     .from('coaching_bookings')
@@ -1073,20 +1092,21 @@ async function completeCoachingBookingAction(formData: FormData): Promise<Coachi
 }
 
 async function markCoachingBookingNoShowAction(formData: FormData): Promise<CoachingActionState> {
-  if (await assertAdmin()) return { error: '管理者権限が必要です' }
-
   const bookingId = String(formData.get('bookingId') ?? '').trim()
   if (!bookingId) return { error: '予約が指定されていません' }
 
   const supabase = await createClient()
   const { data: booking, error: fetchError } = await supabase
     .from('coaching_bookings')
-    .select('id, status')
+    .select('id, status, student_id')
     .eq('id', bookingId)
-    .maybeSingle<{ id: string; status: string }>()
+    .maybeSingle<{ id: string; status: string; student_id: string }>()
 
   if (fetchError || !booking) return { error: '予約が見つかりません' }
   if (booking.status !== 'scheduled') return { error: '無断欠席にできる予約ではありません' }
+
+  const gate = await assertAdminCanAccessStudentId(booking.student_id)
+  if (!gate.ok) return { error: gate.error }
 
   const { error } = await supabase
     .from('coaching_bookings')
@@ -1103,15 +1123,6 @@ export async function createCoachingKarteEntry(
   _prev: CoachingActionState,
   formData: FormData,
 ): Promise<CoachingActionState> {
-  const authError = await assertAdmin()
-  if (authError) return { error: authError }
-
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { error: 'ログインが必要です' }
-
   const studentId = String(formData.get('studentId') ?? '').trim()
   const bookingId = String(formData.get('bookingId') ?? '').trim()
   const coachId = String(formData.get('coachId') ?? '').trim()
@@ -1123,6 +1134,11 @@ export async function createCoachingKarteEntry(
   if (!sessionDate) return { error: '面談日を入力してください' }
   if (!discussionContent) return { error: '話した内容を入力してください' }
 
+  const gate = await assertAdminCanAccessStudentId(studentId)
+  if (!gate.ok) return { error: gate.error }
+
+  const supabase = await createClient()
+
   const { error } = await supabase.from('coaching_karte_entries').insert({
     student_id: studentId,
     booking_id: bookingId || null,
@@ -1130,7 +1146,7 @@ export async function createCoachingKarteEntry(
     session_date: sessionDate,
     discussion_content: discussionContent,
     next_commitments: nextCommitments,
-    created_by: user.id,
+    created_by: gate.access.profile.id,
   })
 
   if (error) {
@@ -1152,9 +1168,6 @@ export async function updateCoachingKarteEntry(
   _prev: CoachingActionState,
   formData: FormData,
 ): Promise<CoachingActionState> {
-  const authError = await assertAdmin()
-  if (authError) return { error: authError }
-
   const entryId = String(formData.get('entryId') ?? '').trim()
   const studentId = String(formData.get('studentId') ?? '').trim()
   const coachId = String(formData.get('coachId') ?? '').trim()
@@ -1166,6 +1179,9 @@ export async function updateCoachingKarteEntry(
   if (!studentId) return { error: '生徒が指定されていません' }
   if (!sessionDate) return { error: '面談日を入力してください' }
   if (!discussionContent) return { error: '話した内容を入力してください' }
+
+  const gate = await assertAdminCanAccessStudentId(studentId)
+  if (!gate.ok) return { error: gate.error }
 
   const supabase = await createClient()
   const { error } = await supabase
@@ -1198,14 +1214,14 @@ export async function deleteCoachingKarteEntry(
   _prev: CoachingActionState,
   formData: FormData,
 ): Promise<CoachingActionState> {
-  const authError = await assertAdmin()
-  if (authError) return { error: authError }
-
   const entryId = String(formData.get('entryId') ?? '').trim()
   const studentId = String(formData.get('studentId') ?? '').trim()
 
   if (!entryId) return { error: '記録が指定されていません' }
   if (!studentId) return { error: '生徒が指定されていません' }
+
+  const gate = await assertAdminCanAccessStudentId(studentId)
+  if (!gate.ok) return { error: gate.error }
 
   const supabase = await createClient()
   const { error } = await supabase

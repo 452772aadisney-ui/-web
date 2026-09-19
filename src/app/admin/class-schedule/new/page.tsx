@@ -1,4 +1,4 @@
-import { requireAdminOrRedirect } from '@/lib/class-schedule/access'
+import { requireSuperAdminOrRedirect } from '@/lib/class-schedule/access'
 import { AdminPageShell } from '@/components/layout/AdminPageShell'
 import { AdminNarrowContent } from '@/components/layout/AdminNarrowContent'
 import { AdminClassScheduleCreateForm } from '@/components/class-schedule/AdminClassScheduleCreateForm'
@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 export default async function AdminClassScheduleNewPage() {
-  await requireAdminOrRedirect()
+  await requireSuperAdminOrRedirect()
 
   return (
     <AdminPageShell

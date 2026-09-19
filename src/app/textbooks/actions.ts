@@ -2,6 +2,11 @@
 
 import { evaluateAndUnlockAchievements, type UnlockedAchievement } from '@/lib/achievements/unlock'
 import { revalidatePath } from 'next/cache'
+import {
+  assertAdminCanAccessStudent,
+  filterGraduatesFromStudentIds,
+  requireAdminAccess,
+} from '@/lib/auth/admin-access'
 import { createClient } from '@/lib/supabase/server'
 import { TEXTBOOK_USAGE_TAGS } from '@/lib/constants/textbook-tags'
 import {
@@ -87,9 +92,17 @@ async function assertCanManageStudent(studentId: string): Promise<string | null>
   const actor = await getActorContext()
   if ('error' in actor) return actor.error
 
-  if (actor.userId !== studentId && !actor.isAdmin) {
+  if (actor.userId === studentId) return null
+
+  if (!actor.isAdmin) {
     return '権限がありません'
   }
+
+  const access = await requireAdminAccess()
+  if (!access.ok) return access.error
+
+  const canAccess = await assertAdminCanAccessStudent(studentId, access)
+  if (!canAccess.ok) return canAccess.error
 
   return null
 }
@@ -162,11 +175,11 @@ export async function createTextbooksForStudents(
   _prevState: TextbookActionState,
   formData: FormData,
 ): Promise<TextbookActionState> {
-  const actor = await getActorContext()
-  if ('error' in actor) return { error: actor.error }
-  if (!actor.isAdmin) return { error: '権限がありません' }
+  const access = await requireAdminAccess()
+  if (!access.ok) return { error: access.error }
 
-  const studentIds = parseStudentIds(formData)
+  const rawStudentIds = parseStudentIds(formData)
+  const studentIds = await filterGraduatesFromStudentIds(rawStudentIds, access)
   const catalogId = String(formData.get('catalogId') ?? '').trim()
   const supabase = await createClient()
 
@@ -215,7 +228,7 @@ export async function createTextbooksForStudents(
     start_date: startDate,
     planned_end_date: plannedEndDate,
     catalog_id: catalogId || null,
-    registered_by: actor.userId,
+    registered_by: access.profile.id,
     is_seen_by_student: false,
   }))
 

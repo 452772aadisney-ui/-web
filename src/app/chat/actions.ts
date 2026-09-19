@@ -11,6 +11,11 @@ import {
   normalizeChatMessageKind,
 } from '@/lib/chat/message-kind'
 import { createClient } from '@/lib/supabase/server'
+import {
+  ADMIN_STUDENT_NOT_FOUND,
+  assertAdminCanAccessStudent,
+  requireAdminAccess,
+} from '@/lib/auth/admin-access'
 import { fetchStudentsWithoutCoachingBookingThisWeek } from '@/lib/coaching/queries'
 import { fetchChatMessagesPage } from '@/lib/chat/queries'
 import type { ChatMessage, ChatMessageKind } from '@/types/chat'
@@ -81,15 +86,11 @@ export async function sendChatMessage(
   }
 
   if (profile.role === 'admin') {
-    const { data: student } = await supabase
-      .from('profiles')
-      .select('id, role')
-      .eq('id', studentId)
-      .maybeSingle<{ id: string; role: UserRole }>()
+    const access = await requireAdminAccess()
+    if (!access.ok) return { error: access.error }
 
-    if (!student || student.role !== 'student') {
-      return { error: '送信先の生徒が見つかりません' }
-    }
+    const canAccess = await assertAdminCanAccessStudent(studentId, access)
+    if (!canAccess.ok) return { error: ADMIN_STUDENT_NOT_FOUND }
   } else if (profile.role !== 'student') {
     return { error: '送信権限がありません' }
   }

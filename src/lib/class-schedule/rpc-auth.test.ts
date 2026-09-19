@@ -7,14 +7,14 @@ import {
 } from '@/lib/class-schedule/rpc-auth'
 
 vi.mock('@/lib/class-schedule/access', () => ({
-  requireAdmin: vi.fn(),
+  requireSuperAdmin: vi.fn(),
 }))
 
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: vi.fn(),
 }))
 
-import { requireAdmin } from '@/lib/class-schedule/access'
+import { requireSuperAdmin } from '@/lib/class-schedule/access'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 describe('isWithinSessionLimit', () => {
@@ -48,24 +48,24 @@ describe('CLASS_SCHEDULE_WRITE_RPC_SIGNATURES', () => {
 
 describe('requireAdminClassScheduleRpcClient', () => {
   beforeEach(() => {
-    vi.mocked(requireAdmin).mockReset()
+    vi.mocked(requireSuperAdmin).mockReset()
     vi.mocked(createAdminClient).mockReset()
   })
 
-  it('rejects when requireAdmin fails (student / unauthenticated)', async () => {
-    vi.mocked(requireAdmin).mockResolvedValue({
+  it('rejects when requireSuperAdmin fails (regular admin / student)', async () => {
+    vi.mocked(requireSuperAdmin).mockResolvedValue({
       ok: false,
-      error: '管理者権限が必要です',
+      error: '大管理者権限が必要です',
     })
     const result = await requireAdminClassScheduleRpcClient()
-    expect(result).toEqual({ ok: false, error: '管理者権限が必要です' })
+    expect(result).toEqual({ ok: false, error: '大管理者権限が必要です' })
     expect(createAdminClient).not.toHaveBeenCalled()
   })
 
   it('rejects when admin client is unavailable', async () => {
-    vi.mocked(requireAdmin).mockResolvedValue({
+    vi.mocked(requireSuperAdmin).mockResolvedValue({
       ok: true,
-      profile: { id: 'admin-1', role: 'admin' } as never,
+      profile: { id: 'admin-1', role: 'admin', is_super_admin: true } as never,
     })
     vi.mocked(createAdminClient).mockReturnValue(null)
     const result = await requireAdminClassScheduleRpcClient()
@@ -74,17 +74,17 @@ describe('requireAdminClassScheduleRpcClient', () => {
     expect(result.error).toBe('授業予定の保存に失敗しました')
   })
 
-  it('returns admin client only after admin gate', async () => {
+  it('returns admin client only after super-admin gate', async () => {
     const admin = { rpc: vi.fn() }
-    vi.mocked(requireAdmin).mockResolvedValue({
+    vi.mocked(requireSuperAdmin).mockResolvedValue({
       ok: true,
-      profile: { id: 'admin-1', role: 'admin' } as never,
+      profile: { id: 'admin-1', role: 'admin', is_super_admin: true } as never,
     })
     vi.mocked(createAdminClient).mockReturnValue(admin as never)
     const result = await requireAdminClassScheduleRpcClient()
     expect(result).toEqual({
       ok: true,
-      profile: { id: 'admin-1', role: 'admin' },
+      profile: { id: 'admin-1', role: 'admin', is_super_admin: true },
       admin,
     })
   })

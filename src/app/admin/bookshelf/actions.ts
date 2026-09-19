@@ -1,6 +1,10 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import {
+  filterGraduatesFromStudentIds,
+  requireAdminAccess,
+} from '@/lib/auth/admin-access'
 import { createClient } from '@/lib/supabase/server'
 import { TEXTBOOK_USAGE_TAGS } from '@/lib/constants/textbook-tags'
 import {
@@ -14,23 +18,10 @@ export type CatalogActionState = {
   success?: boolean
 }
 
-async function assertAdmin(): Promise<{ userId: string } | { error: string }> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) return { error: 'ログインが必要です' }
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle<{ role: string }>()
-
-  if (profile?.role !== 'admin') return { error: '権限がありません' }
-
-  return { userId: user.id }
+async function requireBookshelfAdmin() {
+  const access = await requireAdminAccess()
+  if (!access.ok) return { ok: false as const, error: access.error }
+  return { ok: true as const, access }
 }
 
 function parseSubjects(formData: FormData): string[] {
@@ -99,6 +90,7 @@ function revalidateCatalogPaths(studentIds: string[] = []) {
 
 async function syncStudentAssignments(input: {
   userId: string
+  isSuperAdmin: boolean
   selectedStudentIds: string[]
   textbookIdsByStudent: Record<string, string>
   catalogId: string | null
@@ -108,9 +100,13 @@ async function syncStudentAssignments(input: {
   usageTags: string[]
   metadata?: ReturnType<typeof parseCatalogMetadata>}): Promise<CatalogActionState> {
   const supabase = await createClient()
-  const selectedStudentIds = input.selectedStudentIds
-  const currentStudentIds = Object.keys(input.textbookIdsByStudent)
-  const toAdd = selectedStudentIds.filter((id) => !currentStudentIds.includes(id))
+  const selectedStudentIds = await filterGraduatesFromStudentIds(input.selectedStudentIds, {
+    isSuperAdmin: input.isSuperAdmin,
+  })
+  const currentStudentIds = await filterGraduatesFromStudentIds(
+    Object.keys(input.textbookIdsByStudent),
+    { isSuperAdmin: input.isSuperAdmin },
+  )
   const toRemove = currentStudentIds.filter((id) => !selectedStudentIds.includes(id))
   const affectedStudentIds = [...new Set([...selectedStudentIds, ...currentStudentIds])]
 
@@ -178,8 +174,8 @@ export async function createTextbookCatalogEntry(
   _prev: CatalogActionState,
   formData: FormData,
 ): Promise<CatalogActionState> {
-  const auth = await assertAdmin()
-  if ('error' in auth) return { error: auth.error }
+  const auth = await requireBookshelfAdmin()
+  if (!auth.ok) return { error: auth.error }
 
   const supabase = await createClient()
   const name = String(formData.get('name') ?? '').trim()
@@ -202,7 +198,7 @@ export async function createTextbookCatalogEntry(
     usage_tags: usageTags,
     visibility,
     is_searchable: true,
-    created_by: auth.userId,
+    created_by: auth.access.profile.id,
     ...metadata,
   })
 
@@ -216,8 +212,8 @@ export async function updateAdminBookshelfCatalogEntry(
   _prev: CatalogActionState,
   formData: FormData,
 ): Promise<CatalogActionState> {
-  const auth = await assertAdmin()
-  if ('error' in auth) return { error: auth.error }
+  const auth = await requireBookshelfAdmin()
+  if (!auth.ok) return { error: auth.error }
 
   const supabase = await createClient()
   const catalogId = String(formData.get('catalogId') ?? '').trim()
@@ -269,7 +265,7 @@ export async function updateAdminBookshelfCatalogEntry(
         usage_tags: usageTags,
         visibility,
         is_searchable: false,
-        created_by: auth.userId,
+        created_by: auth.access.profile.id,
       })
       .select('id')
       .single<{ id: string }>()
@@ -291,7 +287,8 @@ export async function updateAdminBookshelfCatalogEntry(
   }
 
   return syncStudentAssignments({
-    userId: auth.userId,
+    userId: auth.access.profile.id,
+    isSuperAdmin: auth.access.isSuperAdmin,
     selectedStudentIds,
     textbookIdsByStudent,
     catalogId: targetCatalogId,
@@ -307,8 +304,8 @@ export async function updateAdminBookshelfStudentEntry(
   _prev: CatalogActionState,
   formData: FormData,
 ): Promise<CatalogActionState> {
-  const auth = await assertAdmin()
-  if ('error' in auth) return { error: auth.error }
+  const auth = await requireBookshelfAdmin()
+  if (!auth.ok) return { error: auth.error }
 
   const supabase = await createClient()
   const name = String(formData.get('name') ?? '').trim()
@@ -340,7 +337,7 @@ export async function updateAdminBookshelfStudentEntry(
         usage_tags: usageTags,
         visibility,
         is_searchable: false,
-        created_by: auth.userId,
+        created_by: auth.access.profile.id,
         ...metadata,
       })
       .select('id')
@@ -351,7 +348,8 @@ export async function updateAdminBookshelfStudentEntry(
   }
 
   return syncStudentAssignments({
-    userId: auth.userId,
+    userId: auth.access.profile.id,
+    isSuperAdmin: auth.access.isSuperAdmin,
     selectedStudentIds,
     textbookIdsByStudent,
     catalogId,
@@ -367,8 +365,8 @@ export async function updateTextbookCatalogVisibility(
   catalogId: string,
   visibility: TextbookCatalogVisibility,
 ): Promise<CatalogActionState> {
-  const auth = await assertAdmin()
-  if ('error' in auth) return { error: auth.error }
+  const auth = await requireBookshelfAdmin()
+  if (!auth.ok) return { error: auth.error }
 
   if (visibility !== 'public' && visibility !== 'private') {
     return { error: '公開設定が不正です' }
@@ -387,8 +385,8 @@ export async function updateTextbookCatalogVisibility(
 }
 
 export async function deleteTextbookCatalogEntry(catalogId: string): Promise<CatalogActionState> {
-  const auth = await assertAdmin()
-  if ('error' in auth) return { error: auth.error }
+  const auth = await requireBookshelfAdmin()
+  if (!auth.ok) return { error: auth.error }
 
   const supabase = await createClient()
   const { error } = await supabase.from('textbook_catalog').delete().eq('id', catalogId)
@@ -402,8 +400,8 @@ export async function deleteTextbookCatalogEntry(catalogId: string): Promise<Cat
 export async function deleteAdminBookshelfStudentEntry(
   textbookIdsJson: string,
 ): Promise<CatalogActionState> {
-  const auth = await assertAdmin()
-  if ('error' in auth) return { error: auth.error }
+  const auth = await requireBookshelfAdmin()
+  if (!auth.ok) return { error: auth.error }
 
   let textbookIdsByStudent: Record<string, string> = {}
   try {
@@ -413,8 +411,13 @@ export async function deleteAdminBookshelfStudentEntry(
   }
 
   const supabase = await createClient()
-  const ids = Object.values(textbookIdsByStudent)
-  const studentIds = Object.keys(textbookIdsByStudent)
+  const studentIds = await filterGraduatesFromStudentIds(
+    Object.keys(textbookIdsByStudent),
+    auth.access,
+  )
+  const ids = studentIds
+    .map((studentId) => textbookIdsByStudent[studentId])
+    .filter(Boolean)
 
   if (ids.length === 0) return { error: '削除対象がありません' }
 

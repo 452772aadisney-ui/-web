@@ -5,9 +5,10 @@ import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
 import { getJstDateKey } from '@/lib/study/dates'
 import { fetchIncompleteStudyFeedbackCount } from '@/lib/study/feedback-queries'
 import {
-  ADMIN_HAMBURGER_ITEMS,
+  getAdminHamburgerItems,
   type HamburgerMenuItem,
 } from '@/components/layout/menu-items'
+import { isSuperAdminProfile } from '@/lib/auth/admin-access'
 import { ADMIN_SHELL_MAX_WIDTH_CLASS } from '@/components/layout/admin-layout'
 import { BackButton } from '@/components/layout/BackButton'
 import { HamburgerMenu } from '@/components/layout/HamburgerMenu'
@@ -35,7 +36,9 @@ export async function AdminPageShell({
     ? await fetchIncompleteStudyFeedbackCount(getJstDateKey())
     : 0
 
-  const menuItems: HamburgerMenuItem[] = ADMIN_HAMBURGER_ITEMS.map((item) => {
+  const menuItems: HamburgerMenuItem[] = getAdminHamburgerItems(
+    isSuperAdminProfile(profile),
+  ).map((item) => {
     const next: HamburgerMenuItem = { ...item }
     if (item.href === '/admin/chat') {
       next.badgeCount = unreadChatCount

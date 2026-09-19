@@ -95,20 +95,26 @@ const menuActions: Array<{
 interface AdminMyPageActionsProps {
   unreadChatCount?: number
   incompleteStudyFeedbackCount?: number
+  isSuperAdmin?: boolean
 }
 
 export function AdminMyPageActions({
   unreadChatCount = 0,
   incompleteStudyFeedbackCount = 0,
+  isSuperAdmin = false,
 }: AdminMyPageActionsProps) {
   const badgeCounts: Record<AdminMenuBadgeKey, number> = {
     studyDaily: incompleteStudyFeedbackCount,
     chat: unreadChatCount,
   }
 
+  const actions = menuActions.filter(
+    (action) => action.href !== '/admin/class-schedule' || isSuperAdmin,
+  )
+
   return (
     <div className="grid grid-cols-3 gap-3 md:grid-cols-4 md:gap-4">
-      {menuActions.map((action) => (
+      {actions.map((action) => (
         <MyPageIconMenuButton
           key={action.href}
           href={action.href}

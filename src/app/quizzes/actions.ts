@@ -2,6 +2,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { getPersonName } from '@/lib/auth/display-name'
+import {
+  assertAdminCanAccessStudent,
+  filterGraduatesFromStudentIds,
+  requireAdminAccess,
+} from '@/lib/auth/admin-access'
 import { createQuizStudentCalendarEvent } from '@/lib/google-calendar/events'
 import { createClient } from '@/lib/supabase/server'
 import { EXAM_SUBJECTS } from '@/lib/constants/subjects'
@@ -11,22 +16,10 @@ export type QuizActionState = {
   success?: boolean
 }
 
-async function assertAdmin(): Promise<{ error: string } | { userId: string }> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) return { error: 'ログインが必要です' }
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle<{ role: string }>()
-
-  if (profile?.role !== 'admin') return { error: '管理者権限が必要です' }
-  return { userId: user.id }
+async function assertAdmin() {
+  const access = await requireAdminAccess()
+  if (!access.ok) return { error: access.error as string }
+  return access
 }
 
 function revalidateQuizPaths(studentId?: string) {
@@ -182,7 +175,7 @@ export async function registerStudentQuizzes(
   const maxScore = parseMaxScore(String(formData.get('maxScore') ?? ''))
   const scheduledOn = String(formData.get('scheduledOn') ?? '').trim()
   const note = String(formData.get('note') ?? '').trim()
-  const studentIds = parseStudentIds(formData)
+  const studentIds = await filterGraduatesFromStudentIds(parseStudentIds(formData), auth)
 
   if (!title) return { error: 'タイトルを入力してください' }
   if (subject && !EXAM_SUBJECTS.includes(subject as (typeof EXAM_SUBJECTS)[number])) {
@@ -240,6 +233,9 @@ export async function saveQuizResult(
 
   if (!assignmentId || !studentId) return { error: '保存対象が不正です' }
 
+  const canAccess = await assertAdminCanAccessStudent(studentId, auth)
+  if (!canAccess.ok) return { error: canAccess.error }
+
   const supabase = await createClient()
 
   const [{ data: assignment }, { data: membership }] = await Promise.all([
@@ -290,7 +286,7 @@ export async function saveQuizResult(
     score,
     max_score: master.max_score,
     note,
-    recorded_by: auth.userId,
+    recorded_by: auth.profile.id,
     recorded_at: new Date().toISOString(),
   }
 

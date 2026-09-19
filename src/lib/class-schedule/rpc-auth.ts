@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireAdmin, type AccessResult } from '@/lib/class-schedule/access'
+import { requireSuperAdmin } from '@/lib/class-schedule/access'
 import type { Profile } from '@/types/database'
 
 /** DB create RPC と同じ上限（053 create_class_schedule_day_with_sessions）。 */
@@ -13,18 +13,17 @@ export type ClassScheduleAdminRpcClient = {
 
 /**
  * Write RPCs are service_role-only. Call only after this helper:
- * 1) getUser + profiles.role=admin via requireAdmin
+ * 1) getUser + profiles.is_super_admin via requireSuperAdmin
  * 2) Admin Client (service role) — never user-scoped anon client
  */
 export async function requireAdminClassScheduleRpcClient(): Promise<
   ClassScheduleAdminRpcClient | { ok: false; error: string }
 > {
-  const access: AccessResult = await requireAdmin()
+  const access = await requireSuperAdmin()
   if (!access.ok) return { ok: false, error: access.error }
 
   const admin = createAdminClient()
   if (!admin) {
-    // Safe diagnostic only — never log keys or profile ids.
     console.error('[class-schedule] create failed:', {
       op: 'class_schedule_create',
       phase: 'admin_client',
@@ -48,7 +47,7 @@ export function isWithinSessionLimit(count: number): boolean {
   )
 }
 
-/** Signatures used in verify SQL — keep in sync with 057. */
+/** Signatures used in verify SQL — keep in sync with 057/065. */
 export const CLASS_SCHEDULE_WRITE_RPC_SIGNATURES = {
   create:
     'public.create_class_schedule_day_with_sessions(date,text,text,jsonb,uuid)',

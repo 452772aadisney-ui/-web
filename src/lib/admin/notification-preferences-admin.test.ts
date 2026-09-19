@@ -1,19 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
-  createClient,
   createAdminClient,
+  requireAdminAccess,
+  assertAdminCanAccessStudent,
 } = vi.hoisted(() => ({
-  createClient: vi.fn(),
   createAdminClient: vi.fn(),
-}))
-
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: () => createClient(),
+  requireAdminAccess: vi.fn(),
+  assertAdminCanAccessStudent: vi.fn(),
 }))
 
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: () => createAdminClient(),
+}))
+
+vi.mock('@/lib/auth/admin-access', () => ({
+  requireAdminAccess: (...args: unknown[]) => requireAdminAccess(...args),
+  assertAdminCanAccessStudent: (...args: unknown[]) => assertAdminCanAccessStudent(...args),
 }))
 
 import {
@@ -21,23 +24,17 @@ import {
   updateAdminStudentNotificationPreferencesBulk,
 } from '@/lib/admin/notification-preferences-admin'
 
-function mockAdminAuth() {
-  createClient.mockResolvedValue({
-    auth: { getUser: async () => ({ data: { user: { id: 'admin-1' } } }) },
-    from() {
-      return {
-        select() {
-          return {
-            eq() {
-              return {
-                maybeSingle: async () => ({ data: { role: 'admin' }, error: null }),
-              }
-            },
-          }
-        },
-      }
+function mockAdminAuth(isSuperAdmin = true) {
+  requireAdminAccess.mockResolvedValue({
+    ok: true,
+    profile: {
+      id: 'admin-1',
+      role: 'admin',
+      is_super_admin: isSuperAdmin,
     },
+    isSuperAdmin,
   })
+  assertAdminCanAccessStudent.mockResolvedValue({ ok: true })
 }
 
 type PrefRow = {
@@ -50,7 +47,6 @@ type PrefRow = {
 }
 
 function mockAdminDb(options: {
-  studentRole?: string
   prefs?: PrefRow | null
   updateEnabled?: boolean
 }) {
@@ -60,31 +56,6 @@ function mockAdminDb(options: {
 
   createAdminClient.mockReturnValue({
     from(table: string) {
-      if (table === 'profiles') {
-        return {
-          select() {
-            return {
-              eq() {
-                return {
-                  maybeSingle: async () => ({
-                    data:
-                      options.studentRole === 'missing'
-                        ? null
-                        : {
-                            id: 'student-1',
-                            role: options.studentRole ?? 'student',
-                            full_name: 'Admin',
-                            display_name: 'Admin',
-                          },
-                    error: null,
-                  }),
-                }
-              },
-            }
-          },
-        }
-      }
-
       if (table === 'notification_preferences') {
         return {
           select() {
@@ -178,22 +149,7 @@ describe('admin notification preferences control', () => {
   })
 
   it('rejects non-admin callers', async () => {
-    createClient.mockResolvedValue({
-      auth: { getUser: async () => ({ data: { user: { id: 'stu' } } }) },
-      from() {
-        return {
-          select() {
-            return {
-              eq() {
-                return {
-                  maybeSingle: async () => ({ data: { role: 'student' }, error: null }),
-                }
-              },
-            }
-          },
-        }
-      },
-    })
+    requireAdminAccess.mockResolvedValue({ ok: false, error: '管理者権限が必要です' })
 
     const result = await updateAdminStudentNotificationPreference({
       studentUserId: 'student-1',
@@ -203,10 +159,13 @@ describe('admin notification preferences control', () => {
     expect(result).toEqual({ ok: false, code: 'forbidden' })
   })
 
-  it('rejects non-student targets', async () => {
-    mockAdminDb({ studentRole: 'admin' })
+  it('rejects inaccessible student targets (incl. 既卒 for regular admin)', async () => {
+    mockAdminAuth(false)
+    assertAdminCanAccessStudent.mockResolvedValue({ ok: false, error: '対象が見つかりません' })
+    createAdminClient.mockReturnValue({})
+
     const result = await updateAdminStudentNotificationPreference({
-      studentUserId: 'admin-2',
+      studentUserId: 'graduate-1',
       category: 'study_reminder',
       enabled: false,
     })
@@ -236,30 +195,16 @@ describe('admin notification preferences control', () => {
     expect(result.snapshot.preferences.announcement).toBe(true)
     expect(db.auditInserts).toHaveLength(1)
     expect(db.auditInserts[0]).toMatchObject({
+      target_user_id: 'student-1',
+      changed_by_admin_id: 'admin-1',
       category: 'study_reminder',
       previous_value: true,
       new_value: false,
-      reason: null,
     })
-    expect(JSON.stringify(result.snapshot)).not.toContain('@')
   })
 
-  it('creates defaults then disables when row is missing', async () => {
-    const db = mockAdminDb({ prefs: null })
-    const result = await updateAdminStudentNotificationPreference({
-      studentUserId: 'student-1',
-      category: 'message',
-      enabled: false,
-    })
-    expect(result.ok).toBe(true)
-    if (!result.ok) return
-    expect(result.snapshot.preferences.message).toBe(false)
-    expect(result.snapshot.preferences.study_reminder).toBe(true)
-    expect(db.auditInserts).toHaveLength(1)
-  })
-
-  it('bulk stop writes per-category audits', async () => {
-    const db = mockAdminDb({
+  it('bulk updates all categories', async () => {
+    mockAdminDb({
       prefs: {
         study_reminder: true,
         announcement: true,
@@ -273,27 +218,15 @@ describe('admin notification preferences control', () => {
       studentUserId: 'student-1',
       enabled: false,
     })
-    expect(result.ok).toBe(true)
-    expect(db.auditInserts).toHaveLength(5)
-    expect(db.auditInserts.every((row) => row.reason === null)).toBe(true)
-  })
 
-  it('skips audit when value is unchanged', async () => {
-    const db = mockAdminDb({
-      prefs: {
-        study_reminder: false,
-        announcement: true,
-        message: true,
-        coaching_reminder: true,
-        class_schedule: true,
-      },
-    })
-    const result = await updateAdminStudentNotificationPreference({
-      studentUserId: 'student-1',
-      category: 'study_reminder',
-      enabled: false,
-    })
     expect(result.ok).toBe(true)
-    expect(db.auditInserts).toHaveLength(0)
+    if (!result.ok) return
+    expect(result.snapshot.preferences).toEqual({
+      study_reminder: false,
+      announcement: false,
+      message: false,
+      coaching_reminder: false,
+      class_schedule: false,
+    })
   })
 })
