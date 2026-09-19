@@ -6,6 +6,7 @@ import type { StudyDayFeedback } from '@/lib/study/feedback'
 import {
   hasReadableStudyFeedbackComment,
   isStudyFeedbackUnread,
+  normalizeFeedbackCommentForRead,
 } from '@/lib/study/feedback-unread'
 import { getTotalPages, parsePageParam } from '@/lib/pagination'
 
@@ -155,7 +156,7 @@ export const fetchUnreadStudyFeedbackDates = cache(
           .eq('student_id', studentId),
         supabase
           .from('study_day_feedback_reads')
-          .select('feedback_id')
+          .select('feedback_id, comment_at_read')
           .eq('student_id', studentId),
       ])
 
@@ -163,14 +164,22 @@ export const fetchUnreadStudyFeedbackDates = cache(
       return new Set()
     }
 
-    const readIds = new Set((readRows ?? []).map((row) => row.feedback_id as string))
+    const commentAtReadById = new Map(
+      (readRows ?? []).map((row) => [
+        row.feedback_id as string,
+        String(row.comment_at_read ?? ''),
+      ]),
+    )
     const unreadDates = new Set<string>()
 
     for (const row of feedbackRows ?? []) {
+      const id = row.id as string
+      const hasRow = commentAtReadById.has(id)
       if (
         isStudyFeedbackUnread({
           comment: row.comment as string,
-          hasRead: readIds.has(row.id as string),
+          commentAtRead: hasRow ? commentAtReadById.get(id)! : null,
+          hasRead: hasRow,
         })
       ) {
         unreadDates.add(row.studied_on as string)
@@ -200,20 +209,28 @@ export async function listUnreadStudyFeedbackIds(
         .eq('student_id', studentId),
       supabase
         .from('study_day_feedback_reads')
-        .select('feedback_id')
+        .select('feedback_id, comment_at_read')
         .eq('student_id', studentId),
     ])
 
   if (feedbackError || readError) return []
 
-  const readIds = new Set((readRows ?? []).map((row) => row.feedback_id as string))
+  const commentAtReadById = new Map(
+    (readRows ?? []).map((row) => [
+      row.feedback_id as string,
+      String(row.comment_at_read ?? ''),
+    ]),
+  )
   return (feedbackRows ?? [])
-    .filter((row) =>
-      isStudyFeedbackUnread({
+    .filter((row) => {
+      const id = row.id as string
+      const hasRow = commentAtReadById.has(id)
+      return isStudyFeedbackUnread({
         comment: row.comment as string,
-        hasRead: readIds.has(row.id as string),
-      }),
-    )
+        commentAtRead: hasRow ? commentAtReadById.get(id)! : null,
+        hasRead: hasRow,
+      })
+    })
     .map((row) => row.id as string)
 }
 
@@ -235,7 +252,7 @@ export async function fetchStudyFeedbackCommentsPage(params: {
         .order('updated_at', { ascending: false }),
       supabase
         .from('study_day_feedback_reads')
-        .select('feedback_id')
+        .select('feedback_id, comment_at_read')
         .eq('student_id', params.studentId),
     ])
 
@@ -250,19 +267,28 @@ export async function fetchStudyFeedbackCommentsPage(params: {
     }
   }
 
-  const readIds = new Set((readRows ?? []).map((row) => row.feedback_id as string))
+  const commentAtReadById = new Map(
+    (readRows ?? []).map((row) => [
+      row.feedback_id as string,
+      String(row.comment_at_read ?? ''),
+    ]),
+  )
 
   const withComment = ((feedbackRows ?? []) as StudyDayFeedback[]).filter((row) =>
     hasReadableStudyFeedbackComment(row.comment),
   )
 
-  const annotated = withComment.map((row) => ({
-    feedback: row,
-    isUnread: isStudyFeedbackUnread({
-      comment: row.comment,
-      hasRead: readIds.has(row.id),
-    }),
-  }))
+  const annotated = withComment.map((row) => {
+    const hasRow = commentAtReadById.has(row.id)
+    return {
+      feedback: row,
+      isUnread: isStudyFeedbackUnread({
+        comment: row.comment,
+        commentAtRead: hasRow ? commentAtReadById.get(row.id)! : null,
+        hasRead: hasRow,
+      }),
+    }
+  })
 
   const unreadCount = annotated.filter((row) => row.isUnread).length
   const filtered =
@@ -365,6 +391,7 @@ export async function markStudyFeedbackAsRead(
       feedback_id: feedback.id,
       student_id: studentId,
       read_at: new Date().toISOString(),
+      comment_at_read: normalizeFeedbackCommentForRead(feedback.comment),
     },
     { onConflict: 'feedback_id,student_id' },
   )

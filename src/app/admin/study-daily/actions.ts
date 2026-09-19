@@ -73,7 +73,12 @@ export async function upsertStudyDayFeedback(
     .eq('studied_on', studiedOn)
     .maybeSingle<{ id: string }>()
 
-  if (savedFeedback) {
+  const previousComment = existing?.comment ?? ''
+  const commentChanged =
+    String(previousComment).trim() !== comment.trim() || !existing
+
+  // Only clear reads when the readable comment text changes (not stamp-only re-save).
+  if (savedFeedback && commentChanged) {
     await supabase
       .from('study_day_feedback_reads')
       .delete()
@@ -81,7 +86,7 @@ export async function upsertStudyDayFeedback(
       .eq('student_id', studentId)
   }
 
-  if (comment.trim()) {
+  if (comment.trim() && commentChanged) {
     await notifyStudyFeedbackReceived({
       studentId,
       studiedOn,
