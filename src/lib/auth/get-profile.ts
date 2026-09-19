@@ -12,6 +12,7 @@ function normalizeProfile(raw: Profile): Profile {
     display_name: raw.display_name ?? raw.full_name ?? '',
     target_schools: raw.target_schools ?? [],
     subjects: raw.subjects ?? [],
+    is_super_admin: Boolean(raw.is_super_admin),
   }
 }
 
@@ -31,6 +32,7 @@ async function ensureUserProfile(user: {
       full_name: fullName,
       display_name: fullName,
       role: 'student',
+      is_super_admin: false,
     })
     .select('*')
     .single<Profile>()

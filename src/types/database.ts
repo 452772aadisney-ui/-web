@@ -34,6 +34,8 @@ export interface Profile {
   subjects: string[]
   student_code: string | null
   role: UserRole
+  /** Present after migration 064. Treat missing as false. */
+  is_super_admin?: boolean
   admin_since: string | null
   faq_intro_seen_at: string | null
   last_accessed_at: string | null
