@@ -367,29 +367,57 @@ describe('processCoachingReminderNewPath', () => {
                   }
                 }
                 return {
+                  maybeSingle: async () => ({
+                    data: {
+                      status: 'failed',
+                      error_code: 'smtp',
+                      http_status: 500,
+                      created_at: '2026-09-05T12:00:00.000Z',
+                      sent_at: null,
+                    },
+                    error: null,
+                  }),
                   eq: () => ({
                     maybeSingle: async () => ({ data: { id: 'd-email' }, error: null }),
                   }),
                 }
               },
             }),
-            update: () => ({
-              eq: async () => ({ error: null }),
-            }),
+            update: () => {
+              const chain: Record<string, unknown> = {}
+              const self = () => chain
+              chain.eq = self
+              chain.neq = self
+              chain.in = async () => ({ error: null })
+              // terminal thenable when awaited after eq/neq/in
+              chain.then = (resolve: (v: unknown) => unknown) =>
+                Promise.resolve(resolve({ error: null }))
+              return chain
+            },
           }
         }
         if (table === 'notification_delivery_attempts') {
           return {
-            select: () => ({
-              eq: () => ({
-                order: () => ({
-                  limit: () => ({
-                    maybeSingle: async () => ({ data: { attempt_no: 1 }, error: null }),
+            select: (_cols?: string, opts?: { count?: string; head?: boolean }) => {
+              if (opts?.head) {
+                return {
+                  eq: async () => ({ count: 0, error: null }),
+                }
+              }
+              return {
+                eq: () => ({
+                  order: () => ({
+                    limit: () => ({
+                      maybeSingle: async () => ({ data: { attempt_no: 1 }, error: null }),
+                    }),
                   }),
                 }),
-              }),
-            }),
-            insert: () => {
+              }
+            },
+            insert: (row: Record<string, unknown>) => {
+              if (row.attempt_no === 1 && !row.claim_token) {
+                return Promise.resolve({ error: null })
+              }
               attemptInserts += 1
               return {
                 select: () => ({
