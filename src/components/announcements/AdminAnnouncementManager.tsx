@@ -38,11 +38,13 @@ function AnnouncementForm({
   announcement,
   allTags,
   students,
+  isSuperAdmin,
   onCancel,
 }: {
   announcement?: AnnouncementWithTargets
   allTags: StudentTag[]
   students: Array<{ id: string; full_name: string; display_name: string }>
+  isSuperAdmin: boolean
   onCancel?: () => void
 }) {
   const action = announcement ? updateAnnouncement : createAnnouncement
@@ -74,6 +76,7 @@ function AnnouncementForm({
         allTags={allTags}
         students={students}
         announcement={announcement}
+        isSuperAdmin={isSuperAdmin}
       />
       {state.error && (
         <p className="text-sm text-error" role="alert">
@@ -150,6 +153,7 @@ interface AdminAnnouncementManagerProps {
   reads: AnnouncementRead[]
   allTags: StudentTag[]
   profileTagAssignments: Array<{ profile_id: string; tag_id: string }>
+  isSuperAdmin?: boolean
 }
 
 export function AdminAnnouncementManager({
@@ -158,6 +162,7 @@ export function AdminAnnouncementManager({
   reads,
   allTags,
   profileTagAssignments,
+  isSuperAdmin = false,
 }: AdminAnnouncementManagerProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -172,7 +177,7 @@ export function AdminAnnouncementManager({
 
   return (
     <div className="space-y-4">
-      <AnnouncementForm allTags={allTags} students={students} />
+      <AnnouncementForm allTags={allTags} students={students} isSuperAdmin={isSuperAdmin} />
       {announcements.length > 0 && (
         <ul className="divide-y divide-border rounded-lg border border-border">
           {announcements.map((announcement) => {
@@ -191,6 +196,7 @@ export function AdminAnnouncementManager({
                     announcement={announcement}
                     allTags={allTags}
                     students={students}
+                    isSuperAdmin={isSuperAdmin}
                     onCancel={() => setEditingId(null)}
                   />
                 ) : (

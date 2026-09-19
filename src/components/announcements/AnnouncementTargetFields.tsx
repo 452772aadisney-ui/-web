@@ -12,17 +12,21 @@ interface AnnouncementTargetFieldsProps {
   allTags: StudentTag[]
   students: Array<{ id: string; full_name: string; display_name: string }>
   announcement?: AnnouncementWithTargets
+  /** When false,「全員」means enrolled-only (在学生). */
+  isSuperAdmin?: boolean
 }
 
 export function AnnouncementTargetFields({
   allTags,
   students,
   announcement,
+  isSuperAdmin = false,
 }: AnnouncementTargetFieldsProps) {
   const grouped = groupTagsByCategory(allTags)
   const selectedTags = new Set(announcement?.target_tag_ids ?? [])
   const selectedStudents = new Set(announcement?.target_student_ids ?? [])
   const targetAll = announcement?.target_all ?? false
+  const allLabel = isSuperAdmin ? '全員に配信' : '在学生全員に配信'
 
   return (
     <fieldset className="space-y-4 rounded-lg border border-border bg-background p-4">
@@ -35,7 +39,7 @@ export function AnnouncementTargetFields({
           defaultChecked={targetAll}
           className="h-4 w-4 rounded border-border text-primary"
         />
-        全員に配信
+        {allLabel}
       </label>
 
       {allTags.length > 0 && (
@@ -84,7 +88,9 @@ export function AnnouncementTargetFields({
       )}
 
       <p className="text-xs text-muted">
-        「全員」以外の場合、タグと個別指定は合算されます（どちらかに該当すれば配信）。
+        {isSuperAdmin
+          ? '「全員」以外の場合、タグと個別指定は合算されます（どちらかに該当すれば配信）。'
+          : '通常管理者の「在学生全員」は既卒を含みません。既卒を含む対象は指定できません。'}
       </p>
     </fieldset>
   )

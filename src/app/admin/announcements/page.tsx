@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { getDashboardPathForRole } from '@/lib/auth/routes'
+import { isSuperAdminProfile } from '@/lib/auth/admin-access'
 import { AdminPageShell } from '@/components/layout/AdminPageShell'
 import { AdminNarrowContent } from '@/components/layout/AdminNarrowContent'
 import { AdminAnnouncementManager } from '@/components/announcements/AdminAnnouncementManager'
@@ -11,6 +12,7 @@ import {
 } from '@/lib/announcements/queries'
 import { fetchAllProfileTagAssignments, fetchStudentTags } from '@/lib/tags/queries'
 import { fetchStudentList } from '@/lib/study/queries'
+import { KISOTSU_GRADE_TAG } from '@/lib/tags/grade-order'
 
 /** Soft budget for createAnnouncement notification fan-out (paced email). */
 export const maxDuration = 60
@@ -25,6 +27,7 @@ export default async function AdminAnnouncementsPage({
   if (!profile) redirect('/login')
   if (profile.role !== 'admin') redirect(getDashboardPathForRole('student'))
 
+  const superAdmin = isSuperAdminProfile(profile)
   const params = await searchParams
   const pageNumber = params.announcementsPage ? parseInt(params.announcementsPage, 10) : 1
 
@@ -39,18 +42,26 @@ export default async function AdminAnnouncementsPage({
     fetchAllProfileTagAssignments(),
   ])
 
+  const tagsForForm = superAdmin
+    ? allTags
+    : allTags.filter((t) => !(t.category === '学年' && t.name === KISOTSU_GRADE_TAG))
+
   return (
     <AdminPageShell title="お知らせ管理" backHref="/admin" backLabel="管理画面">
       <AdminNarrowContent>
         <p className="mb-6 text-sm text-muted">
           お知らせを投稿し、タグまたは個別生徒で配信先を指定できます。既読・未読状況は配信対象者のみ集計されます。
+          {!superAdmin
+            ? ' 通常管理者の「全員」は在学生のみで、既卒を含むお知らせは一覧に表示されません。'
+            : null}
         </p>
         <AdminAnnouncementManager
           announcements={pageResult.announcements}
           students={students}
           reads={reads}
-          allTags={allTags}
+          allTags={tagsForForm}
           profileTagAssignments={profileTagAssignments}
+          isSuperAdmin={superAdmin}
         />
         <Pagination
           currentPage={pageResult.page}

@@ -2,6 +2,8 @@ import {
   buildProfileTagMap,
   resolveAnnouncementAudience,
 } from '@/lib/announcements/audience'
+import { normalizeAudienceScope } from '@/lib/announcements/audience-scope'
+import { fetchAllKisotsuStudentIds } from '@/lib/auth/admin-access'
 import {
   ANNOUNCEMENT_STUDENT_CONCURRENCY,
   announcementSoftDeadlineMs,
@@ -97,41 +99,57 @@ async function fetchProfileTagAssignments(): Promise<
 
 /**
  * Resolve announcement audience to delivery candidates (role=student via fetchStudentList).
- * Preserves existing target_all / tag / individual targeting (OR union).
+ * Preserves targeting. audience_scope=enrolled excludes 既卒.
  */
 export async function resolveAnnouncementCandidates(input: {
   announcementId: string
   title: string
   targetAll: boolean
+  audienceScope?: string | null
   tagIds: string[]
   studentIds: string[]
 }): Promise<AnnouncementCandidate[]> {
-  const [students, tagAssignments] = await Promise.all([
+  const scope = normalizeAudienceScope(input.audienceScope, input.targetAll)
+  const [students, tagAssignments, kisotsuIds] = await Promise.all([
     fetchStudentList(),
     fetchProfileTagAssignments(),
+    scope === 'enrolled' ? fetchAllKisotsuStudentIds() : Promise.resolve([] as string[]),
   ])
+  const kisotsuSet = new Set(kisotsuIds)
 
-  const studentSummaries = students.map((student) => ({
+  const studentSummaries = students
+    .filter((student) => (scope === 'enrolled' ? !kisotsuSet.has(student.id) : true))
+    .map((student) => ({
+      id: student.id,
+      full_name: student.full_name,
+      display_name: student.display_name,
+    }))
+
+  const allSummaries = students.map((student) => ({
     id: student.id,
     full_name: student.full_name,
     display_name: student.display_name,
   }))
 
-  const audience = resolveAnnouncementAudience(
-    {
-      id: input.announcementId,
-      title: input.title,
-      body: '',
-      created_at: '',
-      updated_at: '',
-      created_by: null,
-      target_all: input.targetAll,
-      target_tag_ids: input.tagIds,
-      target_student_ids: input.studentIds,
-    },
-    studentSummaries,
-    buildProfileTagMap(tagAssignments),
-  )
+  const audience =
+    scope === 'enrolled'
+      ? studentSummaries
+      : resolveAnnouncementAudience(
+          {
+            id: input.announcementId,
+            title: input.title,
+            body: '',
+            created_at: '',
+            updated_at: '',
+            created_by: null,
+            target_all: scope === 'all',
+            audience_scope: scope,
+            target_tag_ids: input.tagIds,
+            target_student_ids: input.studentIds,
+          },
+          allSummaries,
+          buildProfileTagMap(tagAssignments),
+        )
 
   const audienceIds = new Set(audience.map((s) => s.id))
   return students
@@ -344,6 +362,7 @@ export async function deliverAnnouncementNotifications(input: {
   announcementId: string
   title: string
   targetAll: boolean
+  audienceScope?: string | null
   tagIds: string[]
   studentIds: string[]
   env?: NodeJS.ProcessEnv | Record<string, string | undefined>

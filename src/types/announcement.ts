@@ -4,6 +4,8 @@ export interface Announcement {
   body: string
   created_by: string | null
   target_all: boolean
+  /** Present after migration 065. */
+  audience_scope?: 'all' | 'enrolled' | 'targeted'
   created_at: string
   updated_at: string
 }

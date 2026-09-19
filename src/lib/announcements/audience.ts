@@ -45,7 +45,12 @@ export function formatAnnouncementTargetSummary(
   tags: StudentTag[],
   students: StudentSummary[],
 ): string {
-  if (announcement.target_all) return '全員'
+  const scope =
+    announcement.audience_scope ??
+    (announcement.target_all ? 'all' : 'targeted')
+
+  if (scope === 'all' || announcement.target_all) return '全員'
+  if (scope === 'enrolled') return '在学生全員'
 
   const parts: string[] = []
 

@@ -6,30 +6,22 @@ import {
   announcementPublishSuccessMessage,
   deliverAnnouncementNotifications,
 } from '@/lib/announcements/announcement-orchestrator'
+import {
+  normalizeAudienceScope,
+  regularAdminMayManageAudienceScope,
+  targetingIncludesKisotsu,
+  type AnnouncementAudienceScope,
+} from '@/lib/announcements/audience-scope'
+import {
+  fetchAllKisotsuStudentIds,
+  requireAdminAccess,
+} from '@/lib/auth/admin-access'
 import { createClient } from '@/lib/supabase/server'
 
 export type AnnouncementActionState = {
   error?: string
   success?: boolean
-  /** Safe toast copy when success (announcement already saved). */
   successMessage?: string
-}
-
-async function assertAdmin(): Promise<string | null> {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return 'ログインが必要です'
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle<{ role: string }>()
-
-  if (profile?.role !== 'admin') return '管理者権限が必要です'
-  return null
 }
 
 function revalidateAnnouncementPaths() {
@@ -60,17 +52,54 @@ function parseTargeting(formData: FormData): {
   return { targetAll, tagIds, studentIds }
 }
 
+async function resolveAudienceScopeForAdmin(params: {
+  isSuperAdmin: boolean
+  targetAll: boolean
+  tagIds: string[]
+  studentIds: string[]
+}): Promise<{ scope: AnnouncementAudienceScope; error?: string }> {
+  if (params.targetAll) {
+    if (params.isSuperAdmin) return { scope: 'all' }
+    return { scope: 'enrolled' }
+  }
+
+  const supabase = await createClient()
+  const { data: tags } = await supabase
+    .from('student_tags')
+    .select('id, category, name')
+    .in('id', params.tagIds.length > 0 ? params.tagIds : ['00000000-0000-0000-0000-000000000000'])
+
+  const kisotsuIds = new Set(await fetchAllKisotsuStudentIds())
+  if (
+    targetingIncludesKisotsu({
+      tagIds: params.tagIds,
+      studentIds: params.studentIds,
+      tags: (tags ?? []) as Array<{ id: string; category: string; name: string }>,
+      kisotsuStudentIds: kisotsuIds,
+    })
+  ) {
+    if (!params.isSuperAdmin) {
+      return {
+        scope: 'targeted',
+        error: '既卒生を含む配信先は指定できません',
+      }
+    }
+  }
+
+  return { scope: 'targeted' }
+}
+
 async function saveAnnouncementTargets(
   supabase: Awaited<ReturnType<typeof createClient>>,
   announcementId: string,
-  targetAll: boolean,
+  scope: AnnouncementAudienceScope,
   tagIds: string[],
   studentIds: string[],
 ) {
   await supabase.from('announcement_target_tags').delete().eq('announcement_id', announcementId)
   await supabase.from('announcement_target_students').delete().eq('announcement_id', announcementId)
 
-  if (targetAll) return
+  if (scope === 'all' || scope === 'enrolled') return
 
   if (tagIds.length > 0) {
     await supabase.from('announcement_target_tags').insert(
@@ -92,8 +121,8 @@ export async function createAnnouncement(
   _prev: AnnouncementActionState,
   formData: FormData,
 ): Promise<AnnouncementActionState> {
-  const authError = await assertAdmin()
-  if (authError) return { error: authError }
+  const access = await requireAdminAccess()
+  if (!access.ok) return { error: access.error }
 
   const title = String(formData.get('title') ?? '').trim()
   const body = String(formData.get('body') ?? '').trim()
@@ -102,6 +131,17 @@ export async function createAnnouncement(
   if (!title) return { error: 'タイトルを入力してください' }
   if (!body) return { error: '本文を入力してください' }
   if (targetError) return { error: targetError }
+
+  const resolved = await resolveAudienceScopeForAdmin({
+    isSuperAdmin: access.isSuperAdmin,
+    targetAll,
+    tagIds,
+    studentIds,
+  })
+  if (resolved.error) return { error: resolved.error }
+  if (!access.isSuperAdmin && !regularAdminMayManageAudienceScope(resolved.scope)) {
+    return { error: 'この配信範囲は大管理者のみ設定できます' }
+  }
 
   const supabase = await createClient()
   const {
@@ -114,41 +154,36 @@ export async function createAnnouncement(
       title,
       body,
       created_by: user?.id ?? null,
-      target_all: targetAll,
+      audience_scope: resolved.scope,
+      target_all: resolved.scope === 'all',
     })
     .select('id')
     .single()
 
   if (error || !created) return { error: '投稿に失敗しました' }
 
-  await saveAnnouncementTargets(supabase, created.id, targetAll, tagIds, studentIds)
+  await saveAnnouncementTargets(
+    supabase,
+    created.id,
+    resolved.scope,
+    tagIds,
+    studentIds,
+  )
 
   let successMessage = 'お知らせを公開しました'
   try {
     const summary = await deliverAnnouncementNotifications({
       announcementId: created.id,
       title,
-      targetAll,
+      targetAll: resolved.scope === 'all',
+      audienceScope: resolved.scope,
       tagIds,
       studentIds,
     })
     successMessage = announcementPublishSuccessMessage(summary)
-    console.info('[announcements] notification summary:', {
-      mode: summary.mode,
-      recipients: summary.recipients,
-      pushSucceeded: summary.pushSucceeded,
-      emailFallbackSucceeded: summary.emailFallbackSucceeded,
-      preferenceDisabled: summary.preferenceDisabled,
-      cannotDeliver: summary.cannotDeliver,
-      failed: summary.failed,
-      legacyEmailSentCount: summary.legacyEmailSentCount,
-      timedOut: summary.timedOut,
-      durationMs: summary.durationMs,
-    })
   } catch {
     console.error('[announcements] notification failed after save')
-    successMessage =
-      'お知らせは公開しましたが、通知を送信できませんでした'
+    successMessage = 'お知らせは公開しましたが、通知を送信できませんでした'
   }
 
   revalidateAnnouncementPaths()
@@ -159,8 +194,8 @@ export async function updateAnnouncement(
   _prev: AnnouncementActionState,
   formData: FormData,
 ): Promise<AnnouncementActionState> {
-  const authError = await assertAdmin()
-  if (authError) return { error: authError }
+  const access = await requireAdminAccess()
+  if (!access.ok) return { error: access.error }
 
   const id = String(formData.get('id') ?? '').trim()
   const title = String(formData.get('title') ?? '').trim()
@@ -171,14 +206,43 @@ export async function updateAnnouncement(
   if (targetError) return { error: targetError }
 
   const supabase = await createClient()
+  const { data: existing } = await supabase
+    .from('announcements')
+    .select('id, audience_scope, target_all')
+    .eq('id', id)
+    .maybeSingle<{ id: string; audience_scope: string | null; target_all: boolean }>()
+
+  if (!existing) return { error: '対象が見つかりません' }
+
+  const existingScope = normalizeAudienceScope(existing.audience_scope, existing.target_all)
+  if (!access.isSuperAdmin && !regularAdminMayManageAudienceScope(existingScope)) {
+    return { error: '対象が見つかりません' }
+  }
+
+  const resolved = await resolveAudienceScopeForAdmin({
+    isSuperAdmin: access.isSuperAdmin,
+    targetAll,
+    tagIds,
+    studentIds,
+  })
+  if (resolved.error) return { error: resolved.error }
+  if (!access.isSuperAdmin && !regularAdminMayManageAudienceScope(resolved.scope)) {
+    return { error: 'この配信範囲は大管理者のみ設定できます' }
+  }
+
   const { error } = await supabase
     .from('announcements')
-    .update({ title, body, target_all: targetAll })
+    .update({
+      title,
+      body,
+      audience_scope: resolved.scope,
+      target_all: resolved.scope === 'all',
+    })
     .eq('id', id)
 
   if (error) return { error: '更新に失敗しました' }
 
-  await saveAnnouncementTargets(supabase, id, targetAll, tagIds, studentIds)
+  await saveAnnouncementTargets(supabase, id, resolved.scope, tagIds, studentIds)
 
   revalidateAnnouncementPaths()
   revalidatePath(`/dashboard/announcements/${id}`)
@@ -186,11 +250,13 @@ export async function updateAnnouncement(
 }
 
 export async function deleteAnnouncement(formData: FormData): Promise<void> {
-  if (await assertAdmin()) return
+  const access = await requireAdminAccess()
+  if (!access.ok) return
   const id = String(formData.get('id') ?? '')
   if (!id) return
 
   const supabase = await createClient()
+  // RLS blocks unmanaged announcements for regular admins
   await supabase.from('announcements').delete().eq('id', id)
   revalidateAnnouncementPaths()
 }
