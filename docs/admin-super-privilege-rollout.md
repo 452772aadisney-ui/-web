@@ -8,7 +8,10 @@
 | 用途 | パス |
 |------|------|
 | 移行 064 | `supabase/migrations/064_admin_super_privilege.sql` |
-| 移行 065 | `supabase/migrations/065_admin_graduate_scope_rls.sql` |
+| 移行 066 | `supabase/migrations/066_admin_privilege_audit_hardening.sql` |
+| 066 precheck | `supabase/queries/066_admin_privilege_audit_hardening_precheck.sql` |
+| 066 verify | `supabase/queries/066_admin_privilege_audit_hardening_verify.sql` |
+| 隔離検証（使い捨てDB） | `supabase/queries/066_admin_privilege_isolation_harness.sql` |
 | 064 precheck | `supabase/queries/064_admin_super_privilege_precheck.sql` |
 | 064 verify | `supabase/queries/064_admin_super_privilege_verify.sql` |
 | 065 precheck | `supabase/queries/065_admin_graduate_scope_rls_precheck.sql` |
@@ -30,10 +33,11 @@
    **UUID を明示指定。氏名・作成日時・role 順から推測しない。**
 5. **065 precheck**（read-only）→ 期待: 064 オブジェクト `PRESENT`、`audience_scope` は未適用なら `ABSENT`。
 6. **065 適用** → **065 verify**。
-7. **新アプリをデプロイ**（`isSuperAdmin` / `audience_scope=enrolled` / 授業予定の大管理者ゲート）。
-8. スモーク後、運用フリーズを解除。開いている管理画面は **リロード**。
+7. **066 precheck** → **066 適用** → **066 verify**（旧広いポリシー残存・DELETE保護・service_role message_kind）。
+8. **新アプリをデプロイ**（`isSuperAdmin` / `audience_scope=enrolled` / 授業予定の大管理者ゲート / comment_at_read 未読）。
+9. スモーク後、運用フリーズを解除。開いている管理画面は **リロード**。
 
-Rollback するときは **逆順**: アプリ戻し →（必要なら）065 DB rollback → 064 DB rollback。
+Rollback するときは **逆順**: アプリ戻し →（必要なら）066 → 065 → 064。
 
 ---
 
@@ -70,6 +74,18 @@ commit;
 
 以降の昇格・降格は `public.set_admin_super_privilege(target_id, make_super)` のみ（監査付き）。  
 **最後の大管理者は demote 不可**（関数・UPDATE トリガの両方で保護）。
+
+---
+
+## 最後の大管理者 — 保護対象と対象外
+
+| 操作 | 保護 |
+|------|------|
+| `set_admin_super_privilege` demote | あり（advisory lock + remaining count） |
+| profiles UPDATE で flag/role 剥がし | あり（同 lock） |
+| profiles DELETE / auth.users CASCADE | あり（066 `profiles_protect_last_super_delete`） |
+| Dashboard での Auth ユーザー削除 | 上記 DELETE トリガが発火すれば保護。トリガ無効化や物理バックアップ復元は対象外 |
+| bootstrap（トリガ DISABLE） | オーナー SQL のみ。通常クライアント不可 |
 
 ---
 
@@ -124,6 +140,7 @@ Cron・自動学習リマインダー等は管理者セッションに依存せ�
 - [ ] 064 verify: 全行 `PASS`（列・`is_super_admin()` / `is_kisotsu_student` / `admin_can_access_student` / トリガ / 監査表 RLS / profiles ポリシー）
 - [ ] bootstrap 後: `role=admin and is_super_admin` が **意図した人数**（通常まず 1）
 - [ ] 065 verify: `audience_scope`・制約・同期トリガ・お知らせ/生徒系/授業予定ポリシー・RPC が大管理者ゲート
+- [ ] 066 verify: stale broad ポリシーなし・DELETE 保護・service_role message_kind・comment_at_read
 - [ ] 学年タグ `既卒` が 1 件存在（precheck の INFO）
 
 ### アプリ / 権限（手動）
@@ -133,9 +150,11 @@ Cron・自動学習リマインダー等は管理者セッションに依存せ�
 - [ ] 一般管理者: お知らせ「在学生全員」(enrolled) は作成可、「全員(既卒含む)」は不可
 - [ ] 一般管理者: 既卒タグの付与/削除・授業予定 CRUD が拒否される
 - [ ] `set_admin_super_privilege` で最後の 1 人を demote すると例外になる
+- [ ] 最後の大管理者 profiles DELETE / Auth ユーザー削除が拒否される
+- [ ] フィードバック: 本文変更で再未読、同一本文再保存で再未読化しない
 
 ### カットオーバー運用
 
-- [ ] 未適用 migration を確認してから 064 → 065 → アプリの順
+- [ ] 未適用 migration を確認してから 062→063→064→bootstrap→065→066→アプリの順
 - [ ] bootstrap UUID を台帳に記録（推測禁止）
 - [ ] フリーズ告知 → 適用 → verify → デプロイ → リロード依頼 → フリーズ解除
