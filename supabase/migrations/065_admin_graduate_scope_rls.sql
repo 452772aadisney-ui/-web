@@ -215,7 +215,11 @@ create policy "chat_messages_select_admin"
 drop policy if exists "chat_messages_insert_admin" on public.chat_messages;
 create policy "chat_messages_insert_admin"
   on public.chat_messages for insert to authenticated
-  with check (public.is_admin() and public.admin_can_access_student(student_id));
+  with check (
+    public.is_admin()
+    and public.admin_can_access_student(student_id)
+    and sender_id = auth.uid()
+  );
 
 drop policy if exists "study_day_feedback_select" on public.study_day_feedback;
 create policy "study_day_feedback_select"
@@ -305,6 +309,8 @@ begin
 
   -- INSERT: super admin, or system/signup path (auth.uid() is null; e.g. handle_new_user).
   -- Authenticated non-super (including regular admin) cannot assign 既卒.
+  -- NOTE: bare auth.uid() IS NULL is not a client bypass — RLS has no anon INSERT
+  -- on profile_student_tags; only SECURITY DEFINER handle_new_user reaches this path.
   if tg_op = 'INSERT' and new_is_kisotsu
      and not public.is_super_admin()
      and auth.uid() is not null then
@@ -719,30 +725,5 @@ begin
   end if;
 end $$;
 
-do $$
-begin
-  if exists (
-    select 1 from information_schema.tables
-    where table_schema = 'public' and table_name = 'application_tasks'
-  ) then
-    execute $p$
-      drop policy if exists "application_tasks_select" on public.application_tasks;
-      create policy "application_tasks_select"
-        on public.application_tasks for select to authenticated
-        using (student_id = auth.uid() or public.admin_can_access_student(student_id));
-      drop policy if exists "application_tasks_insert_admin" on public.application_tasks;
-      create policy "application_tasks_insert_admin"
-        on public.application_tasks for insert to authenticated
-        with check (public.admin_can_access_student(student_id));
-      drop policy if exists "application_tasks_update_admin" on public.application_tasks;
-      create policy "application_tasks_update_admin"
-        on public.application_tasks for update to authenticated
-        using (public.admin_can_access_student(student_id))
-        with check (public.admin_can_access_student(student_id));
-      drop policy if exists "application_tasks_delete_admin" on public.application_tasks;
-      create policy "application_tasks_delete_admin"
-        on public.application_tasks for delete to authenticated
-        using (public.admin_can_access_student(student_id));
-    $p$;
-  end if;
-end $$;
+-- NOTE: Do NOT rewrite application_tasks here — that table is a shared catalog
+-- (no student_id). Student targeting lives on application_task_students (see 066).
