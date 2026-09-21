@@ -189,10 +189,13 @@ export async function addStudentsToExistingCourses(
   const skipped = Number(
     (data as { skipped_duplicate?: number } | null)?.skipped_duplicate ?? 0,
   )
+  const reactivated = Number(
+    (data as { reactivated?: number } | null)?.reactivated ?? 0,
+  )
 
   revalidatePath('/admin/class-schedule')
   revalidatePath('/admin/class-schedule/courses')
-  return { ok: true, inserted, skipped }
+  return { ok: true, inserted: inserted + reactivated, skipped }
 }
 
 export async function listKisotsuStudentsForCourseAdmin(): Promise<
@@ -245,4 +248,87 @@ export async function listCourseUnitsForScope(params: {
       seqNo: Number(row.seq_no),
     }),
   }))
+}
+
+export async function listAssignedStudentsForCourseUnit(
+  courseUnitId: string,
+): Promise<{ id: string; label: string }[]> {
+  const access = await requireSuperAdmin()
+  if (!access.ok) return []
+  const admin = createAdminClient()
+  if (!admin || !courseUnitId) return []
+
+  const { data, error } = await admin
+    .from('class_course_assignments')
+    .select('student_id, profiles(full_name, display_name, email)')
+    .eq('course_unit_id', courseUnitId)
+    .eq('status', 'active')
+
+  if (error || !data) return []
+
+  return data.map((row) => {
+    const profileRaw = row.profiles
+    const profile = (
+      Array.isArray(profileRaw) ? profileRaw[0] : profileRaw
+    ) as {
+      full_name?: string
+      display_name?: string
+      email?: string
+    } | null
+    return {
+      id: String(row.student_id),
+      label:
+        profile?.full_name ||
+        profile?.display_name ||
+        profile?.email ||
+        String(row.student_id),
+    }
+  })
+}
+
+export async function getCourseUnitScope(courseUnitId: string): Promise<{
+  academicYear: number
+  term: ClassCourseTerm
+  subject: ClassCourseSubject
+  track: ClassCourseTrack
+  seqNo: number
+  displayName: string
+} | null> {
+  const access = await requireSuperAdmin()
+  if (!access.ok || !courseUnitId) return null
+  const admin = createAdminClient()
+  if (!admin) return null
+  const { data } = await admin
+    .from('class_course_units')
+    .select('academic_year, term, subject, track, seq_no')
+    .eq('id', courseUnitId)
+    .maybeSingle()
+  if (!data) return null
+  return {
+    academicYear: Number(data.academic_year),
+    term: data.term as ClassCourseTerm,
+    subject: data.subject as ClassCourseSubject,
+    track: data.track as ClassCourseTrack,
+    seqNo: Number(data.seq_no),
+    displayName: buildClassCourseDisplayName({
+      subject: data.subject as ClassCourseSubject,
+      term: data.term as ClassCourseTerm,
+      track: data.track as ClassCourseTrack,
+      seqNo: Number(data.seq_no),
+    }),
+  }
+}
+
+export async function cancelStudentCourseAssignment(formData: FormData): Promise<
+  { ok: true } | { ok: false; error: string }
+> {
+  const courseUnitId = String(formData.get('courseUnitId') ?? '').trim()
+  const studentId = String(formData.get('studentId') ?? '').trim()
+  if (!courseUnitId || !studentId) {
+    return { ok: false, error: '対象が不正です' }
+  }
+  const { cancelClassCourseAssignment } = await import(
+    '@/app/class-course/attendance-actions'
+  )
+  return cancelClassCourseAssignment({ courseUnitId, studentId })
 }

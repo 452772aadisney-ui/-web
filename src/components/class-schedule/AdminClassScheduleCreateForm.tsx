@@ -8,30 +8,27 @@ import {
 } from '@/app/class-schedule/actions'
 import {
   CLASS_SCHEDULE_LOCATION_DETAILS_MAX_LENGTH,
-  CLASS_SCHEDULE_SUBJECT_MAX_LENGTH,
   CLASS_SCHEDULE_SUBJECT_SUGGESTIONS,
 } from '@/lib/class-schedule/validation'
 import { classScheduleFieldClass } from '@/lib/class-schedule/format'
 import { useActionToast } from '@/hooks/useActionToast'
 import { SessionTimeRangeFields } from '@/components/class-schedule/SessionTimeRangeFields'
+import {
+  CourseLinkedSessionFields,
+  defaultCourseSessionDraft,
+  type CourseSessionDraft,
+} from '@/components/class-course/CourseLinkedSessionFields'
+import { resolveAcademicYearFromJstDateKey } from '@/lib/class-course/catalog'
+import { getJstDateKey } from '@/lib/study/dates'
 
 const initialState: ClassScheduleActionState = {}
 
-type SessionRow = {
-  key: string
-  startTime: string
-  endTime: string
-  subject: string
-  note: string
-}
+type SessionRow = CourseSessionDraft & { key: string }
 
 function newSessionRow(): SessionRow {
   return {
     key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    startTime: '10:00',
-    endTime: '11:30',
-    subject: '',
-    note: '',
+    ...defaultCourseSessionDraft(getJstDateKey()),
   }
 }
 
@@ -66,6 +63,16 @@ export function AdminClassScheduleCreateForm() {
             name="scheduleDate"
             required
             className={classScheduleFieldClass}
+            onChange={(e) => {
+              const key = e.target.value
+              if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return
+              const year = resolveAcademicYearFromJstDateKey(key)
+              setSessions((prev) =>
+                prev.map((row) =>
+                  row.mode === 'course' ? { ...row, academicYear: year } : row,
+                ),
+              )
+            }}
           />
         </label>
         <label className="block sm:col-span-2">
@@ -117,7 +124,7 @@ export function AdminClassScheduleCreateForm() {
                   </button>
                 )}
               </div>
-              <div className="grid gap-2 lg:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+              <div className="mb-3">
                 <SessionTimeRangeFields
                   startName="sessionStartTime"
                   endName="sessionEndTime"
@@ -139,45 +146,18 @@ export function AdminClassScheduleCreateForm() {
                     )
                   }
                 />
-                <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-muted">科目 *</span>
-                  <input
-                    name="sessionSubject"
-                    required
-                    list="class-schedule-subject-suggestions"
-                    maxLength={CLASS_SCHEDULE_SUBJECT_MAX_LENGTH}
-                    value={session.subject}
-                    onChange={(event) =>
-                      setSessions((prev) =>
-                        prev.map((row) =>
-                          row.key === session.key
-                            ? { ...row, subject: event.target.value }
-                            : row,
-                        ),
-                      )
-                    }
-                    className={classScheduleFieldClass}
-                    placeholder="例）英語"
-                  />
-                </label>
               </div>
-              <label className="mt-2 block">
-                <span className="mb-1 block text-xs font-medium text-muted">生徒向け補足</span>
-                <input
-                  name="sessionNote"
-                  value={session.note}
-                  onChange={(event) =>
-                    setSessions((prev) =>
-                      prev.map((row) =>
-                        row.key === session.key
-                          ? { ...row, note: event.target.value }
-                          : row,
-                      ),
-                    )
-                  }
-                  className={classScheduleFieldClass}
-                />
-              </label>
+              <CourseLinkedSessionFields
+                index={index}
+                value={session}
+                onChange={(next) =>
+                  setSessions((prev) =>
+                    prev.map((row) =>
+                      row.key === session.key ? { ...row, ...next } : row,
+                    ),
+                  )
+                }
+              />
             </li>
           ))}
         </ul>

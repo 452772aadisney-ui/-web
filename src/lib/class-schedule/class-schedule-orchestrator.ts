@@ -84,14 +84,22 @@ export async function resolveClassScheduleCandidates(options?: {
     fetchGradeTagNamesByStudentId(),
   ])
 
-  const allow =
-    options?.recipientStudentIds && options.recipientStudentIds.length > 0
-      ? new Set(options.recipientStudentIds)
-      : null
+  // Explicit empty list = notify nobody (do not fall back to all kisotsu).
+  if (options && 'recipientStudentIds' in options) {
+    const ids = options.recipientStudentIds ?? []
+    if (ids.length === 0) return []
+    const allow = new Set(ids)
+    return students
+      .filter((student) => isKisotsuGradeTag(gradeMap.get(student.id)))
+      .filter((student) => allow.has(student.id))
+      .map((student) => ({
+        studentId: student.id,
+        email: student.email?.trim() ? student.email.trim() : null,
+      }))
+  }
 
   return students
     .filter((student) => isKisotsuGradeTag(gradeMap.get(student.id)))
-    .filter((student) => (allow ? allow.has(student.id) : true))
     .map((student) => ({
       studentId: student.id,
       email: student.email?.trim() ? student.email.trim() : null,
@@ -99,9 +107,12 @@ export async function resolveClassScheduleCandidates(options?: {
 }
 
 /**
- * Day-level notify audience:
+ * Day-level notify audience (venue change / day cancel):
  * - any all_kisotsu session on the day → all kisotsu
  * - otherwise union of targeted session attendees (deduped)
+ *
+ * Session-level / attendee-delta audiences must be passed explicitly via
+ * recipientStudentIds — do not call this helper for those mutations.
  */
 export async function resolveClassScheduleNotifyRecipientIdsForDay(
   dayId: string,
@@ -302,7 +313,9 @@ export async function deliverClassScheduleNotifications(input: {
       recipientStudentIds = resolved === 'all_kisotsu' ? undefined : resolved
     }
     candidates = await resolveClassScheduleCandidates(
-      recipientStudentIds ? { recipientStudentIds } : undefined,
+      recipientStudentIds === undefined
+        ? undefined
+        : { recipientStudentIds },
     )
   } catch {
     console.error('[class-schedule-delivery] audience resolve failed')

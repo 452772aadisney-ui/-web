@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useState, useTransition } from 'react'
+import { useActionState, useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   addClassScheduleSession,
@@ -17,7 +17,6 @@ import {
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import {
   CLASS_SCHEDULE_LOCATION_DETAILS_MAX_LENGTH,
-  CLASS_SCHEDULE_SUBJECT_MAX_LENGTH,
   CLASS_SCHEDULE_SUBJECT_SUGGESTIONS,
 } from '@/lib/class-schedule/validation'
 import { resolveLocationDetailsText } from '@/lib/class-schedule/location-details'
@@ -34,6 +33,13 @@ import {
   AdminSessionAttendanceBar,
   type SessionAttendeeRow,
 } from '@/components/class-course/AdminSessionAttendanceBar'
+import {
+  CourseLinkedSessionFields,
+  defaultCourseSessionDraft,
+  type CourseSessionDraft,
+} from '@/components/class-course/CourseLinkedSessionFields'
+import { getCourseUnitScope } from '@/app/class-course/actions'
+import { resolveAcademicYearFromJstDateKey } from '@/lib/class-course/catalog'
 
 const initialState: ClassScheduleActionState = {}
 
@@ -112,9 +118,39 @@ function SessionEditForm({
   const [actionPending, startActionTransition] = useTransition()
   const [startTime, setStartTime] = useState(session.start_time.slice(0, 5))
   const [endTime, setEndTime] = useState(session.end_time.slice(0, 5))
+  const [courseDraft, setCourseDraft] = useState<CourseSessionDraft>(() => ({
+    ...defaultCourseSessionDraft(day.schedule_date),
+    mode: session.course_unit_id ? 'course' : 'freeform',
+    courseUnitId: session.course_unit_id ?? '',
+    attendeeIds: (attendees ?? []).map((a) => a.studentId),
+    freeSubject: session.course_unit_id ? '' : session.subject,
+    note: session.note ?? '',
+    startTime: session.start_time.slice(0, 5),
+    endTime: session.end_time.slice(0, 5),
+  }))
   const dateLabel = formatClassScheduleDateLabel(day.schedule_date)
   const timeLabel = formatSessionTimeRange(session.start_time, session.end_time)
   const dayCancelled = day.status === 'cancelled'
+
+  useEffect(() => {
+    if (!session.course_unit_id) return
+    let cancelled = false
+    void getCourseUnitScope(session.course_unit_id).then((scope) => {
+      if (cancelled || !scope) return
+      setCourseDraft((prev) => ({
+        ...prev,
+        academicYear: scope.academicYear,
+        term: scope.term,
+        subject: scope.subject,
+        track: scope.track,
+        courseUnitId: session.course_unit_id!,
+        mode: 'course',
+      }))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [session.course_unit_id])
 
   useActionToast(state, { successMessage: 'コマを更新しました', pending })
 
@@ -168,41 +204,21 @@ function SessionEditForm({
         <form action={formAction} className="space-y-2">
           <input type="hidden" name="sessionId" value={session.id} />
           <input type="hidden" name="dayId" value={day.id} />
-          <div className="grid gap-2 lg:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
-            <SessionTimeRangeFields
-              startValue={startTime}
-              endValue={endTime}
-              allowOriginalTimes
-              idPrefix={`edit-${session.id}`}
-              onStartChange={setStartTime}
-              onEndChange={setEndTime}
-            />
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-muted">科目 *</span>
-              <input
-                name="subject"
-                required
-                list="class-schedule-subject-suggestions"
-                maxLength={CLASS_SCHEDULE_SUBJECT_MAX_LENGTH}
-                defaultValue={session.subject}
-                className={classScheduleFieldClass}
-                readOnly={Boolean(session.course_unit_id)}
-              />
-              {session.course_unit_id ? (
-                <span className="mt-1 block text-xs text-muted">
-                  回数管理コマの名称は共通授業から自動設定（手入力不可）
-                </span>
-              ) : null}
-            </label>
-          </div>
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted">生徒向け補足</span>
-            <input
-              name="note"
-              defaultValue={session.note ?? ''}
-              className={classScheduleFieldClass}
-            />
-          </label>
+          <SessionTimeRangeFields
+            startValue={startTime}
+            endValue={endTime}
+            allowOriginalTimes
+            idPrefix={`edit-${session.id}`}
+            onStartChange={setStartTime}
+            onEndChange={setEndTime}
+          />
+          <CourseLinkedSessionFields
+            index={0}
+            value={courseDraft}
+            onChange={setCourseDraft}
+            attendeeInputName="attendeeIds"
+            lockCourseMode={Boolean(session.course_unit_id)}
+          />
           {state.error && (
             <p className="text-sm text-error" role="alert">
               {state.error}
@@ -310,36 +326,31 @@ function AddSessionForm({ day }: { day: ClassScheduleDayWithSessions }) {
   const [state, formAction, pending] = useActionState(addClassScheduleSession, initialState)
   const [startTime, setStartTime] = useState('10:00')
   const [endTime, setEndTime] = useState('11:30')
+  const [draft, setDraft] = useState<CourseSessionDraft>(() =>
+    defaultCourseSessionDraft(day.schedule_date),
+  )
   useActionToast(state, { successMessage: 'コマを追加しました', pending })
 
   return (
     <form action={formAction} className="space-y-2 rounded-xl border border-dashed border-border p-3">
       <input type="hidden" name="dayId" value={day.id} />
       <h3 className="text-sm font-bold">コマを追加</h3>
-      <div className="grid gap-2 lg:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
-        <SessionTimeRangeFields
-          startValue={startTime}
-          endValue={endTime}
-          idPrefix={`add-${day.id}`}
-          onStartChange={setStartTime}
-          onEndChange={setEndTime}
-        />
-        <label className="block">
-          <span className="mb-1 block text-xs font-medium text-muted">科目 *</span>
-          <input
-            name="subject"
-            required
-            list="class-schedule-subject-suggestions"
-            maxLength={CLASS_SCHEDULE_SUBJECT_MAX_LENGTH}
-            className={classScheduleFieldClass}
-            placeholder="例）英語"
-          />
-        </label>
-      </div>
-      <label className="block">
-        <span className="mb-1 block text-xs font-medium text-muted">生徒向け補足</span>
-        <input name="note" className={classScheduleFieldClass} />
-      </label>
+      <SessionTimeRangeFields
+        startValue={startTime}
+        endValue={endTime}
+        idPrefix={`add-${day.id}`}
+        onStartChange={setStartTime}
+        onEndChange={setEndTime}
+      />
+      <CourseLinkedSessionFields
+        index={0}
+        value={{
+          ...draft,
+          academicYear: resolveAcademicYearFromJstDateKey(day.schedule_date),
+        }}
+        onChange={setDraft}
+        attendeeInputName="attendeeIds"
+      />
       {state.error && (
         <p className="text-sm text-error" role="alert">
           {state.error}
