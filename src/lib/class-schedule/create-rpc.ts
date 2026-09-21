@@ -1,7 +1,11 @@
 import { CLASS_SCHEDULE_MAX_SESSIONS_PER_DAY } from '@/lib/class-schedule/rpc-auth'
 
-/** Must match public.create_class_schedule_day_with_sessions (057) parameter names. */
+/** Must match public.create_class_schedule_day_with_course_sessions (069). */
 export const CREATE_CLASS_SCHEDULE_RPC_NAME =
+  'create_class_schedule_day_with_course_sessions' as const
+
+/** Legacy freeform-only create (057/065). Kept for old apps; new app uses 069. */
+export const CREATE_CLASS_SCHEDULE_LEGACY_RPC_NAME =
   'create_class_schedule_day_with_sessions' as const
 
 export const CREATE_CLASS_SCHEDULE_RPC_ARG_KEYS = [
@@ -17,6 +21,8 @@ export type CreateClassScheduleRpcSession = {
   end_time: string
   subject: string
   note: string | null
+  course_unit_id?: string | null
+  attendee_ids?: string[]
 }
 
 export type CreateClassScheduleRpcArgs = {
@@ -58,12 +64,19 @@ export function buildCreateClassScheduleRpcArgs(input: {
     p_schedule_date: input.schedule_date,
     p_venue_name: input.venue_name,
     p_location_details: input.location_details,
-    p_sessions: input.sessions.map((session) => ({
-      start_time: session.start_time,
-      end_time: session.end_time,
-      subject: session.subject,
-      note: session.note,
-    })),
+    p_sessions: input.sessions.map((session) => {
+      const base: CreateClassScheduleRpcSession = {
+        start_time: session.start_time,
+        end_time: session.end_time,
+        subject: session.subject,
+        note: session.note,
+      }
+      if (session.course_unit_id) {
+        base.course_unit_id = session.course_unit_id
+        base.attendee_ids = session.attendee_ids ?? []
+      }
+      return base
+    }),
     p_actor_id: input.actorId,
   }
 }
@@ -176,6 +189,11 @@ export function mapClassScheduleDbError(error: ClassScheduleRpcErrorLike): strin
   }
   if (code === '42501' || /permission denied/i.test(message)) {
     return '管理者権限が必要です'
+  }
+  if (
+    /attendee|course unit|assignment|course_unit/i.test(message)
+  ) {
+    return '共通授業または対象生徒の指定が不正です'
   }
   return '授業予定の保存に失敗しました'
 }

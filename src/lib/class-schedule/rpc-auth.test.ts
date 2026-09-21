@@ -33,8 +33,11 @@ describe('isWithinSessionLimit', () => {
 })
 
 describe('CLASS_SCHEDULE_WRITE_RPC_SIGNATURES', () => {
-  it('documents full signatures including create actor uuid (057 5-arg)', () => {
+  it('documents 069 course create and legacy freeform create', () => {
     expect(CLASS_SCHEDULE_WRITE_RPC_SIGNATURES.create).toBe(
+      'public.create_class_schedule_day_with_course_sessions(date,text,text,jsonb,uuid)',
+    )
+    expect(CLASS_SCHEDULE_WRITE_RPC_SIGNATURES.createLegacy).toBe(
       'public.create_class_schedule_day_with_sessions(date,text,text,jsonb,uuid)',
     )
     expect(CLASS_SCHEDULE_WRITE_RPC_SIGNATURES.bump).toBe(

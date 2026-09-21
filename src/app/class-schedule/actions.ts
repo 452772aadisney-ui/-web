@@ -245,70 +245,6 @@ async function resolveCourseUnitDisplaySubject(
   })
 }
 
-async function attachCourseLinksAfterCreate(params: {
-  dayId: string
-  drafts: ParsedSessionDraft[]
-  actorId: string
-}): Promise<{ ok: true } | { ok: false; error: string }> {
-  const hasCourse = params.drafts.some((d) => d.mode === 'course')
-  if (!hasCourse) return { ok: true }
-
-  const gate = await requireAdminClassScheduleRpcClient()
-  if (!gate.ok) return { ok: false, error: gate.error }
-  if (gate.profile.id !== params.actorId) {
-    return { ok: false, error: '権限がありません' }
-  }
-
-  const { data: rows, error } = await gate.admin
-    .from('class_schedule_sessions')
-    .select('id, start_time, end_time, subject')
-    .eq('day_id', params.dayId)
-    .order('start_time', { ascending: true })
-
-  if (error || !rows || rows.length !== params.drafts.length) {
-    return { ok: false, error: 'コマの授業紐づけに失敗しました' }
-  }
-
-  for (let i = 0; i < params.drafts.length; i += 1) {
-    const draft = params.drafts[i]!
-    const row = rows[i]!
-    if (draft.mode !== 'course' || !draft.courseUnitId) continue
-
-    const subject = await resolveCourseUnitDisplaySubject(
-      gate.admin,
-      draft.courseUnitId,
-    )
-    if (!subject) return { ok: false, error: '共通授業が見つかりません' }
-
-    const { error: updError } = await gate.admin
-      .from('class_schedule_sessions')
-      .update({
-        course_unit_id: draft.courseUnitId,
-        audience_type: 'targeted',
-        subject,
-      })
-      .eq('id', row.id)
-
-    if (updError) {
-      return { ok: false, error: 'コマの授業紐づけに失敗しました' }
-    }
-
-    const { error: attendeeError } = await gate.admin
-      .from('class_schedule_session_attendees')
-      .insert(
-        draft.attendeeIds.map((studentId) => ({
-          session_id: row.id,
-          student_id: studentId,
-        })),
-      )
-    if (attendeeError) {
-      return { ok: false, error: '対象生徒の保存に失敗しました' }
-    }
-  }
-
-  return { ok: true }
-}
-
 async function notifyAfterSave(params: {
   dayId: string
   notifyRevision: number
@@ -393,7 +329,7 @@ export async function createClassScheduleDay(
   const sessionsResult = parseSessionsFromFormData(formData)
   if (!sessionsResult.ok) return { error: sessionsResult.error }
 
-  // Atomic create only via service_role RPC — no prior table writes (no partial rows).
+  // Atomic create: day + sessions + optional course links/attendees in one TX (069).
   const rpcArgs = buildCreateClassScheduleRpcArgs({
     schedule_date: dayFields.day.schedule_date,
     venue_name: dayFields.day.venue_name,
@@ -403,6 +339,9 @@ export async function createClassScheduleDay(
       end_time: s.end_time,
       subject: s.subject,
       note: s.note,
+      ...(s.mode === 'course' && s.courseUnitId
+        ? { course_unit_id: s.courseUnitId, attendee_ids: s.attendeeIds }
+        : {}),
     })),
     actorId: gate.profile.id,
   })
@@ -444,16 +383,6 @@ export async function createClassScheduleDay(
       }),
     )
     return { error: '授業予定の登録に失敗しました' }
-  }
-
-  const linked = await attachCourseLinksAfterCreate({
-    dayId,
-    drafts: sessionsResult.sessions,
-    actorId: gate.profile.id,
-  })
-  if (!linked.ok) {
-    console.error('[class-schedule] course link after create failed')
-    return { error: linked.error }
   }
 
   // Day create: day-level audience (includes all_kisotsu expansion when present).
@@ -584,75 +513,51 @@ export async function addClassScheduleSession(
     return { error: '既存のコマと時間が重複しています' }
   }
 
-  const supabase = await createClient()
-  const courseUnitId = courseUnitIdEarly
   const attendeeIds = formData.getAll('attendeeIds').map(String).filter(Boolean)
-
   let subject = parsed.session.subject
-  let audienceType: 'all_kisotsu' | 'targeted' = 'all_kisotsu'
   let resolvedCourseUnitId: string | null = null
 
+  const gate = await requireAdminClassScheduleRpcClient()
+  if (!gate.ok) return { error: gate.error }
+
   if (isCourse) {
-    if (!courseUnitId) {
+    if (!courseUnitIdEarly) {
       return { error: '授業番号を選択してください' }
     }
-    const adminGate = await requireAdminClassScheduleRpcClient()
-    if (!adminGate.ok) return { error: adminGate.error }
-    const { data: unit } = await adminGate.admin
-      .from('class_course_units')
-      .select('id, academic_year, term, subject, track, seq_no')
-      .eq('id', courseUnitId)
-      .maybeSingle()
-    if (!unit) return { error: '共通授業が見つかりません' }
-    const { buildClassCourseDisplayName } = await import('@/lib/class-course/catalog')
-    subject = buildClassCourseDisplayName({
-      subject: unit.subject as never,
-      term: unit.term as never,
-      track: unit.track as never,
-      seqNo: Number(unit.seq_no),
-    })
-    audienceType = 'targeted'
-    resolvedCourseUnitId = String(unit.id)
+    const display = await resolveCourseUnitDisplaySubject(
+      gate.admin,
+      courseUnitIdEarly,
+    )
+    if (!display) return { error: '共通授業が見つかりません' }
+    subject = display
+    resolvedCourseUnitId = courseUnitIdEarly
     if (attendeeIds.length === 0) {
       return { error: '対象生徒を選択してください' }
     }
   }
 
-  const { data: inserted, error } = await supabase
-    .from('class_schedule_sessions')
-    .insert({
-      day_id: dayId,
-      start_time: parsed.session.start_time,
-      end_time: parsed.session.end_time,
-      subject,
-      note: parsed.session.note,
-      status: 'scheduled',
-      course_unit_id: resolvedCourseUnitId,
-      audience_type: audienceType,
-    })
-    .select('id')
-    .maybeSingle()
+  const { data, error } = await gate.admin.rpc(
+    'add_class_schedule_session_with_course',
+    {
+      p_day_id: dayId,
+      p_start_time: parsed.session.start_time,
+      p_end_time: parsed.session.end_time,
+      p_subject: subject,
+      p_note: parsed.session.note,
+      p_course_unit_id: resolvedCourseUnitId,
+      p_attendee_ids: resolvedCourseUnitId ? attendeeIds : null,
+      p_actor_id: gate.profile.id,
+    },
+  )
 
-  if (error) {
-    return { error: mapClassScheduleDbError(error) }
+  if (error || !data) {
+    return { error: mapClassScheduleDbError(error ?? {}) }
   }
 
-  if (resolvedCourseUnitId && inserted?.id && attendeeIds.length > 0) {
-    const adminGate = await requireAdminClassScheduleRpcClient()
-    if (!adminGate.ok) return { error: adminGate.error }
-    const { error: attendeeError } = await adminGate.admin
-      .from('class_schedule_session_attendees')
-      .insert(
-        attendeeIds.map((studentId) => ({
-          session_id: inserted.id,
-          student_id: studentId,
-        })),
-      )
-    if (attendeeError) {
-      console.error('[class-schedule] attendee insert failed', attendeeError.code)
-      return { error: '対象生徒の保存に失敗しました' }
-    }
-  }
+  const insertedId =
+    data && typeof data === 'object' && 'session_id' in data
+      ? String((data as { session_id: string }).session_id)
+      : ''
 
   const bumped = await bumpNotifyRevision(dayId, access.profile.id)
   if (!bumped.ok) {
@@ -664,20 +569,18 @@ export async function addClassScheduleSession(
     }
   }
 
-  // Targeted session: notify only this session's attendees (not day-wide all_kisotsu).
   const audience = resolveSessionNotifyAudience({
-    sessionId: String(inserted?.id ?? ''),
-    audienceType,
-    attendeeIds,
+    sessionId: insertedId,
+    audienceType: resolvedCourseUnitId ? 'targeted' : 'all_kisotsu',
+    attendeeIds: resolvedCourseUnitId ? attendeeIds : [],
   })
-  const notifyState = await notifyAfterSave({
+  return notifyAfterSave({
     dayId,
     notifyRevision: bumped.notifyRevision,
     kind: 'change',
     savedMessage: 'コマを追加しました',
     recipientStudentIds: audience === 'all_kisotsu' ? undefined : audience,
   })
-  return notifyState
 }
 
 export async function updateClassScheduleSession(
@@ -756,7 +659,6 @@ export async function updateClassScheduleSession(
 
   let nextSubject = parsed.session.subject
   let nextCourseUnitId = current.course_unit_id ?? null
-  let nextAudience = current.audience_type ?? 'all_kisotsu'
 
   if (linkingNewCourse && courseUnitIdForm) {
     const subject = await resolveCourseUnitDisplaySubject(gate.admin, courseUnitIdForm)
@@ -766,87 +668,48 @@ export async function updateClassScheduleSession(
     }
     nextSubject = subject
     nextCourseUnitId = courseUnitIdForm
-    nextAudience = 'targeted'
   } else if (current.course_unit_id) {
     nextSubject = current.subject
-    nextAudience = 'targeted'
   }
 
-  const supabase = await createClient()
-  const { error } = await supabase
-    .from('class_schedule_sessions')
-    .update({
-      start_time: parsed.session.start_time,
-      end_time: parsed.session.end_time,
-      subject: nextSubject,
-      note: parsed.session.note,
-      course_unit_id: nextCourseUnitId,
-      audience_type: nextAudience,
-    })
-    .eq('id', sessionId)
-    .eq('day_id', dayId)
+  const { error } = await gate.admin.rpc(
+    'update_class_schedule_session_with_course',
+    {
+      p_session_id: sessionId,
+      p_day_id: dayId,
+      p_start_time: parsed.session.start_time,
+      p_end_time: parsed.session.end_time,
+      p_subject: nextSubject,
+      p_note: parsed.session.note,
+      p_course_unit_id: linkingNewCourse ? nextCourseUnitId : current.course_unit_id,
+      p_attendee_ids: managingAttendees ? attendeeIdsFromForm : null,
+      p_manage_attendees: managingAttendees,
+      p_actor_id: gate.profile.id,
+    },
+  )
 
   if (error) {
+    const msg = String(error.message ?? '')
+    if (msg.includes('attendance record')) {
+      return {
+        error:
+          '実施または欠席の記録がある生徒は、先に未実施へ訂正してから対象外してください',
+      }
+    }
     return { error: mapClassScheduleDbError(error) }
   }
 
   let notifyRecipientIds: string[] | undefined
-
   if (managingAttendees && (current.course_unit_id || linkingNewCourse)) {
-    if (attendeeIdsFromForm.length === 0) {
-      return { error: '対象生徒を選択してください' }
-    }
-    const desired = new Set(attendeeIdsFromForm)
-    const toRemove = beforeAttendeeIds.filter((id) => !desired.has(id))
-    const beforeSet = new Set(beforeAttendeeIds)
-    const toAdd = attendeeIdsFromForm.filter((id) => !beforeSet.has(id))
-
-    for (const studentId of toRemove) {
-      const { error: rmError } = await gate.admin.rpc(
-        'remove_class_schedule_session_attendee',
-        {
-          p_session_id: sessionId,
-          p_student_id: studentId,
-          p_actor_id: gate.profile.id,
-        },
-      )
-      if (rmError) {
-        const msg = String(rmError.message ?? '')
-        if (msg.includes('attendance record')) {
-          return {
-            error:
-              '実施または欠席の記録がある生徒は、先に未実施へ訂正してから対象外してください',
-          }
-        }
-        return { error: '対象生徒の更新に失敗しました' }
-      }
-    }
-
-    if (toAdd.length > 0) {
-      const { error: addError } = await gate.admin
-        .from('class_schedule_session_attendees')
-        .insert(
-          toAdd.map((studentId) => ({
-            session_id: sessionId,
-            student_id: studentId,
-          })),
-        )
-      if (addError) return { error: '対象生徒の更新に失敗しました' }
-    }
-
     notifyRecipientIds = resolveAttendeeChangeNotifyAudience({
       beforeIds: beforeAttendeeIds,
       afterIds: attendeeIdsFromForm,
     })
   } else {
-    const afterSnap =
-      (await loadSessionAudienceSnapshot(sessionId)) ??
-      ({
-        sessionId,
-        audienceType: (nextAudience as 'all_kisotsu' | 'targeted') ?? 'all_kisotsu',
-        attendeeIds: beforeAttendeeIds,
-      } satisfies SessionAudienceSnapshot)
-    const resolved = resolveSessionNotifyAudience(afterSnap)
+    const afterSnap = await loadSessionAudienceSnapshot(sessionId)
+    const resolved = afterSnap
+      ? resolveSessionNotifyAudience(afterSnap)
+      : 'all_kisotsu'
     notifyRecipientIds = resolved === 'all_kisotsu' ? undefined : resolved
   }
 

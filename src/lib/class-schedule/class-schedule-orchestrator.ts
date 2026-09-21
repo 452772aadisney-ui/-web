@@ -113,30 +113,48 @@ export async function resolveClassScheduleCandidates(options?: {
  *
  * Session-level / attendee-delta audiences must be passed explicitly via
  * recipientStudentIds — do not call this helper for those mutations.
+ *
+ * On query failure, throws (never falls back to all kisotsu).
+ * Empty day with no sessions returns [].
  */
 export async function resolveClassScheduleNotifyRecipientIdsForDay(
   dayId: string,
 ): Promise<'all_kisotsu' | string[]> {
   const admin = createAdminClient()
-  if (!admin) return 'all_kisotsu'
+  if (!admin) {
+    throw new Error('admin client unavailable for audience resolve')
+  }
 
   const { data: sessions, error } = await admin
     .from('class_schedule_sessions')
     .select('id, audience_type')
     .eq('day_id', dayId)
 
-  if (error || !sessions) return 'all_kisotsu'
+  if (error) {
+    throw new Error(`audience resolve failed: ${error.code ?? 'unknown'}`)
+  }
+  if (!sessions) {
+    throw new Error('audience resolve returned null sessions')
+  }
+
+  if (sessions.length === 0) return []
 
   const hasAll = sessions.some(
     (s) => (s.audience_type ?? 'all_kisotsu') === 'all_kisotsu',
   )
-  if (hasAll || sessions.length === 0) return 'all_kisotsu'
+  if (hasAll) return 'all_kisotsu'
 
   const sessionIds = sessions.map((s) => String(s.id))
-  const { data: attendees } = await admin
+  const { data: attendees, error: attendeeError } = await admin
     .from('class_schedule_session_attendees')
     .select('student_id')
     .in('session_id', sessionIds)
+
+  if (attendeeError) {
+    throw new Error(
+      `attendee audience resolve failed: ${attendeeError.code ?? 'unknown'}`,
+    )
+  }
 
   return [...new Set((attendees ?? []).map((a) => String(a.student_id)))]
 }

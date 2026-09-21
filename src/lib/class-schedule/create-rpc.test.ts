@@ -4,6 +4,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import {
   CREATE_CLASS_SCHEDULE_RPC_ARG_KEYS,
   CREATE_CLASS_SCHEDULE_RPC_NAME,
+  CREATE_CLASS_SCHEDULE_LEGACY_RPC_NAME,
   buildCreateClassScheduleRpcArgs,
   classifyClassScheduleRpcError,
   createClassScheduleRpcArgKeyCount,
@@ -32,15 +33,22 @@ function extractCreateRpcParamNamesForLocationDetails(sql: string): string[] {
 }
 
 describe('create class schedule RPC arg alignment', () => {
-  it('keeps app RPC name identical to migration 057 5-arg function', () => {
-    const sql = readMigration('057_class_schedule_location_details.sql')
+  it('keeps app create RPC name identical to migration 069 course-aware function', () => {
+    const sql = readMigration('069_class_schedule_course_atomic.sql')
     expect(sql).toContain(
       `create or replace function public.${CREATE_CLASS_SCHEDULE_RPC_NAME}(`,
     )
     expect(sql).toMatch(/p_location_details text/)
   })
 
-  it('matches 057 5-arg parameter names exactly (order and keys)', () => {
+  it('keeps legacy freeform create RPC name for old apps', () => {
+    const sql = readMigration('057_class_schedule_location_details.sql')
+    expect(sql).toContain(
+      `create or replace function public.${CREATE_CLASS_SCHEDULE_LEGACY_RPC_NAME}(`,
+    )
+  })
+
+  it('matches 057/069 5-arg parameter names exactly (order and keys)', () => {
     const from057 = extractCreateRpcParamNamesForLocationDetails(
       readMigration('057_class_schedule_location_details.sql'),
     )
