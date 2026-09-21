@@ -5,6 +5,10 @@
 -- Dependency: apply 064_admin_super_privilege.sql first (+ bootstrap first super).
 -- Expectation before apply: audience_scope ABSENT; 064 helpers PRESENT.
 -- Expectation after apply: audience_scope PRESENT NOT NULL; graduate-scoped policies.
+--
+-- Do not name profiles.is_super_admin or announcements.audience_scope in SQL
+-- expressions — PostgreSQL analyzes every CASE branch. Use information_schema
+-- for presence and to_jsonb(row) ->> 'col' for optional values.
 
 with state as (
   select
@@ -58,7 +62,24 @@ with state as (
       where schemaname = 'public'
         and tablename = 'class_schedule_days'
         and policyname = 'class_schedule_days_insert_admin'
-    ) as has_class_schedule_insert_policy
+    ) as has_class_schedule_insert_policy,
+    (
+      select count(*)::bigint
+      from public.profiles p
+      where p.role = 'admin'
+        and coalesce((to_jsonb(p) ->> 'is_super_admin')::boolean, false)
+    ) as super_admin_count,
+    (
+      select coalesce(
+        string_agg(format('%s=%s', scope, cnt), ', ' order by scope),
+        'empty'
+      )
+      from (
+        select to_jsonb(a) ->> 'audience_scope' as scope, count(*)::bigint as cnt
+        from public.announcements a
+        group by 1
+      ) s
+    ) as audience_scope_dist
 )
 select
   '065_depends_on_064_is_super_admin_col'::text as check_name,
@@ -83,14 +104,13 @@ select
   '065_super_admin_bootstrap'::text,
   case
     when not has_064_col then 'SKIP_NO_COLUMN'
-    when (
-      select count(*)::bigint
-      from public.profiles
-      where role = 'admin' and is_super_admin = true
-    ) >= 1 then 'PRESENT'
+    when super_admin_count >= 1 then 'PRESENT'
     else 'ABSENT_WARN_BOOTSTRAP'
   end,
-  'at least one admin with is_super_admin'::text
+  case
+    when not has_064_col then '0 (column_absent)'
+    else format('super_admin_count=%s', super_admin_count)
+  end
 from state
 
 union all
@@ -152,24 +172,9 @@ union all
 
 select
   '065_audience_scope_distribution'::text,
-  'INFO'::text,
+  case when has_audience_scope then 'INFO' else 'ABSENT' end,
   case
-    when exists (
-      select 1 from information_schema.columns
-      where table_schema = 'public'
-        and table_name = 'announcements'
-        and column_name = 'audience_scope'
-    )
-    then (
-      select coalesce(
-        string_agg(format('%s=%s', audience_scope, cnt), ', ' order by audience_scope),
-        'empty'
-      )
-      from (
-        select audience_scope, count(*)::bigint as cnt
-        from public.announcements
-        group by audience_scope
-      ) s
-    )
+    when has_audience_scope then audience_scope_dist
     else 'column_absent'
-  end;
+  end
+from state;

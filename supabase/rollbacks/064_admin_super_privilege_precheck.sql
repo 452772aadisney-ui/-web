@@ -33,8 +33,14 @@ select
   case when has_audit then 'WARN_DROP_AUDIT_TABLE' else 'OK_NO_AUDIT_TABLE' end as status,
   case
     when has_audit then (
-      select format('admin_privilege_audit_rows=%s', count(*))
-      from public.admin_privilege_audit
+      -- Avoid FROM admin_privilege_audit (missing table fails parse of whole stmt).
+      select format(
+        'admin_privilege_audit_est_rows=%s',
+        greatest(coalesce(c.reltuples, 0), 0)::bigint
+      )
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relname = 'admin_privilege_audit'
     )
     else 'n/a'::text
   end as details
@@ -47,11 +53,15 @@ select
   case when has_col then 'WARN_DROP_IS_SUPER_ADMIN' else 'OK_NO_COLUMN' end,
   case
     when has_col then (
-      select format('super_admin_rows=%s', count(*))
-      from public.profiles
-      where role = 'admin' and is_super_admin = true
+      select format(
+        'super_admin_rows=%s',
+        count(*)
+      )
+      from public.profiles p
+      where p.role = 'admin'
+        and coalesce((to_jsonb(p) ->> 'is_super_admin')::boolean, false)
     )
-    else 'n/a'::text
+    else '0 (column_absent)'::text
   end
 from state
 

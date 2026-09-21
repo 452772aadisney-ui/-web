@@ -5,6 +5,14 @@
 -- Expectation before apply: is_super_admin column ABSENT; helpers ABSENT.
 -- Expectation after apply: column PRESENT; helpers PRESENT; super_admin_count may be 0
 -- until explicit UUID bootstrap (never infer from name/order).
+--
+-- IMPORTANT: Do not reference profiles.is_super_admin (or other not-yet-added
+-- columns) by name anywhere in this statement. PostgreSQL analyzes all CASE
+-- branches, so a "then count where is_super_admin" arm fails on pre-064 DBs
+-- even when the column-existence check is false. Use information_schema /
+-- pg_catalog for presence, and to_jsonb(row) ->> 'col' for optional values.
+-- Optional tables (admin_privilege_audit) are probed with to_regclass only —
+-- never FROM them in this statement.
 
 with state as (
   select
@@ -53,15 +61,24 @@ with state as (
         and t.tgname = 'profiles_protect_admin_privilege_insert'
         and not t.tgisinternal
     ) as has_protect_insert_trigger,
+    -- student_tags predates 064 (required app dependency on production).
     exists (
-      select 1 from public.student_tags
-      where category = '学年' and name = '既卒'
+      select 1
+      from public.student_tags st
+      where coalesce(to_jsonb(st) ->> 'category', '') = '学年'
+        and coalesce(to_jsonb(st) ->> 'name', '') = '既卒'
     ) as has_kisotsu_tag,
     exists (
       select 1 from pg_proc p
       join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public' and p.proname = 'is_admin' and p.pronargs = 0
-    ) as has_is_admin_fn
+    ) as has_is_admin_fn,
+    (
+      select count(*)::bigint
+      from public.profiles p
+      where p.role = 'admin'
+        and coalesce((to_jsonb(p) ->> 'is_super_admin')::boolean, false)
+    ) as super_admin_count
 )
 select
   '064_depends_on_is_admin'::text as check_name,
@@ -161,18 +178,9 @@ union all
 
 select
   '064_super_admin_row_count'::text,
-  'INFO'::text,
+  case when has_is_super_admin_col then 'INFO' else 'ABSENT' end,
   case
-    when exists (
-      select 1 from information_schema.columns
-      where table_schema = 'public'
-        and table_name = 'profiles'
-        and column_name = 'is_super_admin'
-    )
-    then (
-      select count(*)::text
-      from public.profiles
-      where role = 'admin' and is_super_admin = true
-    )
-    else 'column_absent'
-  end;
+    when has_is_super_admin_col then super_admin_count::text
+    else super_admin_count::text || ' (column_absent)'
+  end
+from state;
