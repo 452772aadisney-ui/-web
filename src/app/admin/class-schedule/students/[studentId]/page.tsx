@@ -17,6 +17,7 @@ import { AdminPageShell } from '@/components/layout/AdminPageShell'
 import { AdminNarrowContent } from '@/components/layout/AdminNarrowContent'
 import { getJstDateKey } from '@/lib/study/dates'
 import { ManualAttendanceForm } from '@/components/class-course/ManualAttendanceForm'
+import { CancelAssignmentButton } from '@/components/class-course/CancelAssignmentButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -96,16 +97,25 @@ export default async function AdminClassCourseStudentPage({
           <ul className="space-y-3">
             {loaded.rows.map((row) => (
               <li key={row.courseUnitId} className="rounded-lg border border-border p-3">
-                <p className="font-medium">{row.displayName}</p>
-                <p className="text-sm text-muted">
-                  現在:{' '}
-                  {row.currentStatus === 'attended'
-                    ? '実施'
-                    : row.currentStatus === 'absent'
-                      ? '欠席'
-                      : '未実施'}
-                  {row.attended ? '（消化済み）' : ''}
-                </p>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-medium">{row.displayName}</p>
+                    <p className="text-sm text-muted">
+                      現在:{' '}
+                      {row.currentStatus === 'attended'
+                        ? '実施'
+                        : row.currentStatus === 'absent'
+                          ? '欠席'
+                          : '未実施'}
+                      {row.attended ? '（消化済み）' : ''}
+                    </p>
+                  </div>
+                  <CancelAssignmentButton
+                    studentId={studentId}
+                    courseUnitId={row.courseUnitId}
+                    disabled={row.currentStatus === 'attended'}
+                  />
+                </div>
                 {row.events.length > 0 ? (
                   <ul className="mt-2 space-y-1 text-xs text-muted">
                     {row.events.map((ev, index) => (

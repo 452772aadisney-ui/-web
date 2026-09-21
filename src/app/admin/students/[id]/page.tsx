@@ -46,6 +46,8 @@ import { StudentTagAssignForm } from '@/components/tags/StudentTagAssignForm'
 import { getAdminStudentNotificationPrefs } from '@/lib/admin/notification-preferences-admin'
 import { getStudentPushRegistrationView } from '@/lib/admin/push-registration-queries'
 import { defaultNotificationPreferences } from '@/lib/push/preferences'
+import { isSuperAdminProfile } from '@/lib/auth/admin-access'
+import Link from 'next/link'
 
 async function fetchStudyLogsPaginated(
   studentId: string,
@@ -208,6 +210,16 @@ export default async function AdminStudentStudyPage({
               {' / '}
               累計: <span className="font-bold">{formatDuration(totalMinutes)}</span>
             </p>
+            {isSuperAdminProfile(profile) ? (
+              <p className="mt-3 text-sm">
+                <Link
+                  href={`/admin/class-schedule/students/${id}`}
+                  className="text-primary underline"
+                >
+                  授業回数・残回数・履歴
+                </Link>
+              </p>
+            ) : null}
             <AdminStudentProfileForm
               student={{
                 id: student.id,

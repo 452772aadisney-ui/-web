@@ -1,4 +1,4 @@
-# 既卒授業回数・割当・実施（067）ロールアウト
+# 既卒授業回数・割当・実施（067–068）ロールアウト
 
 本番 DB に対してこのドキュメントから SQL を自動実行しないこと。
 
@@ -7,6 +7,9 @@
 | migration | `supabase/migrations/067_class_course_sessions.sql` |
 | precheck | `supabase/queries/067_class_course_sessions_precheck.sql` |
 | verify | `supabase/queries/067_class_course_sessions_verify.sql` |
+| migration | `supabase/migrations/068_class_course_cancel_guards.sql` |
+| precheck | `supabase/queries/068_class_course_cancel_guards_precheck.sql` |
+| verify | `supabase/queries/068_class_course_cancel_guards_verify.sql` |
 
 ## 適用順
 
@@ -14,8 +17,11 @@
 2. **067 precheck**（read-only）→ 依存 `PASS`、067 オブジェクト `ABSENT`
 3. **067 適用**
 4. **067 verify**（全行 `PASS`）
-5. **新アプリをデプロイ**（回数登録・対象コマ・実施 UI・通知聴衆）
-6. 大管理者でスモーク後、必要なら短時間フリーズを解除
+5. **068 precheck** → 067 依存 `PASS`、068 RPC は適用前 `ABSENT`
+6. **068 適用**（割当取消・対象外し RPC、対象 DELETE ガード、再追加の二重防止）
+7. **068 verify**（全行 `PASS`）
+8. **新アプリをデプロイ**（回数登録・対象コマ・実施 UI・通知聴衆・取消ガード）
+9. 大管理者でスモーク後、必要なら短時間フリーズを解除
 
 ## 旧アプリ互換
 
@@ -38,4 +44,8 @@
 ## 通知
 
 - 回数追加・割当・実施記録では通知しない
-- 予定の create/change/cancel は既存カテゴリを維持し、聴衆のみ影響生徒（全員向けコマ含む日は既卒全員）に限定
+- 予定の create/change/cancel は既存カテゴリを維持し、聴衆のみ影響生徒に限定
+  - 日全体の会場変更・中止: その日の全コマ対象を集約（全員向けコマがあれば既卒全員）
+  - 個別コマの変更・中止: そのコマの対象者のみ（同日の無関係な全員向けコマへ広げない）
+  - 対象者変更: 変更前後の和（外れた生徒・追加された生徒を含む）
+- 068: 割当取消・対象外しは RPC/トリガで実施・欠席記録がある場合に拒否。再追加は cancelled 行の再活性化で二重 active を防ぐ

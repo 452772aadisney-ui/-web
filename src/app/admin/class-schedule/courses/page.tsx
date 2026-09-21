@@ -23,23 +23,26 @@ export default async function AdminClassCourseRegistrationPage() {
       <AdminNarrowContent>
         <p className="mb-6 text-sm text-muted">
           共通授業の登録と生徒への割り当てを行います。予定コマへの日時設定は授業予定画面から行います。
-          生徒別の残回数・履歴は{' '}
-          <Link href="/admin/students" className="text-primary underline">
-            生徒一覧
-          </Link>
-          から各生徒ページ（
-          <code className="text-xs">/admin/class-schedule/students/[id]</code>
-          ）で確認できます。
         </p>
         <AdminClassCourseRegistrationPanels
           defaultAcademicYear={academicYear}
           students={students}
         />
-        <p className="mt-8 text-sm">
-          <Link href="/admin/class-schedule" className="text-primary underline">
-            授業予定一覧へ戻る
-          </Link>
-        </p>
+        <section className="mt-10 space-y-2">
+          <h2 className="text-base font-bold">生徒別 残回数・履歴</h2>
+          <ul className="space-y-1 text-sm">
+            {students.map((s) => (
+              <li key={s.id}>
+                <Link
+                  href={`/admin/class-schedule/students/${s.id}`}
+                  className="text-primary underline"
+                >
+                  {s.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       </AdminNarrowContent>
     </AdminPageShell>
   )
