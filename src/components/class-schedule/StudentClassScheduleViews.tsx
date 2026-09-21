@@ -57,6 +57,7 @@ function SessionList({
   todayKey,
   nowTimeHHmm,
   showCancelled = true,
+  viewerTargetSessionIds,
 }: {
   dayStatus: ClassScheduleDayWithSessions['status']
   sessions: ClassScheduleSession[]
@@ -64,6 +65,8 @@ function SessionList({
   todayKey?: string
   nowTimeHHmm?: string
   showCancelled?: boolean
+  /** Session ids where the viewer is a targeted attendee. */
+  viewerTargetSessionIds?: ReadonlySet<string>
 }) {
   const visible = showCancelled
     ? sessions
@@ -84,17 +87,29 @@ function SessionList({
           todayKey,
           nowTimeHHmm,
         })
+        const audience = session.audience_type ?? 'all_kisotsu'
+        const isTarget =
+          audience === 'all_kisotsu' ||
+          Boolean(viewerTargetSessionIds?.has(session.id))
+        const isNonTarget = audience === 'targeted' && !isTarget
+
+        let rowClass =
+          'rounded-lg bg-background px-3 py-2 text-sm text-foreground'
+        if (cancelled) {
+          rowClass =
+            'rounded-lg bg-muted/30 px-3 py-2 text-sm text-muted line-through'
+        } else if (badge === '終了') {
+          rowClass = 'rounded-lg bg-muted/20 px-3 py-2 text-sm text-muted'
+        } else if (isNonTarget) {
+          // Readable muted (not invisible): keep contrast for body text
+          rowClass = 'rounded-lg bg-muted/40 px-3 py-2 text-sm text-muted'
+        } else if (audience === 'targeted' && isTarget) {
+          rowClass =
+            'rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-foreground'
+        }
+
         return (
-          <li
-            key={session.id}
-            className={
-              cancelled
-                ? 'rounded-lg bg-muted/30 px-3 py-2 text-sm text-muted line-through'
-                : badge === '終了'
-                  ? 'rounded-lg bg-muted/20 px-3 py-2 text-sm text-muted'
-                  : 'rounded-lg bg-background px-3 py-2 text-sm'
-            }
-          >
+          <li key={session.id} className={rowClass}>
             <p className="font-medium">
               {formatSessionTimeRange(session.start_time, session.end_time)}{' '}
               <span className="break-words">{session.subject}</span>
@@ -102,6 +117,12 @@ function SessionList({
                 <span className="ml-2 text-xs font-semibold no-underline">{badge}</span>
               )}
             </p>
+            {!cancelled && audience === 'targeted' && isTarget ? (
+              <p className="mt-0.5 text-xs font-medium text-primary">対象の授業</p>
+            ) : null}
+            {!cancelled && isNonTarget ? (
+              <p className="mt-0.5 text-xs">他の生徒向け</p>
+            ) : null}
             {session.note && (
               <p className="mt-0.5 break-words text-xs text-muted no-underline">
                 {session.note}
@@ -118,10 +139,12 @@ export function StudentClassScheduleNextHero({
   next,
   todayKey,
   nowTimeHHmm,
+  viewerTargetSessionIds,
 }: {
   next: NextClassDay | null
   todayKey: string
   nowTimeHHmm: string
+  viewerTargetSessionIds?: ReadonlySet<string>
 }) {
   if (!next) {
     return (
@@ -147,6 +170,7 @@ export function StudentClassScheduleNextHero({
         todayKey={todayKey}
         nowTimeHHmm={nowTimeHHmm}
         showCancelled
+        viewerTargetSessionIds={viewerTargetSessionIds}
       />
     </section>
   )
@@ -155,9 +179,11 @@ export function StudentClassScheduleNextHero({
 export function StudentClassScheduleDayCards({
   days,
   emptyMessage,
+  viewerTargetSessionIds,
 }: {
   days: ClassScheduleDayWithSessions[]
   emptyMessage: string
+  viewerTargetSessionIds?: ReadonlySet<string>
 }) {
   if (days.length === 0) {
     return <p className="text-sm text-muted">{emptyMessage}</p>
@@ -188,6 +214,7 @@ export function StudentClassScheduleDayCards({
             dayStatus={day.status}
             sessions={day.sessions}
             scheduleDate={day.schedule_date}
+            viewerTargetSessionIds={viewerTargetSessionIds}
           />
         </li>
       ))}

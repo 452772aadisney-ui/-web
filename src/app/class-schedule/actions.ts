@@ -388,10 +388,13 @@ export async function addClassScheduleSession(
     return { error: '中止中の授業日にはコマを追加できません。先に再開してください' }
   }
 
+  const courseUnitIdEarly = String(formData.get('courseUnitId') ?? '').trim()
   const parsed = parseSessionDraft({
     start_time: String(formData.get('startTime') ?? ''),
     end_time: String(formData.get('endTime') ?? ''),
-    subject: String(formData.get('subject') ?? ''),
+    subject: courseUnitIdEarly
+      ? '共通授業'
+      : String(formData.get('subject') ?? ''),
     note: String(formData.get('note') ?? ''),
   })
   if (!parsed.ok) return { error: parsed.error }
@@ -407,17 +410,70 @@ export async function addClassScheduleSession(
   }
 
   const supabase = await createClient()
-  const { error } = await supabase.from('class_schedule_sessions').insert({
-    day_id: dayId,
-    start_time: parsed.session.start_time,
-    end_time: parsed.session.end_time,
-    subject: parsed.session.subject,
-    note: parsed.session.note,
-    status: 'scheduled',
-  })
+  const courseUnitId = courseUnitIdEarly
+  const attendeeIds = formData.getAll('attendeeIds').map(String).filter(Boolean)
+
+  let subject = parsed.session.subject
+  let audienceType: 'all_kisotsu' | 'targeted' = 'all_kisotsu'
+  let resolvedCourseUnitId: string | null = null
+
+  if (courseUnitId) {
+    const adminGate = await requireAdminClassScheduleRpcClient()
+    if (!adminGate.ok) return { error: adminGate.error }
+    const { data: unit } = await adminGate.admin
+      .from('class_course_units')
+      .select('id, academic_year, term, subject, track, seq_no')
+      .eq('id', courseUnitId)
+      .maybeSingle()
+    if (!unit) return { error: '共通授業が見つかりません' }
+    const { buildClassCourseDisplayName } = await import('@/lib/class-course/catalog')
+    subject = buildClassCourseDisplayName({
+      subject: unit.subject as never,
+      term: unit.term as never,
+      track: unit.track as never,
+      seqNo: Number(unit.seq_no),
+    })
+    audienceType = 'targeted'
+    resolvedCourseUnitId = String(unit.id)
+    if (attendeeIds.length === 0) {
+      return { error: '対象生徒を選択してください' }
+    }
+  }
+
+  const { data: inserted, error } = await supabase
+    .from('class_schedule_sessions')
+    .insert({
+      day_id: dayId,
+      start_time: parsed.session.start_time,
+      end_time: parsed.session.end_time,
+      subject,
+      note: parsed.session.note,
+      status: 'scheduled',
+      course_unit_id: resolvedCourseUnitId,
+      audience_type: audienceType,
+    })
+    .select('id')
+    .maybeSingle()
 
   if (error) {
     return { error: mapClassScheduleDbError(error) }
+  }
+
+  if (resolvedCourseUnitId && inserted?.id && attendeeIds.length > 0) {
+    const adminGate = await requireAdminClassScheduleRpcClient()
+    if (!adminGate.ok) return { error: adminGate.error }
+    const { error: attendeeError } = await adminGate.admin
+      .from('class_schedule_session_attendees')
+      .insert(
+        attendeeIds.map((studentId) => ({
+          session_id: inserted.id,
+          student_id: studentId,
+        })),
+      )
+    if (attendeeError) {
+      console.error('[class-schedule] attendee insert failed', attendeeError.code)
+      return { error: '対象生徒の保存に失敗しました' }
+    }
   }
 
   const bumped = await bumpNotifyRevision(dayId, access.profile.id)
@@ -430,12 +486,14 @@ export async function addClassScheduleSession(
     }
   }
 
-  return notifyAfterSave({
+  // Targeted session: notify only selected attendees (+ changes from day aggregate helper)
+  const notifyState = await notifyAfterSave({
     dayId,
     notifyRevision: bumped.notifyRevision,
     kind: 'change',
     savedMessage: 'コマを追加しました',
   })
+  return notifyState
 }
 
 export async function updateClassScheduleSession(
@@ -462,7 +520,9 @@ export async function updateClassScheduleSession(
   const parsed = parseSessionDraft({
     start_time: String(formData.get('startTime') ?? ''),
     end_time: String(formData.get('endTime') ?? ''),
-    subject: String(formData.get('subject') ?? ''),
+    subject: current.course_unit_id
+      ? current.subject
+      : String(formData.get('subject') ?? ''),
     note: String(formData.get('note') ?? ''),
     originalStart: current.start_time,
     originalEnd: current.end_time,

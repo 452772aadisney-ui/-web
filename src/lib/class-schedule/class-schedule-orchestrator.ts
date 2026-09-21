@@ -74,19 +74,60 @@ async function mapPool<T, R>(
 
 /**
  * Audience = all students with 学年=既卒 (via KISOTSU_GRADE_TAG / isKisotsuGradeTag).
+ * Optional recipientStudentIds narrows to an explicit set (still kisotsu-filtered).
  */
-export async function resolveClassScheduleCandidates(): Promise<ClassScheduleCandidate[]> {
+export async function resolveClassScheduleCandidates(options?: {
+  recipientStudentIds?: readonly string[]
+}): Promise<ClassScheduleCandidate[]> {
   const [students, gradeMap] = await Promise.all([
     fetchStudentList(),
     fetchGradeTagNamesByStudentId(),
   ])
 
+  const allow =
+    options?.recipientStudentIds && options.recipientStudentIds.length > 0
+      ? new Set(options.recipientStudentIds)
+      : null
+
   return students
     .filter((student) => isKisotsuGradeTag(gradeMap.get(student.id)))
+    .filter((student) => (allow ? allow.has(student.id) : true))
     .map((student) => ({
       studentId: student.id,
       email: student.email?.trim() ? student.email.trim() : null,
     }))
+}
+
+/**
+ * Day-level notify audience:
+ * - any all_kisotsu session on the day → all kisotsu
+ * - otherwise union of targeted session attendees (deduped)
+ */
+export async function resolveClassScheduleNotifyRecipientIdsForDay(
+  dayId: string,
+): Promise<'all_kisotsu' | string[]> {
+  const admin = createAdminClient()
+  if (!admin) return 'all_kisotsu'
+
+  const { data: sessions, error } = await admin
+    .from('class_schedule_sessions')
+    .select('id, audience_type')
+    .eq('day_id', dayId)
+
+  if (error || !sessions) return 'all_kisotsu'
+
+  const hasAll = sessions.some(
+    (s) => (s.audience_type ?? 'all_kisotsu') === 'all_kisotsu',
+  )
+  if (hasAll || sessions.length === 0) return 'all_kisotsu'
+
+  const sessionIds = sessions.map((s) => String(s.id))
+  const { data: attendees } = await admin
+    .from('class_schedule_session_attendees')
+    .select('student_id')
+    .in('session_id', sessionIds)
+
+  return [...new Set((attendees ?? []).map((a) => String(a.student_id)))]
 }
 
 function emptySummary(
@@ -243,6 +284,8 @@ export async function deliverClassScheduleNotifications(input: {
   dayId: string
   notifyRevision: number
   kind: ClassScheduleNotifyKind
+  /** When set, only these students (still kisotsu-filtered). Omit = day aggregate. */
+  recipientStudentIds?: readonly string[]
   env?: NodeJS.ProcessEnv | Record<string, string | undefined>
 }): Promise<ClassScheduleDeliverySummary> {
   const startedAt = Date.now()
@@ -253,7 +296,14 @@ export async function deliverClassScheduleNotifications(input: {
 
   let candidates: ClassScheduleCandidate[]
   try {
-    candidates = await resolveClassScheduleCandidates()
+    let recipientStudentIds = input.recipientStudentIds
+    if (recipientStudentIds === undefined) {
+      const resolved = await resolveClassScheduleNotifyRecipientIdsForDay(input.dayId)
+      recipientStudentIds = resolved === 'all_kisotsu' ? undefined : resolved
+    }
+    candidates = await resolveClassScheduleCandidates(
+      recipientStudentIds ? { recipientStudentIds } : undefined,
+    )
   } catch {
     console.error('[class-schedule-delivery] audience resolve failed')
     summary.ok = false

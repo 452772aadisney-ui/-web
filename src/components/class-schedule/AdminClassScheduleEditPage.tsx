@@ -30,6 +30,10 @@ import { createToastSession } from '@/lib/toast/app-toast'
 import { useActionToast } from '@/hooks/useActionToast'
 import { SessionTimeRangeFields } from '@/components/class-schedule/SessionTimeRangeFields'
 import type { ClassScheduleDayWithSessions, ClassScheduleSession } from '@/types/class-schedule'
+import {
+  AdminSessionAttendanceBar,
+  type SessionAttendeeRow,
+} from '@/components/class-course/AdminSessionAttendanceBar'
 
 const initialState: ClassScheduleActionState = {}
 
@@ -94,9 +98,13 @@ function DayFieldsForm({ day }: { day: ClassScheduleDayWithSessions }) {
 function SessionEditForm({
   day,
   session,
+  attendees,
+  canRecordAttendance,
 }: {
   day: ClassScheduleDayWithSessions
   session: ClassScheduleSession
+  attendees?: SessionAttendeeRow[]
+  canRecordAttendance: boolean
 }) {
   const [state, formAction, pending] = useActionState(updateClassScheduleSession, initialState)
   const [confirmCancel, setConfirmCancel] = useState(false)
@@ -178,7 +186,13 @@ function SessionEditForm({
                 maxLength={CLASS_SCHEDULE_SUBJECT_MAX_LENGTH}
                 defaultValue={session.subject}
                 className={classScheduleFieldClass}
+                readOnly={Boolean(session.course_unit_id)}
               />
+              {session.course_unit_id ? (
+                <span className="mt-1 block text-xs text-muted">
+                  回数管理コマの名称は共通授業から自動設定（手入力不可）
+                </span>
+              ) : null}
             </label>
           </div>
           <label className="block">
@@ -243,10 +257,21 @@ function SessionEditForm({
         </form>
       )}
 
+      {attendees && attendees.length > 0 && session.course_unit_id ? (
+        <AdminSessionAttendanceBar
+          sessionId={session.id}
+          eventDate={day.schedule_date}
+          dayCancelled={dayCancelled}
+          sessionCancelled={session.status === 'cancelled'}
+          canRecord={canRecordAttendance}
+          attendees={attendees}
+        />
+      ) : null}
+
       <ConfirmDialog
         open={confirmCancel}
         title="このコマを中止しますか？"
-        description={`${dateLabel} ${timeLabel} ${session.subject} を中止します。`}
+        description={`${dateLabel} ${timeLabel} ${session.subject} を中止します。実施記録がある場合も記録と消化回数は残ります。`}
         confirmLabel="中止する"
         busy={actionPending}
         onConfirm={() =>
@@ -332,7 +357,15 @@ function AddSessionForm({ day }: { day: ClassScheduleDayWithSessions }) {
   )
 }
 
-export function AdminClassScheduleEditPage({ day }: { day: ClassScheduleDayWithSessions }) {
+export function AdminClassScheduleEditPage({
+  day,
+  attendanceBySession = {},
+  canRecordAttendance = true,
+}: {
+  day: ClassScheduleDayWithSessions
+  attendanceBySession?: Record<string, SessionAttendeeRow[]>
+  canRecordAttendance?: boolean
+}) {
   const router = useRouter()
   const [confirmCancelDay, setConfirmCancelDay] = useState(false)
   const [confirmDeleteDay, setConfirmDeleteDay] = useState(false)
@@ -414,7 +447,13 @@ export function AdminClassScheduleEditPage({ day }: { day: ClassScheduleDayWithS
         <h2 className="text-base font-bold">コマ一覧</h2>
         <ul className="space-y-2">
           {day.sessions.map((session) => (
-            <SessionEditForm key={session.id} day={day} session={session} />
+            <SessionEditForm
+              key={session.id}
+              day={day}
+              session={session}
+              attendees={attendanceBySession[session.id]}
+              canRecordAttendance={canRecordAttendance}
+            />
           ))}
         </ul>
         {day.status === 'scheduled' ? (
@@ -432,7 +471,7 @@ export function AdminClassScheduleEditPage({ day }: { day: ClassScheduleDayWithS
       <ConfirmDialog
         open={confirmCancelDay}
         title="この日の授業を中止しますか？"
-        description={`${dateLabel}（${day.venue_name}）を中止します。`}
+        description={`${dateLabel}（${day.venue_name}）を中止します。実施記録がある場合も記録と消化回数は残ります。`}
         confirmLabel="中止する"
         busy={pending}
         onConfirm={() => runDayAction(cancelClassScheduleDay)}

@@ -1,5 +1,6 @@
 import { requireKisotsuStudentOrRedirect } from '@/lib/class-schedule/access'
 import {
+  fetchMyTargetedClassScheduleSessionIds,
   fetchStudentClassScheduleOverview,
   getJstWallClockHHmm,
   upcomingClassScheduleEmptyMessage,
@@ -19,11 +20,14 @@ export default async function StudentClassSchedulePage() {
   const todayKey = getJstDateKey()
   const nowTimeHHmm = getJstWallClockHHmm()
 
-  const { next, upcoming } = await fetchStudentClassScheduleOverview({
-    todayKey,
-    nowTimeHHmm,
-    limit: 90,
-  })
+  const [{ next, upcoming }, targetSessionIds] = await Promise.all([
+    fetchStudentClassScheduleOverview({
+      todayKey,
+      nowTimeHHmm,
+      limit: 90,
+    }),
+    fetchMyTargetedClassScheduleSessionIds(),
+  ])
 
   return (
     <StudentPageShell title="授業予定" backHref="/dashboard" backLabel="マイページ">
@@ -32,12 +36,14 @@ export default async function StudentClassSchedulePage() {
           next={next}
           todayKey={todayKey}
           nowTimeHHmm={nowTimeHHmm}
+          viewerTargetSessionIds={targetSessionIds}
         />
         <section className="space-y-3">
           <h2 className="text-lg font-bold">今後の予定</h2>
           <StudentClassScheduleDayCards
             days={upcoming}
             emptyMessage={upcomingClassScheduleEmptyMessage(Boolean(next))}
+            viewerTargetSessionIds={targetSessionIds}
           />
         </section>
         <StudentClassSchedulePastLink />

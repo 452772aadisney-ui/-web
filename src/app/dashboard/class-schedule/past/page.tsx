@@ -1,6 +1,9 @@
 import Link from 'next/link'
 import { requireKisotsuStudentOrRedirect } from '@/lib/class-schedule/access'
-import { fetchClassScheduleDaysPaginated } from '@/lib/class-schedule/queries'
+import {
+  fetchClassScheduleDaysPaginated,
+  fetchMyTargetedClassScheduleSessionIds,
+} from '@/lib/class-schedule/queries'
 import { getJstDateKey } from '@/lib/study/dates'
 import { StudentPageShell } from '@/components/layout/StudentPageShell'
 import { StudentClassScheduleDayCards } from '@/components/class-schedule/StudentClassScheduleViews'
@@ -18,12 +21,15 @@ export default async function StudentClassSchedulePastPage({
   const pageNumber = params.page ? parseInt(params.page, 10) : 1
   const todayKey = getJstDateKey()
 
-  const result = await fetchClassScheduleDaysPaginated({
-    scope: 'past',
-    page: Number.isFinite(pageNumber) ? pageNumber : 1,
-    pageSize: 10,
-    todayKey,
-  })
+  const [result, targetSessionIds] = await Promise.all([
+    fetchClassScheduleDaysPaginated({
+      scope: 'past',
+      page: Number.isFinite(pageNumber) ? pageNumber : 1,
+      pageSize: 10,
+      todayKey,
+    }),
+    fetchMyTargetedClassScheduleSessionIds(),
+  ])
 
   return (
     <StudentPageShell
@@ -35,6 +41,7 @@ export default async function StudentClassSchedulePastPage({
         <StudentClassScheduleDayCards
           days={result.days}
           emptyMessage="過去の授業予定はありません。"
+          viewerTargetSessionIds={targetSessionIds}
         />
         <Pagination
           currentPage={result.page}

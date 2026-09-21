@@ -26,6 +26,10 @@ export interface ClassScheduleSession {
   subject: string
   note: string | null
   status: ClassScheduleStatus
+  /** NULL = 自由記述（回数管理外） */
+  course_unit_id?: string | null
+  /** all_kisotsu（既定・旧データ） / targeted */
+  audience_type?: 'all_kisotsu' | 'targeted'
   created_at: string
   updated_at: string
 }

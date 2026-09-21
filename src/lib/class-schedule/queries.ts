@@ -253,6 +253,23 @@ export async function fetchStudentClassScheduleOverview(options?: {
   return splitNextAndUpcomingClassDays(days, todayKey, now)
 }
 
+/** Session ids where the current student is listed as a targeted attendee. */
+export async function fetchMyTargetedClassScheduleSessionIds(): Promise<Set<string>> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return new Set()
+
+  const { data, error } = await supabase
+    .from('class_schedule_session_attendees')
+    .select('session_id')
+    .eq('student_id', user.id)
+
+  if (error || !data) return new Set()
+  return new Set(data.map((row) => String(row.session_id)))
+}
+
 /** @deprecated Prefer fetchNextClassDay — kept for transitional imports. */
 export type NextClassSession = {
   day: ClassScheduleDay
