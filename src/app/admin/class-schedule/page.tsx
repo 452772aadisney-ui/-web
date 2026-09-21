@@ -52,12 +52,20 @@ export default async function AdminClassSchedulePage({
           <p className="text-sm text-muted">
             既卒生向けの授業日・コマを登録・管理します。
           </p>
-          <Link
-            href="/admin/class-schedule/new"
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white"
-          >
-            新規登録
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/admin/class-schedule/courses"
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium"
+            >
+              授業回数登録
+            </Link>
+            <Link
+              href="/admin/class-schedule/new"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white"
+            >
+              新規登録
+            </Link>
+          </div>
         </div>
 
         <section className="mb-10 space-y-4">

@@ -1,0 +1,248 @@
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { requireSuperAdmin } from '@/lib/class-schedule/access'
+import { requireAdminClassScheduleRpcClient } from '@/lib/class-schedule/rpc-auth'
+import {
+  CLASS_COURSE_SUBJECTS,
+  CLASS_COURSE_TERMS,
+  CLASS_COURSE_TRACKS,
+  buildClassCourseDisplayName,
+  type ClassCourseSubject,
+  type ClassCourseTerm,
+  type ClassCourseTrack,
+} from '@/lib/class-course/catalog'
+import {
+  buildClassCourseRegistrationPopup,
+  planClassCourseSeqRange,
+  type ClassCourseNumberingMode,
+} from '@/lib/class-course/numbering'
+import { isKisotsuGradeTag } from '@/lib/tags/grade-order'
+import { fetchGradeTagNamesByStudentId } from '@/lib/tags/queries'
+import { fetchStudentList } from '@/lib/study/queries'
+
+function parseTerm(raw: FormDataEntryValue | null): ClassCourseTerm | null {
+  const v = String(raw ?? '')
+  return (CLASS_COURSE_TERMS as readonly string[]).includes(v)
+    ? (v as ClassCourseTerm)
+    : null
+}
+
+function parseSubject(raw: FormDataEntryValue | null): ClassCourseSubject | null {
+  const v = String(raw ?? '')
+  return (CLASS_COURSE_SUBJECTS as readonly string[]).includes(v)
+    ? (v as ClassCourseSubject)
+    : null
+}
+
+function parseTrack(raw: FormDataEntryValue | null): ClassCourseTrack {
+  const v = String(raw ?? 'regular')
+  return (CLASS_COURSE_TRACKS as readonly string[]).includes(v)
+    ? (v as ClassCourseTrack)
+    : 'regular'
+}
+
+async function filterKisotsuStudentIds(studentIds: string[]): Promise<string[]> {
+  if (studentIds.length === 0) return []
+  const gradeMap = await fetchGradeTagNamesByStudentId()
+  return studentIds.filter((id) => isKisotsuGradeTag(gradeMap.get(id) ?? null))
+}
+
+export type CreateCoursesResult =
+  | {
+      ok: true
+      popupTitle: string
+      popupBody: string
+      unitIds: string[]
+    }
+  | { ok: false; error: string }
+
+export async function createClassCoursesWithAssignments(
+  formData: FormData,
+): Promise<CreateCoursesResult> {
+  const gate = await requireAdminClassScheduleRpcClient()
+  if (!gate.ok) return { ok: false, error: gate.error }
+
+  const academicYear = Number(formData.get('academicYear'))
+  const term = parseTerm(formData.get('term'))
+  const subject = parseSubject(formData.get('subject'))
+  const track = parseTrack(formData.get('track'))
+  const modeRaw = String(formData.get('numberingMode') ?? 'append')
+  const mode: ClassCourseNumberingMode =
+    modeRaw === 'custom' ? 'custom' : 'append'
+  const count = Number(formData.get('count'))
+  const startSeqRaw = formData.get('startSeq')
+  const startSeq =
+    startSeqRaw != null && String(startSeqRaw).trim() !== ''
+      ? Number(startSeqRaw)
+      : undefined
+  const studentIds = formData.getAll('studentIds').map(String).filter(Boolean)
+
+  if (!Number.isInteger(academicYear) || academicYear < 2000) {
+    return { ok: false, error: '年度を確認してください' }
+  }
+  if (!term || !subject) {
+    return { ok: false, error: '時期と科目を選択してください' }
+  }
+
+  const kisotsuIds = await filterKisotsuStudentIds(studentIds)
+  if (kisotsuIds.length === 0) {
+    return { ok: false, error: '対象の既卒生を選択してください' }
+  }
+
+  const { data: existingRows, error: existingError } = await gate.admin
+    .from('class_course_units')
+    .select('seq_no')
+    .eq('academic_year', academicYear)
+    .eq('term', term)
+    .eq('subject', subject)
+    .eq('track', track)
+
+  if (existingError) {
+    console.error('[class-course] list seq failed', existingError.code)
+    return { ok: false, error: '既存番号の取得に失敗しました' }
+  }
+
+  const existingSeqNumbers = (existingRows ?? []).map((r) => Number(r.seq_no))
+  const plan = planClassCourseSeqRange({
+    existingSeqNumbers,
+    mode,
+    startSeq,
+    count,
+  })
+  if (!plan.ok) return { ok: false, error: plan.message }
+
+  const { data, error } = await gate.admin.rpc(
+    'create_class_course_units_with_assignments',
+    {
+      p_academic_year: academicYear,
+      p_term: term,
+      p_subject: subject,
+      p_track: track,
+      p_seq_numbers: plan.seqNumbers,
+      p_student_ids: kisotsuIds,
+      p_actor_id: gate.profile.id,
+    },
+  )
+
+  if (error) {
+    console.error('[class-course] create rpc failed', error.code)
+    return {
+      ok: false,
+      error:
+        error.message?.includes('seq conflict')
+          ? '番号が衝突しました。再度お試しください'
+          : '授業の登録に失敗しました',
+    }
+  }
+
+  const popup = buildClassCourseRegistrationPopup({
+    plan,
+    term,
+    track,
+    subject,
+  })
+  const unitIds = Array.isArray((data as { unit_ids?: string[] } | null)?.unit_ids)
+    ? ((data as { unit_ids: string[] }).unit_ids)
+    : plan.seqNumbers.map(() => '')
+
+  revalidatePath('/admin/class-schedule')
+  revalidatePath('/admin/class-schedule/courses')
+  return {
+    ok: true,
+    popupTitle: popup.title,
+    popupBody: popup.body,
+    unitIds,
+  }
+}
+
+export async function addStudentsToExistingCourses(
+  formData: FormData,
+): Promise<{ ok: true; inserted: number; skipped: number } | { ok: false; error: string }> {
+  const gate = await requireAdminClassScheduleRpcClient()
+  if (!gate.ok) return { ok: false, error: gate.error }
+
+  const unitIds = formData.getAll('unitIds').map(String).filter(Boolean)
+  const studentIds = formData.getAll('studentIds').map(String).filter(Boolean)
+  const kisotsuIds = await filterKisotsuStudentIds(studentIds)
+
+  if (unitIds.length === 0) {
+    return { ok: false, error: '授業を選択してください' }
+  }
+  if (kisotsuIds.length === 0) {
+    return { ok: false, error: '対象の既卒生を選択してください' }
+  }
+
+  const { data, error } = await gate.admin.rpc('add_students_to_class_course_units', {
+    p_unit_ids: unitIds,
+    p_student_ids: kisotsuIds,
+    p_actor_id: gate.profile.id,
+  })
+
+  if (error) {
+    console.error('[class-course] add students rpc failed', error.code)
+    return { ok: false, error: '生徒の追加に失敗しました' }
+  }
+
+  const inserted = Number((data as { inserted?: number } | null)?.inserted ?? 0)
+  const skipped = Number(
+    (data as { skipped_duplicate?: number } | null)?.skipped_duplicate ?? 0,
+  )
+
+  revalidatePath('/admin/class-schedule')
+  revalidatePath('/admin/class-schedule/courses')
+  return { ok: true, inserted, skipped }
+}
+
+export async function listKisotsuStudentsForCourseAdmin(): Promise<
+  { id: string; label: string }[]
+> {
+  const access = await requireSuperAdmin()
+  if (!access.ok) return []
+
+  const students = await fetchStudentList()
+  const gradeMap = await fetchGradeTagNamesByStudentId()
+  return students
+    .filter((s) => isKisotsuGradeTag(gradeMap.get(s.id) ?? null))
+    .map((s) => ({
+      id: s.id,
+      label: s.full_name || s.display_name || s.email || s.id,
+    }))
+}
+
+export async function listCourseUnitsForScope(params: {
+  academicYear: number
+  term: ClassCourseTerm
+  subject: ClassCourseSubject
+  track: ClassCourseTrack
+}): Promise<
+  { id: string; seqNo: number; displayName: string }[]
+> {
+  const access = await requireSuperAdmin()
+  if (!access.ok) return []
+  const admin = createAdminClient()
+  if (!admin) return []
+
+  const { data, error } = await admin
+    .from('class_course_units')
+    .select('id, seq_no, academic_year, term, subject, track')
+    .eq('academic_year', params.academicYear)
+    .eq('term', params.term)
+    .eq('subject', params.subject)
+    .eq('track', params.track)
+    .order('seq_no', { ascending: true })
+
+  if (error || !data) return []
+
+  return data.map((row) => ({
+    id: String(row.id),
+    seqNo: Number(row.seq_no),
+    displayName: buildClassCourseDisplayName({
+      subject: row.subject as ClassCourseSubject,
+      term: row.term as ClassCourseTerm,
+      track: row.track as ClassCourseTrack,
+      seqNo: Number(row.seq_no),
+    }),
+  }))
+}
