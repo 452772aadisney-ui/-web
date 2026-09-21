@@ -25,11 +25,11 @@
 
 ## 適用順（厳密）
 
-1. **未適用の先行 migration をすべて適用**（少なくとも 063 まで）。  
+1. **未適用の先行 migration をすべて適用**（少なくとも 063 まで）。
    `schema_migrations` / 運用台帳で確認。**ファイル名や並びから推測しない。**
 2. **064 precheck**（read-only）→ 期待: `is_super_admin` 列 `ABSENT`、依存オブジェクトあり。
 3. **064 適用** → **064 verify**（列・関数・トリガ・監査表・profiles ポリシー）。
-4. **最初の大管理者を bootstrap**（下記テンプレ。064 の直後・065 の前が推奨）。  
+4. **最初の大管理者を bootstrap**（下記テンプレ。064 の直後・065 の前が推奨）。
    **UUID を明示指定。氏名・作成日時・role 順から推測しない。**
 5. **065 precheck**（read-only）→ 期待: 064 オブジェクト `PRESENT`、`audience_scope` は未適用なら `ABSENT`。
 6. **065 適用** → **065 verify**。
@@ -43,7 +43,7 @@ Rollback するときは **逆順**: アプリ戻し →（必要なら）066 �
 
 ## 最初の大管理者 bootstrap（テンプレ・実行しない）
 
-064 は誰も `is_super_admin=true` にしない。  
+064 は誰も `is_super_admin=true` にしない。
 UPDATE トリガ `profiles_protect_admin_privilege` は「既存の大管理者」を要求するため、**最初の 1 人はトリガを一時無効化**してから明示 UUID で立てる。
 
 **必須条件**
@@ -121,7 +121,7 @@ commit;
 -- select tgenabled from pg_trigger where tgname = 'profiles_protect_admin_privilege';
 ```
 
-以降の昇格・降格は `public.set_admin_super_privilege(target_id, make_super)` のみ（監査付き）。  
+以降の昇格・降格は `public.set_admin_super_privilege(target_id, make_super)` のみ（監査付き）。
 **最後の大管理者は demote / DELETE 不可**。
 
 ---
@@ -202,7 +202,7 @@ API は UI 非表示に加え `isSuperAdmin` / `excludeGraduates` をサーバ�
 
 ## Rollback の危険（特に 065）
 
-- **065 を rollback すると、一般管理者が再び既卒の学習ログ・チャット・予約・プロフィール等を読める**（再露出）。  
+- **065 を rollback すると、一般管理者が再び既卒の学習ログ・チャット・予約・プロフィール等を読める**（再露出）。
   アプリだけ戻しても RLS が残っていれば秘匿は維持される。**原則はアプリ戻し + DB 残置。**
 - 064 rollback は `admin_privilege_audit` 削除と `is_super_admin` 列 DROP で **監査・権限フラグを失う**。列を残してアプリだけ戻す方が安全。
 - 破壊的 SQL の前に必ず各 `supabase/rollbacks/*_precheck.sql` を実行し、WARN 行を読むこと。
