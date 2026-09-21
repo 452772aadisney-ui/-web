@@ -63,3 +63,15 @@ describe('071 attendance lineage migration', () => {
     expect(body).toMatch(/latest\.status = 'attended'/)
   })
 })
+
+describe('071 final state check query', () => {
+  it('requires 7-arg record RPC and rejects leftover 6-arg', () => {
+    const q = readFileSync(
+      join(process.cwd(), 'supabase', 'queries', '071_class_course_final_state_check.sql'),
+      'utf8',
+    )
+    expect(q).toMatch(/record_class_course_attendance\(uuid,uuid,text,date,uuid,uuid,uuid\)/)
+    expect(q).toMatch(/6-arg must be gone after 071/)
+    expect(q).toMatch(/final_assignments_select_own_absent/)
+  })
+})
