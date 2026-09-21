@@ -9,6 +9,7 @@ import { isPushSendingAvailable } from '@/lib/push/send-config'
 import { DEFAULT_NOTIFICATION_PREFERENCES } from '@/types/push'
 import { getJstDateKey } from '@/lib/study/dates'
 import { resolveEffectiveStudyReminderMode, type StudyReminderDeliveryMode } from '@/lib/study/study-reminder-mode'
+import { fetchKisotsuStudentIdsViaAdmin } from '@/lib/admin/dry-run-student-scope'
 
 const PAGE_SIZE = 1000
 /** Keep `.in(...)` URL length under PostgREST limits. */
@@ -225,6 +226,8 @@ export type AdminFullDryRunReport = {
   dateKey: string
   evaluatedAt: string
   durationMs: number
+  /** enrolled = graduates excluded (regular admin); all = super admin / unrestricted */
+  audienceScope: 'all' | 'enrolled'
   readiness: StudyReminderPushReadinessAggregate
   current: StudyReminderCurrentEffectiveAggregate
 }
@@ -486,6 +489,8 @@ export async function evaluateStudyReminderDryRunAggregate(params?: {
 export async function evaluateAdminFullDryRunReport(params?: {
   dateKey?: string
   env?: NodeJS.ProcessEnv | Record<string, string | undefined>
+  /** When true, exclude 既卒 before aggregates (regular admin). Cron must omit. */
+  excludeGraduates?: boolean
 }): Promise<
   | { ok: true; report: AdminFullDryRunReport }
   | { ok: false; code: 'admin_unavailable' | 'query_failed' }
@@ -500,7 +505,17 @@ export async function evaluateAdminFullDryRunReport(params?: {
   const admin = createAdminClient()
   if (!admin) return { ok: false, code: 'admin_unavailable' }
 
-  const loaded = await loadDryRunSnapshots(admin, dateKey)
+  let onlyStudentIds: ReadonlySet<string> | undefined
+  if (params?.excludeGraduates) {
+    const kisotsu = await fetchKisotsuStudentIdsViaAdmin(admin)
+    const all = await loadStudents(admin)
+    if (!all.ok) return { ok: false, code: 'query_failed' }
+    onlyStudentIds = new Set(
+      all.students.map((s) => s.id).filter((id) => !kisotsu.has(id)),
+    )
+  }
+
+  const loaded = await loadDryRunSnapshots(admin, dateKey, onlyStudentIds)
   if (!loaded.ok) return { ok: false, code: 'query_failed' }
 
   const readiness = emptyPushReadinessAggregate()
@@ -556,6 +571,7 @@ export async function evaluateAdminFullDryRunReport(params?: {
       dateKey,
       evaluatedAt,
       durationMs: Date.now() - started,
+      audienceScope: params?.excludeGraduates ? 'enrolled' : 'all',
       readiness,
       current,
     },

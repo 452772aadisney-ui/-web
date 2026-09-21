@@ -27,6 +27,7 @@ type Props = {
   initialFlagEnabled: boolean
   initialDisabledReason: string | null
   initialTargets: AdminTestTargetOption[]
+  isSuperAdmin?: boolean
 }
 
 type ApiInspectResponse = { ok: true; inspect: AdminTestInspectResult }
@@ -183,6 +184,7 @@ export function AdminNotificationTestClient({
   initialFlagEnabled,
   initialDisabledReason,
   initialTargets,
+  isSuperAdmin = false,
 }: Props) {
   const baseId = useId()
   const [targetId, setTargetId] = useState(
@@ -207,6 +209,7 @@ export function AdminNotificationTestClient({
   const [classScheduleDryRun, setClassScheduleDryRun] =
     useState<ClassScheduleAdminDryRunReport | null>(null)
   const [category, setCategory] = useState<AdminCategoryTestKind>('study_reminder')
+  const expectedAudienceScope = isSuperAdmin ? 'all' : 'enrolled'
   const [busy, setBusy] = useState<
     | 'inspect'
     | 'push'
@@ -661,6 +664,12 @@ export function AdminNotificationTestClient({
         }
 
         const data = result.data as ApiDryRunResponse
+        if (data.dryRun.audienceScope !== expectedAudienceScope) {
+          setDryRun(null)
+          setDryRunSumOk(null)
+          toastSession.error('権限スコープが一致しないため結果を破棄しました', 'admin-notification-test-toast')
+          return
+        }
         setDryRun(data.dryRun)
         setDryRunSumOk(data.sumConsistent)
         toastSession.success('dry-runの集計が完了しました', 'admin-notification-test-toast')
@@ -700,6 +709,11 @@ export function AdminNotificationTestClient({
         }
 
         const data = result.data as ApiAnnouncementDryRunResponse
+        if (data.announcementDryRun.audienceScope !== expectedAudienceScope) {
+          setAnnouncementDryRun(null)
+          toastSession.error('権限スコープが一致しないため結果を破棄しました', 'admin-notification-test-toast')
+          return
+        }
         setAnnouncementDryRun(data.announcementDryRun)
         toastSession.success('お知らせ通知の準備状況を集計しました', 'admin-notification-test-toast')
       } finally {
@@ -738,6 +752,11 @@ export function AdminNotificationTestClient({
         }
 
         const data = result.data as ApiMessageDryRunResponse
+        if (data.messageDryRun.audienceScope !== expectedAudienceScope) {
+          setMessageDryRun(null)
+          toastSession.error('権限スコープが一致しないため結果を破棄しました', 'admin-notification-test-toast')
+          return
+        }
         setMessageDryRun(data.messageDryRun)
         toastSession.success('メッセージ通知の準備状況を集計しました', 'admin-notification-test-toast')
       } finally {
@@ -776,6 +795,11 @@ export function AdminNotificationTestClient({
         }
 
         const data = result.data as ApiCoachingDryRunResponse
+        if (data.coachingDryRun.audienceScope !== expectedAudienceScope) {
+          setCoachingDryRun(null)
+          toastSession.error('権限スコープが一致しないため結果を破棄しました', 'admin-notification-test-toast')
+          return
+        }
         setCoachingDryRun(data.coachingDryRun)
         toastSession.success('コーチング通知の準備状況を集計しました', 'admin-notification-test-toast')
       } finally {
@@ -786,6 +810,7 @@ export function AdminNotificationTestClient({
   }
 
   const runClassScheduleDryRun = () => {
+    if (!isSuperAdmin) return
     if (busyRef.current || !dryRunAvailable) return
 
     busyRef.current = true
@@ -796,6 +821,10 @@ export function AdminNotificationTestClient({
       try {
         const result = await postJson({ action: 'class-schedule-dry-run' })
         if (!result.ok) {
+          if (result.status === 403 || result.error === 'super_admin_required') {
+            toastSession.error('大管理者のみ実行できます', 'admin-notification-test-toast')
+            return
+          }
           if (result.status === 429) {
             toastSession.error(
               result.retryAfterSeconds
@@ -834,6 +863,9 @@ export function AdminNotificationTestClient({
         </h2>
         <p className="mt-2 text-sm text-muted">
           現在のデータを使って、22:00の新しい通知方式なら何人が各処理の対象になるか確認します。Push・メールは送信しません。
+          {!isSuperAdmin
+            ? ' 通常管理者の集計対象は在学生のみです（既卒を含みません）。'
+            : null}
         </p>
 
         {!dryRunAvailable ? (
@@ -1366,6 +1398,7 @@ export function AdminNotificationTestClient({
         )}
       </section>
 
+      {isSuperAdmin ? (
       <section
         className="rounded-2xl border border-border bg-card p-5 shadow-sm"
         aria-labelledby={`${baseId}-class-schedule-dry-run-heading`}
@@ -1377,7 +1410,7 @@ export function AdminNotificationTestClient({
           授業予定通知の準備状況
         </h2>
         <p className="mt-2 text-sm text-muted">
-          学年=既卒の生徒向け授業予定通知の準備状況です。Push・メールは送信しません。
+          学年=既卒の生徒向け授業予定通知の準備状況です。Push・メールは送信しません。大管理者専用です。
         </p>
 
         {!dryRunAvailable ? (
@@ -1445,6 +1478,7 @@ export function AdminNotificationTestClient({
           </>
         )}
       </section>
+      ) : null}
 
       <div className="border-t border-border pt-2">
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-foreground">

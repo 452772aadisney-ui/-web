@@ -11,7 +11,7 @@
 | 移行 066 | `supabase/migrations/066_admin_privilege_audit_hardening.sql` |
 | 066 precheck | `supabase/queries/066_admin_privilege_audit_hardening_precheck.sql` |
 | 066 verify | `supabase/queries/066_admin_privilege_audit_hardening_verify.sql` |
-| 隔離検証（使い捨てDB） | `supabase/queries/066_admin_privilege_isolation_harness.sql` |
+| 隔離検証（使い捨てDB・ロール切替） | `supabase/queries/066_admin_privilege_isolation_harness.sql` |
 | 064 precheck | `supabase/queries/064_admin_super_privilege_precheck.sql` |
 | 064 verify | `supabase/queries/064_admin_super_privilege_verify.sql` |
 | 065 precheck | `supabase/queries/065_admin_graduate_scope_rls_precheck.sql` |
@@ -46,35 +46,97 @@ Rollback するときは **逆順**: アプリ戻し →（必要なら）066 �
 064 は誰も `is_super_admin=true` にしない。  
 UPDATE トリガ `profiles_protect_admin_privilege` は「既存の大管理者」を要求するため、**最初の 1 人はトリガを一時無効化**してから明示 UUID で立てる。
 
+**必須条件**
+
+- 同一トランザクション内で DISABLE → UPDATE → ENABLE
+- 例外時も ENABLE を実行（`EXCEPTION WHEN OTHERS` で再有効化してから再送出）
+- 対象 UUID が `role = 'admin'` であることを UPDATE の WHERE と行数検査で検証
+- コミット前にトリガ有効・大管理者人数を確認
+
 ```sql
--- TEMPLATE ONLY. Do not run as-is.
+-- TEMPLATE ONLY. Do not run as-is against production from this chat.
 -- Replace PASTE-ADMIN-UUID-HERE with the exact profiles.id of an existing admin.
 -- Never pick by full_name / email / created_at / "first admin".
 
 begin;
 
-alter table public.profiles
-  disable trigger profiles_protect_admin_privilege;
+do $$
+declare
+  target uuid := 'PASTE-ADMIN-UUID-HERE'::uuid;
+  updated_count integer;
+  super_count integer;
+  trigger_enabled boolean;
+begin
+  -- Fail closed: always re-enable trigger even on error.
+  begin
+    alter table public.profiles
+      disable trigger profiles_protect_admin_privilege;
 
-update public.profiles
-set is_super_admin = true,
-    updated_at = now()
-where id = 'PASTE-ADMIN-UUID-HERE'::uuid
-  and role = 'admin';
+    update public.profiles
+    set is_super_admin = true,
+        updated_at = now()
+    where id = target
+      and role = 'admin';
 
--- Expect exactly 1. If 0, abort (wrong UUID or not admin).
--- select count(*) from public.profiles
--- where role = 'admin' and is_super_admin = true;
+    get diagnostics updated_count = row_count;
+    if updated_count <> 1 then
+      raise exception 'bootstrap aborted: target must be an existing admin (updated=%)', updated_count;
+    end if;
 
-alter table public.profiles
-  enable trigger profiles_protect_admin_privilege;
+  exception
+    when others then
+      alter table public.profiles
+        enable trigger profiles_protect_admin_privilege;
+      raise;
+  end;
+
+  alter table public.profiles
+    enable trigger profiles_protect_admin_privilege;
+
+  select tgenabled = 'O' into trigger_enabled
+  from pg_trigger
+  where tgname = 'profiles_protect_admin_privilege'
+    and tgrelid = 'public.profiles'::regclass
+    and not tgisinternal;
+
+  if coalesce(trigger_enabled, false) is not true then
+    raise exception 'bootstrap aborted: protect trigger is not enabled';
+  end if;
+
+  select count(*)::integer into super_count
+  from public.profiles
+  where role = 'admin' and is_super_admin = true;
+
+  if super_count < 1 then
+    raise exception 'bootstrap aborted: no super admin after update';
+  end if;
+
+  raise notice 'bootstrap ok: super_admin_count=%', super_count;
+end $$;
 
 commit;
+
+-- Post-check (read-only)
+-- select id, role, is_super_admin from public.profiles where is_super_admin = true;
+-- select tgenabled from pg_trigger where tgname = 'profiles_protect_admin_privilege';
 ```
 
 以降の昇格・降格は `public.set_admin_super_privilege(target_id, make_super)` のみ（監査付き）。  
-**最後の大管理者は demote 不可**（関数・UPDATE トリガの両方で保護）。
+**最後の大管理者は demote / DELETE 不可**。
 
+---
+
+## 切り替え中の利用制限（必須）
+
+旧アプリの **service_role** 経路は RLS 追加だけでは制限できない。
+
+**064 適用開始〜新アプリ反映・ロール別確認完了まで:**
+
+- **通常管理者の管理画面利用全体を控える**（生徒一覧・お知らせ・通知運用・dry-run・コーチング代理操作を含む）
+- 大管理者のみ、検証に必要な最小操作を許可
+- 切替完了後: 新アプリへ再読み込み（ハードリロード）してから通常管理者の利用を再開
+
+共存リスクの詳細は下記「共存期間」を参照。
 ---
 
 ## 最後の大管理者 — 保護対象と対象外
@@ -102,11 +164,10 @@ commit;
 
 **推奨フリーズ（カットオーバー中）**
 
-- 一般管理者による **既卒まわりの操作**（既卒プロフィール閲覧・タグ変更・既卒向けお知らせ・授業予定の作成/更新）を止める。
-- 在学生向け通常オペは可能だが、混乱回避のため短時間の管理作業フリーズを推奨。
-- 旧タブからの書き込みを避けるため、切替後は **必ずリロード**。
-
-「RLS だけ先に当てて旧アプリを長く同居」は推奨しない。
+- **通常管理者の管理画面利用全体を停止**（service_role を使う旧パスが RLS を迂回しうるため）
+- 大管理者による検証用の最小操作のみ
+- 新アプリ反映・ロール別確認後に利用再開し、**必ずハードリロード**
+- 「RLS だけ先に当てて旧アプリを長く同居」は禁止
 
 ---
 
@@ -121,6 +182,21 @@ commit;
 | 購読集計 | 通常管理者は在学生のみ（service_role で既卒除外） |
 
 Cron・自動学習リマインダー等は管理者セッションに依存せず、既存の対象条件を維持（既卒を一律除外しない）。
+
+---
+
+## 通知 dry-run の権限（最終）
+
+| カテゴリ | 通常管理者 | 大管理者 | Cron / DELIVERY_MODE=dry-run |
+|----------|------------|----------|------------------------------|
+| 学習リマインダー全体 dry-run | 在学生のみ集計 | 全員 | **変更なし**（従来どおり全対象条件） |
+| お知らせ準備状況 dry-run | 在学生のみ | 全員 | オーケストレータ dry-run は従来どおり |
+| メッセージ準備状況 dry-run | 在学生のみ | 全員 | 同上 |
+| コーチング準備状況 dry-run | 在学生のみ（候補から既卒除外） | 全員 | Cron 候補ロジックは変更なし |
+| 授業予定準備状況 dry-run | **不可**（API 403） | 可（既卒向け） | Cron 対象条件は変更なし |
+
+API は UI 非表示に加え `isSuperAdmin` / `excludeGraduates` をサーバーで強制。
+ゲートキーは `adminId:enrolled|all` でスコープ分離（大管理者用結果を通常管理者ゲートと共有しない）。
 
 ---
 
@@ -158,3 +234,20 @@ Cron・自動学習リマインダー等は管理者セッションに依存せ�
 - [ ] 未適用 migration を確認してから 062→063→064→bootstrap→065→066→アプリの順
 - [ ] bootstrap UUID を台帳に記録（推測禁止）
 - [ ] フリーズ告知 → 適用 → verify → デプロイ → リロード依頼 → フリーズ解除
+
+### 隔離 DB での RLS 検証（必須・本番禁止）
+
+**実 DB 検証ステータス: 未実施**（このリポジトリ作業では隔離プロジェクトを起動・実行していない）。
+
+必要環境:
+
+1. 本番と切り離した Supabase プロジェクト（ローカル `supabase start` または専用 throwaway）
+2. migration 066 まで適用済み
+3. bootstrap 済みの大管理者 1 名 + 使い捨て通常管理者・在学生・既卒・全員宛てお知らせ行
+4. SQL Editor / psql で **同一セッション**に `066_admin_privilege_isolation_harness.sql` を流す
+   （`isolation_harness_ids` へ UUID を INSERT してから A–G1 を実行）
+5. 各ブロックで `SET LOCAL ROLE authenticated|anon` 後に `PASS` NOTICE を確認
+   postgres のままセクション 0 だけ成功しても **RLS 検証完了扱いにしない**
+6. 同時降格（G2）は **独立した 2 接続**で実施
+
+本番にテストユーザーや harness 用行を作らないこと。

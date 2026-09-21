@@ -4,25 +4,26 @@ type DryRunGate =
   | { ok: true }
   | { ok: false; code: 'in_progress' | 'rate_limited'; retryAfterSeconds?: number }
 
-const lastStartedByAdmin = new Map<string, number>()
-const inFlightAdmins = new Set<string>()
+const lastStartedByKey = new Map<string, number>()
+const inFlightKeys = new Set<string>()
 
 /** Test-only reset. */
 export function resetAdminFullDryRunRateLimitForTests(): void {
-  lastStartedByAdmin.clear()
-  inFlightAdmins.clear()
+  lastStartedByKey.clear()
+  inFlightKeys.clear()
 }
 
 /**
- * Process-local gate: one in-flight dry-run per admin and 60s between starts.
+ * Process-local gate keyed by admin + audience scope (enrolled vs all).
+ * Prevents sharing in-flight/cooldown across scopes for the same admin.
  * Does not coordinate across Vercel instances (documented limitation).
  */
-export function beginAdminFullDryRun(adminUserId: string, nowMs = Date.now()): DryRunGate {
-  if (inFlightAdmins.has(adminUserId)) {
+export function beginAdminFullDryRun(gateKey: string, nowMs = Date.now()): DryRunGate {
+  if (inFlightKeys.has(gateKey)) {
     return { ok: false, code: 'in_progress' }
   }
 
-  const last = lastStartedByAdmin.get(adminUserId)
+  const last = lastStartedByKey.get(gateKey)
   if (last != null) {
     const elapsed = nowMs - last
     if (elapsed < ADMIN_FULL_DRY_RUN_COOLDOWN_MS) {
@@ -37,11 +38,11 @@ export function beginAdminFullDryRun(adminUserId: string, nowMs = Date.now()): D
     }
   }
 
-  inFlightAdmins.add(adminUserId)
-  lastStartedByAdmin.set(adminUserId, nowMs)
+  inFlightKeys.add(gateKey)
+  lastStartedByKey.set(gateKey, nowMs)
   return { ok: true }
 }
 
-export function endAdminFullDryRun(adminUserId: string): void {
-  inFlightAdmins.delete(adminUserId)
+export function endAdminFullDryRun(gateKey: string): void {
+  inFlightKeys.delete(gateKey)
 }

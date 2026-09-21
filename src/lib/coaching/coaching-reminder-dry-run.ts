@@ -14,6 +14,7 @@ import {
   loadBookingPromptCandidates,
   loadSessionReminderCandidates,
 } from '@/lib/coaching/coaching-reminder-candidates'
+import { fetchKisotsuStudentIdsViaAdmin } from '@/lib/admin/dry-run-student-scope'
 
 export type CoachingDryRunFinalBucket =
   | 'preference_disabled'
@@ -91,6 +92,7 @@ export type CoachingSessionDryRunSection = {
 export type CoachingAdminDryRunReport = {
   evaluatedAt: string
   durationMs: number
+  audienceScope: 'all' | 'enrolled'
   mode: CoachingReminderDeliveryMode
   pushSendingEnabled: boolean
   forcedLegacyReason: 'allowlist_empty' | 'allowlist_invalid' | null
@@ -235,6 +237,7 @@ function tallyCurrent(
 export async function evaluateCoachingAdminDryRunReport(params?: {
   now?: Date
   env?: NodeJS.ProcessEnv | Record<string, string | undefined>
+  excludeGraduates?: boolean
 }): Promise<
   | { ok: true; report: CoachingAdminDryRunReport }
   | { ok: false; code: 'admin_unavailable' | 'query_failed' }
@@ -253,10 +256,22 @@ export async function evaluateCoachingAdminDryRunReport(params?: {
     return { ok: false, code: 'query_failed' }
   }
 
+  let bookingCandidates = bookingLoaded.candidates
+  let sessionCandidates = sessionLoaded.candidates
+  // When excluding graduates, do not surface unfiltered bookedThisWeek (mixed count).
+  let bookedThisWeek = bookingLoaded.bookedStudentCount
+
+  if (params?.excludeGraduates) {
+    const kisotsu = await fetchKisotsuStudentIdsViaAdmin(admin)
+    bookingCandidates = bookingCandidates.filter((c) => !kisotsu.has(c.studentId))
+    sessionCandidates = sessionCandidates.filter((c) => !kisotsu.has(c.studentId))
+    bookedThisWeek = 0
+  }
+
   const userIds = [
     ...new Set([
-      ...bookingLoaded.candidates.map((c) => c.studentId),
-      ...sessionLoaded.candidates.map((c) => c.studentId),
+      ...bookingCandidates.map((c) => c.studentId),
+      ...sessionCandidates.map((c) => c.studentId),
     ]),
   ]
 
@@ -264,8 +279,8 @@ export async function evaluateCoachingAdminDryRunReport(params?: {
 
   const bookingPrompt: CoachingBookingPromptDryRunSection = {
     weekMondayKey: bookingLoaded.weekMondayKey,
-    coachingEligibleUnbooked: bookingLoaded.candidates.length,
-    bookedThisWeek: bookingLoaded.bookedStudentCount,
+    coachingEligibleUnbooked: bookingCandidates.length,
+    bookedThisWeek,
     preferenceDisabled: 0,
     pushReady: 0,
     emailFallback: 0,
@@ -281,7 +296,7 @@ export async function evaluateCoachingAdminDryRunReport(params?: {
     failed: 0,
   }
 
-  for (const c of bookingLoaded.candidates) {
+  for (const c of bookingCandidates) {
     const base = {
       preferenceLookupOk: maps.prefOk.get(c.studentId) ?? false,
       preferenceEnabled: maps.prefEnabled.get(c.studentId) ?? true,
@@ -299,7 +314,7 @@ export async function evaluateCoachingAdminDryRunReport(params?: {
 
   const sessionPreviousDay: CoachingSessionDryRunSection = {
     tomorrowKey: sessionLoaded.tomorrowKey,
-    validBookingsTomorrow: sessionLoaded.candidates.length,
+    validBookingsTomorrow: sessionCandidates.length,
     preferenceDisabled: 0,
     pushReady: 0,
     emailFallback: 0,
@@ -315,7 +330,7 @@ export async function evaluateCoachingAdminDryRunReport(params?: {
     failed: 0,
   }
 
-  for (const c of sessionLoaded.candidates) {
+  for (const c of sessionCandidates) {
     const base = {
       preferenceLookupOk: maps.prefOk.get(c.studentId) ?? false,
       preferenceEnabled: maps.prefEnabled.get(c.studentId) ?? true,
@@ -336,6 +351,7 @@ export async function evaluateCoachingAdminDryRunReport(params?: {
     report: {
       evaluatedAt: new Date().toISOString(),
       durationMs: Date.now() - startedAt,
+      audienceScope: params?.excludeGraduates ? 'enrolled' : 'all',
       mode: effective.mode,
       pushSendingEnabled,
       forcedLegacyReason: effective.forcedLegacyReason,

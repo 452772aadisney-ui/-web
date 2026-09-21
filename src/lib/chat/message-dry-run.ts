@@ -11,6 +11,7 @@ import {
   resolveEffectiveMessageMode,
   type MessageDeliveryMode,
 } from '@/lib/chat/message-delivery-mode'
+import { filterStudentIdsForAdminDryRun } from '@/lib/admin/dry-run-student-scope'
 
 export type MessageDryRunFinalBucket =
   | 'preference_disabled'
@@ -76,6 +77,7 @@ export type MessageDryRunAggregate = {
 }
 
 export type MessageAdminDryRunReport = {
+  audienceScope: 'all' | 'enrolled'
   /** Structural readiness ignoring PUSH_SENDING_ENABLED. */
   readiness: {
     recipients: number
@@ -92,6 +94,7 @@ export type MessageAdminDryRunReport = {
 
 export async function evaluateMessageAdminDryRunReport(params?: {
   env?: NodeJS.ProcessEnv | Record<string, string | undefined>
+  excludeGraduates?: boolean
 }): Promise<
   | { ok: true; report: MessageAdminDryRunReport }
   | { ok: false; code: 'admin_unavailable' | 'query_failed' }
@@ -106,6 +109,19 @@ export async function evaluateMessageAdminDryRunReport(params?: {
   } catch {
     return { ok: false, code: 'query_failed' }
   }
+
+  if (params?.excludeGraduates) {
+    const allowed = new Set(
+      await filterStudentIdsForAdminDryRun(
+        admin,
+        students.map((s) => s.id),
+        true,
+      ),
+    )
+    students = students.filter((s) => allowed.has(s.id))
+  }
+
+  const audienceScope = params?.excludeGraduates ? 'enrolled' : 'all'
 
   const effective = resolveEffectiveMessageMode(env)
   const pushSendingEnabled = isPushSendingAvailable(env)
@@ -200,6 +216,7 @@ export async function evaluateMessageAdminDryRunReport(params?: {
   return {
     ok: true,
     report: {
+      audienceScope,
       readiness,
       current,
       notice: 'all_students_readiness_actual_recipient_at_send_time',

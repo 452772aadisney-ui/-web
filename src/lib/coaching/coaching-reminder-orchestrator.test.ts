@@ -65,6 +65,7 @@ describe('coaching reminder orchestrators', () => {
     evaluateCoachingAdminDryRunReport.mockResolvedValue({
       ok: true,
       report: {
+        audienceScope: 'all',
         bookingPromptCurrent: {
           wouldUsePush: 1,
           wouldFallbackEmail: 0,

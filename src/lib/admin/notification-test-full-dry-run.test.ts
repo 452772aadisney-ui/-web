@@ -27,18 +27,29 @@ describe('admin full dry-run gate', () => {
     resetAdminFullDryRunRateLimitForTests()
   })
 
-  it('blocks overlapping runs and enforces cooldown', () => {
-    expect(beginAdminFullDryRun('admin-1', 1_000).ok).toBe(true)
-    expect(beginAdminFullDryRun('admin-1', 1_100)).toEqual({ ok: false, code: 'in_progress' })
-    endAdminFullDryRun('admin-1')
+  it('blocks overlapping runs and enforces cooldown per scope key', () => {
+    expect(beginAdminFullDryRun('admin-1:enrolled', 1_000).ok).toBe(true)
+    expect(beginAdminFullDryRun('admin-1:enrolled', 1_100)).toEqual({
+      ok: false,
+      code: 'in_progress',
+    })
+    // Different audience scope does not share in-flight
+    expect(beginAdminFullDryRun('admin-1:all', 1_100).ok).toBe(true)
+    endAdminFullDryRun('admin-1:all')
+    endAdminFullDryRun('admin-1:enrolled')
 
-    const limited = beginAdminFullDryRun('admin-1', 1_000 + ADMIN_FULL_DRY_RUN_COOLDOWN_MS - 1)
+    const limited = beginAdminFullDryRun(
+      'admin-1:enrolled',
+      1_000 + ADMIN_FULL_DRY_RUN_COOLDOWN_MS - 1,
+    )
     expect(limited.ok).toBe(false)
     if (limited.ok) return
     expect(limited.code).toBe('rate_limited')
 
-    expect(beginAdminFullDryRun('admin-1', 1_000 + ADMIN_FULL_DRY_RUN_COOLDOWN_MS).ok).toBe(true)
-    endAdminFullDryRun('admin-1')
+    expect(
+      beginAdminFullDryRun('admin-1:enrolled', 1_000 + ADMIN_FULL_DRY_RUN_COOLDOWN_MS).ok,
+    ).toBe(true)
+    endAdminFullDryRun('admin-1:enrolled')
   })
 })
 
@@ -51,19 +62,21 @@ describe('runAdminFullStudyReminderDryRun', () => {
   it('requires feature flag', async () => {
     const result = await runAdminFullStudyReminderDryRun({
       adminUserId: 'admin-1',
+      isSuperAdmin: false,
       env: { ADMIN_NOTIFICATION_TEST_ENABLED: 'false' },
     })
     expect(result).toEqual({ ok: false, code: 'feature_disabled' })
     expect(evaluateAdminFullDryRunReport).not.toHaveBeenCalled()
   })
 
-  it('returns dual report without requiring allowlist', async () => {
+  it('returns dual report without requiring allowlist (enrolled for regular admin)', async () => {
     evaluateAdminFullDryRunReport.mockResolvedValue({
       ok: true,
       report: {
         dateKey: '2026-09-05',
         evaluatedAt: '2026-09-05T13:00:00.000Z',
         durationMs: 12,
+        audienceScope: 'enrolled',
         readiness: {
           totalStudents: 1,
           alreadyRecorded: 1,
@@ -96,6 +109,7 @@ describe('runAdminFullStudyReminderDryRun', () => {
 
     const result = await runAdminFullStudyReminderDryRun({
       adminUserId: 'admin-1',
+      isSuperAdmin: false,
       env: {
         ADMIN_NOTIFICATION_TEST_ENABLED: 'true',
       },
@@ -104,6 +118,9 @@ describe('runAdminFullStudyReminderDryRun', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.sumConsistent).toEqual({ readiness: true, current: true })
+    expect(evaluateAdminFullDryRunReport).toHaveBeenCalledWith(
+      expect.objectContaining({ excludeGraduates: true }),
+    )
     expect(JSON.stringify(result.report)).not.toContain('admin-1')
   })
 })

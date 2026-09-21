@@ -8,6 +8,10 @@ import {
   endAdminFullDryRun,
 } from '@/lib/admin/notification-test-dry-run-gate'
 import {
+  dryRunGateKey,
+  resolveAdminDryRunAudienceScope,
+} from '@/lib/admin/dry-run-student-scope'
+import {
   evaluateCoachingAdminDryRunReport,
   type CoachingAdminDryRunReport,
 } from '@/lib/coaching/coaching-reminder-dry-run'
@@ -27,6 +31,7 @@ export type AdminCoachingDryRunResult =
 
 export async function runAdminCoachingReminderDryRun(params: {
   adminUserId: string
+  isSuperAdmin: boolean
   env?: NodeJS.ProcessEnv | Record<string, string | undefined>
 }): Promise<AdminCoachingDryRunResult> {
   const env = params.env ?? process.env
@@ -35,7 +40,9 @@ export async function runAdminCoachingReminderDryRun(params: {
     return { ok: false, code: 'feature_disabled' }
   }
 
-  const gate = beginAdminFullDryRun(params.adminUserId)
+  const audienceScope = resolveAdminDryRunAudienceScope(params.isSuperAdmin)
+  const gateKey = dryRunGateKey(params.adminUserId, audienceScope)
+  const gate = beginAdminFullDryRun(gateKey)
   if (!gate.ok) {
     return {
       ok: false,
@@ -45,12 +52,15 @@ export async function runAdminCoachingReminderDryRun(params: {
   }
 
   try {
-    const evaluated = await evaluateCoachingAdminDryRunReport({ env })
+    const evaluated = await evaluateCoachingAdminDryRunReport({
+      env,
+      excludeGraduates: audienceScope === 'enrolled',
+    })
     if (!evaluated.ok) {
       return { ok: false, code: evaluated.code }
     }
     return { ok: true, report: evaluated.report }
   } finally {
-    endAdminFullDryRun(params.adminUserId)
+    endAdminFullDryRun(gateKey)
   }
 }

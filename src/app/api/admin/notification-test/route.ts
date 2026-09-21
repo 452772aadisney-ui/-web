@@ -376,7 +376,10 @@ export async function POST(request: Request) {
   }
 
   if (action === 'full-dry-run') {
-    const result = await runAdminFullStudyReminderDryRun({ adminUserId: auth.userId })
+    const result = await runAdminFullStudyReminderDryRun({
+      adminUserId: auth.userId,
+      isSuperAdmin: auth.isSuperAdmin,
+    })
     if (!result.ok) {
       if (result.code === 'rate_limited') {
         return jsonError(429, 'rate_limited', {
@@ -401,7 +404,10 @@ export async function POST(request: Request) {
   }
 
   if (action === 'announcement-dry-run') {
-    const result = await runAdminAnnouncementDeliveryDryRun({ adminUserId: auth.userId })
+    const result = await runAdminAnnouncementDeliveryDryRun({
+      adminUserId: auth.userId,
+      isSuperAdmin: auth.isSuperAdmin,
+    })
     if (!result.ok) {
       if (result.code === 'rate_limited') {
         return jsonError(429, 'rate_limited', {
@@ -424,7 +430,10 @@ export async function POST(request: Request) {
   }
 
   if (action === 'message-dry-run') {
-    const result = await runAdminMessageDeliveryDryRun({ adminUserId: auth.userId })
+    const result = await runAdminMessageDeliveryDryRun({
+      adminUserId: auth.userId,
+      isSuperAdmin: auth.isSuperAdmin,
+    })
     if (!result.ok) {
       if (result.code === 'rate_limited') {
         return jsonError(429, 'rate_limited', {
@@ -447,7 +456,10 @@ export async function POST(request: Request) {
   }
 
   if (action === 'coaching-dry-run') {
-    const result = await runAdminCoachingReminderDryRun({ adminUserId: auth.userId })
+    const result = await runAdminCoachingReminderDryRun({
+      adminUserId: auth.userId,
+      isSuperAdmin: auth.isSuperAdmin,
+    })
     if (!result.ok) {
       if (result.code === 'rate_limited') {
         return jsonError(429, 'rate_limited', {
@@ -473,8 +485,14 @@ export async function POST(request: Request) {
     if (!auth.isSuperAdmin) {
       return jsonError(403, 'super_admin_required')
     }
-    const result = await runAdminClassScheduleDeliveryDryRun({ adminUserId: auth.userId })
+    const result = await runAdminClassScheduleDeliveryDryRun({
+      adminUserId: auth.userId,
+      isSuperAdmin: auth.isSuperAdmin,
+    })
     if (!result.ok) {
+      if (result.code === 'super_admin_required') {
+        return jsonError(403, 'super_admin_required')
+      }
       if (result.code === 'rate_limited') {
         return jsonError(429, 'rate_limited', {
           retryAfterSeconds: result.retryAfterSeconds,

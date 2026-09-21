@@ -11,6 +11,7 @@ import {
   resolveEffectiveAnnouncementMode,
   type AnnouncementDeliveryMode,
 } from '@/lib/announcements/announcement-delivery-mode'
+import { filterStudentIdsForAdminDryRun } from '@/lib/admin/dry-run-student-scope'
 
 export type AnnouncementDryRunFinalBucket =
   | 'preference_disabled'
@@ -166,6 +167,7 @@ export async function evaluateAnnouncementDeliveryDryRunAggregate(params?: {
 }
 
 export type AnnouncementAdminDryRunReport = {
+  audienceScope: 'all' | 'enrolled'
   readiness: {
     recipients: number
     preferenceDisabled: number
@@ -179,6 +181,7 @@ export type AnnouncementAdminDryRunReport = {
 
 export async function evaluateAnnouncementAdminDryRunReport(params?: {
   env?: NodeJS.ProcessEnv | Record<string, string | undefined>
+  excludeGraduates?: boolean
 }): Promise<
   | { ok: true; report: AnnouncementAdminDryRunReport }
   | { ok: false; code: 'admin_unavailable' | 'query_failed' }
@@ -193,6 +196,19 @@ export async function evaluateAnnouncementAdminDryRunReport(params?: {
   } catch {
     return { ok: false, code: 'query_failed' }
   }
+
+  if (params?.excludeGraduates) {
+    const allowed = new Set(
+      await filterStudentIdsForAdminDryRun(
+        admin,
+        students.map((s) => s.id),
+        true,
+      ),
+    )
+    students = students.filter((s) => allowed.has(s.id))
+  }
+
+  const audienceScope = params?.excludeGraduates ? 'enrolled' : 'all'
 
   const effective = resolveEffectiveAnnouncementMode(env)
   const pushSendingEnabled = isPushSendingAvailable(env)
@@ -284,5 +300,5 @@ export async function evaluateAnnouncementAdminDryRunReport(params?: {
     }
   }
 
-  return { ok: true, report: { readiness, current } }
+  return { ok: true, report: { audienceScope, readiness, current } }
 }

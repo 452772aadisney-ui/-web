@@ -65,6 +65,7 @@ export default async function AdminNotificationsOpsPage() {
             initialFlagEnabled={isAdminNotificationTestEnabled()}
             initialDisabledReason={disabledReason}
             initialTargets={targets}
+            isSuperAdmin={superAdmin}
           />
 
           <details className="rounded-2xl border border-border bg-card p-5 shadow-sm">

@@ -8,6 +8,10 @@ import {
   endAdminFullDryRun,
 } from '@/lib/admin/notification-test-dry-run-gate'
 import {
+  dryRunGateKey,
+  resolveAdminDryRunAudienceScope,
+} from '@/lib/admin/dry-run-student-scope'
+import {
   evaluateMessageAdminDryRunReport,
   type MessageAdminDryRunReport,
 } from '@/lib/chat/message-dry-run'
@@ -27,6 +31,7 @@ export type AdminMessageDryRunResult =
 
 export async function runAdminMessageDeliveryDryRun(params: {
   adminUserId: string
+  isSuperAdmin: boolean
   env?: NodeJS.ProcessEnv | Record<string, string | undefined>
 }): Promise<AdminMessageDryRunResult> {
   const env = params.env ?? process.env
@@ -35,7 +40,9 @@ export async function runAdminMessageDeliveryDryRun(params: {
     return { ok: false, code: 'feature_disabled' }
   }
 
-  const gate = beginAdminFullDryRun(params.adminUserId)
+  const audienceScope = resolveAdminDryRunAudienceScope(params.isSuperAdmin)
+  const gateKey = dryRunGateKey(params.adminUserId, audienceScope)
+  const gate = beginAdminFullDryRun(gateKey)
   if (!gate.ok) {
     return {
       ok: false,
@@ -45,12 +52,15 @@ export async function runAdminMessageDeliveryDryRun(params: {
   }
 
   try {
-    const evaluated = await evaluateMessageAdminDryRunReport({ env })
+    const evaluated = await evaluateMessageAdminDryRunReport({
+      env,
+      excludeGraduates: audienceScope === 'enrolled',
+    })
     if (!evaluated.ok) {
       return { ok: false, code: evaluated.code }
     }
     return { ok: true, report: evaluated.report }
   } finally {
-    endAdminFullDryRun(params.adminUserId)
+    endAdminFullDryRun(gateKey)
   }
 }
