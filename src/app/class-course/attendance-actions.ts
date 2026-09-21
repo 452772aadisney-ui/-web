@@ -80,20 +80,29 @@ export async function recordClassCourseAttendance(params: {
     return { ok: false, error: '有効な割り当てがありません' }
   }
 
-  const { error } = await gate.admin.from('class_course_attendance_events').insert({
-    course_unit_id: params.courseUnitId,
-    student_id: params.studentId,
-    assignment_id: assignment.id,
-    status: params.status,
-    event_date: params.eventDate,
-    session_id: params.sessionId ?? null,
-    recorded_by: gate.profile.id,
+  const { data, error } = await gate.admin.rpc('record_class_course_attendance', {
+    p_course_unit_id: params.courseUnitId,
+    p_student_id: params.studentId,
+    p_status: params.status,
+    p_event_date: params.eventDate,
+    p_session_id: params.sessionId ?? null,
+    p_actor_id: gate.profile.id,
   })
 
   if (error) {
-    console.error('[class-course] attendance insert failed', error.code)
+    console.error('[class-course] attendance rpc failed', error.code)
+    const msg = String(error.message ?? '')
+    if (msg.includes('cancelled session')) {
+      return { ok: false, error: '中止コマには新規の実施・欠席を付けられません' }
+    }
+    if (msg.includes('active assignment')) {
+      return { ok: false, error: '有効な割り当てがありません' }
+    }
     return { ok: false, error: '保存に失敗しました' }
   }
+
+  // already_attended skip is success without new row
+  void data
 
   revalidateAttendancePaths(params.studentId)
   return { ok: true }
@@ -450,7 +459,7 @@ export async function loadStudentCourseRemaining(studentId: string): Promise<{
     const currentStatus = resolveCurrentAttendanceStatus(
       unitEvents.map((e) => ({ status: e.status as ClassCourseAttendanceStatus })),
     )
-    const attended = unitEvents.some((e) => e.status === 'attended')
+    const attended = currentStatus === 'attended'
     return {
       courseUnitId: String(a.course_unit_id),
       displayName: unit
@@ -499,6 +508,7 @@ export async function loadStudentCourseRemaining(studentId: string): Promise<{
       attendanceEvents: (events ?? []).map((e) => ({
         course_unit_id: String(e.course_unit_id),
         status: e.status as ClassCourseAttendanceStatus,
+        recorded_at: String(e.recorded_at),
       })),
     })
     return {

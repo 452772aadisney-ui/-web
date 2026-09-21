@@ -33,6 +33,8 @@ export type ClassScheduleAudienceType = 'all_kisotsu' | 'targeted'
 
 export type ClassCourseAttendanceStatus = 'not_done' | 'attended' | 'absent'
 
+export type ClassCourseAttendanceEventSource = 'session' | 'manual'
+
 export type ClassCourseAttendanceEvent = {
   id: string
   course_unit_id: string
@@ -41,6 +43,8 @@ export type ClassCourseAttendanceEvent = {
   status: ClassCourseAttendanceStatus
   event_date: string
   session_id: string | null
+  /** session=コマ経由 / manual=手入力。コマ削除後も session_id null と区別する。 */
+  source: ClassCourseAttendanceEventSource
   note: string | null
   recorded_by: string | null
   recorded_at: string
