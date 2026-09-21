@@ -3,7 +3,11 @@
  */
 
 import type { ClassCourseAttendanceStatus } from '@/types/class-course'
-import { resolveCurrentAttendanceStatus } from '@/lib/class-course/remaining'
+import {
+  hasEffectiveAttended,
+  resolveCurrentAttendanceStatus,
+  type AttendanceEventForRemaining,
+} from '@/lib/class-course/remaining'
 
 export type BulkAttendStudentPlan = {
   studentId: string
@@ -16,7 +20,10 @@ export function planBulkMarkAttended(
   attendees: readonly {
     studentId: string
     label: string
+    /** Status for THIS session lineage only. */
     currentStatus: ClassCourseAttendanceStatus
+    /** True when another lineage already has effective attended. */
+    blockedByOtherEffectiveAttend?: boolean
   }[],
 ): {
   plans: BulkAttendStudentPlan[]
@@ -25,7 +32,7 @@ export function planBulkMarkAttended(
   alreadyAttended: BulkAttendStudentPlan[]
 } {
   const plans: BulkAttendStudentPlan[] = attendees.map((row) => {
-    if (row.currentStatus === 'attended') {
+    if (row.currentStatus === 'attended' || row.blockedByOtherEffectiveAttend) {
       return { ...row, action: 'skip_already_attended' as const }
     }
     if (row.currentStatus === 'absent') {
@@ -74,20 +81,20 @@ export function summarizeBulkAttendResult(params: {
   }
 }
 
-/** Latest status blocks remove when attended or absent. */
+/** Remove blocked when THIS session lineage latest is attended or absent. */
 export function canRemoveSessionAttendee(params: {
-  eventsNewestFirst: readonly { status: ClassCourseAttendanceStatus }[]
+  lineageEventsNewestFirst: readonly { status: ClassCourseAttendanceStatus }[]
 }): { ok: true } | { ok: false; reason: 'has_attendance_record' } {
-  const current = resolveCurrentAttendanceStatus(params.eventsNewestFirst)
+  const current = resolveCurrentAttendanceStatus(params.lineageEventsNewestFirst)
   if (current === 'attended' || current === 'absent') {
     return { ok: false, reason: 'has_attendance_record' }
   }
   return { ok: true }
 }
 
-/** Assignment cancel requires current not attended and no session targeting. */
+/** Assignment cancel requires no effective attended across lineages and no session targeting. */
 export function canCancelClassCourseAssignment(params: {
-  eventsNewestFirst: readonly { status: ClassCourseAttendanceStatus }[]
+  events: readonly AttendanceEventForRemaining[]
   sessionAttendeeCount: number
 }):
   | { ok: true }
@@ -95,8 +102,7 @@ export function canCancelClassCourseAssignment(params: {
       ok: false
       reason: 'has_attended' | 'still_on_sessions'
     } {
-  const current = resolveCurrentAttendanceStatus(params.eventsNewestFirst)
-  if (current === 'attended') {
+  if (hasEffectiveAttended(params.events)) {
     return { ok: false, reason: 'has_attended' }
   }
   if (params.sessionAttendeeCount > 0) {

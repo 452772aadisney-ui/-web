@@ -987,7 +987,16 @@ export async function deleteClassScheduleDay(
   const supabase = await createClient()
   const { error } = await supabase.from('class_schedule_days').delete().eq('id', dayId)
 
-  if (error) return { error: '授業日の削除に失敗しました' }
+  if (error) {
+    const msg = String(error.message ?? '')
+    if (msg.includes('attendance record')) {
+      return {
+        error:
+          '実施または欠席の記録があるコマがあるため削除できません。先に未実施へ訂正してください',
+      }
+    }
+    return { error: '授業日の削除に失敗しました' }
+  }
 
   // Misregistration delete: NO notify
   await setFlashToastCookie('class_schedule_day_deleted')
@@ -1020,7 +1029,16 @@ export async function deleteClassScheduleSession(
     .eq('id', sessionId)
     .eq('day_id', dayId)
 
-  if (error) return { error: 'コマの削除に失敗しました' }
+  if (error) {
+    const msg = String(error.message ?? '')
+    if (msg.includes('attendance record')) {
+      return {
+        error:
+          '実施または欠席の記録があるためコマを削除できません。先に未実施へ訂正してください',
+      }
+    }
+    return { error: 'コマの削除に失敗しました' }
+  }
 
   // Misregistration delete: NO notify
   await supabase

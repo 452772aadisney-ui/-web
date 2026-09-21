@@ -18,6 +18,7 @@ import { AdminNarrowContent } from '@/components/layout/AdminNarrowContent'
 import { getJstDateKey } from '@/lib/study/dates'
 import { ManualAttendanceForm } from '@/components/class-course/ManualAttendanceForm'
 import { CancelAssignmentButton } from '@/components/class-course/CancelAssignmentButton'
+import { StudentCourseLineagePanel } from '@/components/class-course/StudentCourseLineagePanel'
 
 export const dynamic = 'force-dynamic'
 
@@ -126,10 +127,23 @@ export default async function AdminClassCourseStudentPage({
                           : ev.status === 'absent'
                             ? '欠席'
                             : '未実施'}
+                        {' · '}
+                        {ev.source === 'session'
+                          ? ev.sessionId
+                            ? 'コマ'
+                            : 'コマ（削除済）'
+                          : '手入力'}
                       </li>
                     ))}
                   </ul>
                 ) : null}
+                <StudentCourseLineagePanel
+                  studentId={studentId}
+                  todayKey={todayKey}
+                  courseUnitId={row.courseUnitId}
+                  displayName={row.displayName}
+                  lineages={row.lineages}
+                />
               </li>
             ))}
           </ul>

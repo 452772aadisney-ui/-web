@@ -43,6 +43,8 @@ export type ClassCourseAttendanceEvent = {
   status: ClassCourseAttendanceStatus
   event_date: string
   session_id: string | null
+  /** Survives session delete; shared by corrections for the same attendance record. */
+  attendance_lineage_id: string
   /** session=コマ経由 / manual=手入力。コマ削除後も session_id null と区別する。 */
   source: ClassCourseAttendanceEventSource
   note: string | null

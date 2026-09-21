@@ -52,11 +52,11 @@ export default async function AdminClassScheduleDayPage({
           studentIds.length > 0
             ? await admin
                 .from('class_course_attendance_events')
-                .select('student_id, status, recorded_at')
+                .select('student_id, status, recorded_at, attendance_lineage_id')
                 .eq('course_unit_id', session.course_unit_id)
                 .in('student_id', studentIds)
                 .order('recorded_at', { ascending: false })
-            : { data: [] as { student_id: string; status: string }[] }
+            : { data: [] as { student_id: string; status: string; attendance_lineage_id: string }[] }
 
         attendanceBySession.set(
           session.id,
@@ -70,7 +70,9 @@ export default async function AdminClassScheduleDayPage({
               email?: string
             } | null
             const studentEvents = (events ?? []).filter(
-              (e) => e.student_id === row.student_id,
+              (e) =>
+                e.student_id === row.student_id &&
+                String(e.attendance_lineage_id) === session.id,
             )
             return {
               studentId: String(row.student_id),

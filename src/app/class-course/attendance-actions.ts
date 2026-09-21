@@ -4,7 +4,13 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireSuperAdmin } from '@/lib/class-schedule/access'
 import { requireAdminClassScheduleRpcClient } from '@/lib/class-schedule/rpc-auth'
-import { canRecordAttendanceOnScheduleDate } from '@/lib/class-course/remaining'
+import {
+  canRecordAttendanceOnScheduleDate,
+  hasEffectiveAttended,
+  resolveCurrentAttendanceStatus,
+  resolveUnitEffectiveStatus,
+  type AttendanceEventForRemaining,
+} from '@/lib/class-course/remaining'
 import {
   attendeeRemoveErrorMessage,
   assignmentCancelErrorMessage,
@@ -33,7 +39,12 @@ export async function recordClassCourseAttendance(params: {
   status: ClassCourseAttendanceStatus
   eventDate: string
   sessionId?: string | null
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+  /** Required to correct a manual / post-delete lineage; ignored when sessionId set. */
+  attendanceLineageId?: string | null
+}): Promise<
+  | { ok: true; skipped?: boolean; message?: string }
+  | { ok: false; error: string }
+> {
   const gate = await requireAdminClassScheduleRpcClient()
   if (!gate.ok) return { ok: false, error: gate.error }
 
@@ -86,6 +97,7 @@ export async function recordClassCourseAttendance(params: {
     p_status: params.status,
     p_event_date: params.eventDate,
     p_session_id: params.sessionId ?? null,
+    p_attendance_lineage_id: params.attendanceLineageId ?? null,
     p_actor_id: gate.profile.id,
   })
 
@@ -98,11 +110,25 @@ export async function recordClassCourseAttendance(params: {
     if (msg.includes('active assignment')) {
       return { ok: false, error: '有効な割り当てがありません' }
     }
+    if (msg.includes('effective attendance already exists')) {
+      return {
+        ok: false,
+        error:
+          'この共通授業は別の受講記録で実施済みです。二重実施はできません。先にそちらの実施を未実施へ訂正してください',
+      }
+    }
     return { ok: false, error: '保存に失敗しました' }
   }
 
-  // already_attended skip is success without new row
-  void data
+  const payload = data as { skipped?: boolean; reason?: string } | null
+  if (payload?.skipped) {
+    revalidateAttendancePaths(params.studentId)
+    return {
+      ok: true,
+      skipped: true,
+      message: 'この受講記録はすでに実施済みです（追加保存はしていません）',
+    }
+  }
 
   revalidateAttendancePaths(params.studentId)
   return { ok: true }
@@ -160,29 +186,49 @@ export async function recordClassCourseAttendanceForAllAttendees(params: {
 
   const { data: events } = await gate.admin
     .from('class_course_attendance_events')
-    .select('student_id, status, recorded_at')
+    .select('student_id, status, recorded_at, attendance_lineage_id')
     .eq('course_unit_id', params.courseUnitId)
     .in('student_id', studentIds)
     .order('recorded_at', { ascending: false })
 
-  const latestByStudent = new Map<string, ClassCourseAttendanceStatus>()
-  for (const ev of events ?? []) {
-    const sid = String(ev.student_id)
-    if (!latestByStudent.has(sid)) {
-      latestByStudent.set(sid, ev.status as ClassCourseAttendanceStatus)
-    }
+  const lineageStatusByStudent = new Map<string, ClassCourseAttendanceStatus>()
+  const otherAttendByStudent = new Map<string, boolean>()
+  for (const sid of studentIds) {
+    const studentEvents = (events ?? []).filter((e) => String(e.student_id) === sid)
+    const lineageEvents = studentEvents.filter(
+      (e) => String(e.attendance_lineage_id) === params.sessionId,
+    )
+    lineageStatusByStudent.set(
+      sid,
+      resolveCurrentAttendanceStatus(
+        lineageEvents.map((e) => ({ status: e.status as ClassCourseAttendanceStatus })),
+      ),
+    )
+    const mapped: AttendanceEventForRemaining[] = studentEvents.map((e) => ({
+      course_unit_id: params.courseUnitId,
+      status: e.status as ClassCourseAttendanceStatus,
+      recorded_at: String(e.recorded_at),
+      attendance_lineage_id: String(e.attendance_lineage_id),
+    }))
+    const lineageLatest = lineageStatusByStudent.get(sid)
+    otherAttendByStudent.set(
+      sid,
+      hasEffectiveAttended(mapped) && lineageLatest !== 'attended',
+    )
   }
 
   const plan = planBulkMarkAttended(
     studentIds.map((studentId) => ({
       studentId,
       label: studentId,
-      currentStatus: latestByStudent.get(studentId) ?? 'not_done',
+      currentStatus: lineageStatusByStudent.get(studentId) ?? 'not_done',
+      blockedByOtherEffectiveAttend: otherAttendByStudent.get(studentId) ?? false,
     })),
   )
 
   let saved = 0
   let failed = 0
+  let skippedConflict = 0
   for (const row of plan.toSave) {
     const result = await recordClassCourseAttendance({
       courseUnitId: params.courseUnitId,
@@ -191,14 +237,18 @@ export async function recordClassCourseAttendanceForAllAttendees(params: {
       eventDate: params.eventDate,
       sessionId: params.sessionId,
     })
-    if (result.ok) saved += 1
-    else failed += 1
+    if (!result.ok) {
+      failed += 1
+      continue
+    }
+    if (result.skipped) skippedConflict += 1
+    else saved += 1
   }
 
   const summary = summarizeBulkAttendResult({
     attempted: plan.toSave.length,
     saved,
-    skippedAlreadyAttended: plan.alreadyAttended.length,
+    skippedAlreadyAttended: plan.alreadyAttended.length + skippedConflict,
     failed,
   })
 
@@ -208,7 +258,7 @@ export async function recordClassCourseAttendanceForAllAttendees(params: {
     ok: true,
     message: summary.message,
     saved,
-    skipped: plan.alreadyAttended.length,
+    skipped: plan.alreadyAttended.length + skippedConflict,
   }
 }
 
@@ -240,19 +290,11 @@ export async function previewBulkMarkAttended(params: {
     studentIds.length > 0
       ? await admin
           .from('class_course_attendance_events')
-          .select('student_id, status, recorded_at')
+          .select('student_id, status, recorded_at, attendance_lineage_id')
           .eq('course_unit_id', params.courseUnitId)
           .in('student_id', studentIds)
           .order('recorded_at', { ascending: false })
       : { data: [] as never[] }
-
-  const latestByStudent = new Map<string, ClassCourseAttendanceStatus>()
-  for (const ev of events ?? []) {
-    const sid = String(ev.student_id)
-    if (!latestByStudent.has(sid)) {
-      latestByStudent.set(sid, ev.status as ClassCourseAttendanceStatus)
-    }
-  }
 
   const labeled = rows.map((row) => {
     const profileRaw = row.profiles
@@ -263,14 +305,30 @@ export async function previewBulkMarkAttended(params: {
       display_name?: string
       email?: string
     } | null
+    const sid = String(row.student_id)
+    const studentEvents = (events ?? []).filter((e) => String(e.student_id) === sid)
+    const lineageEvents = studentEvents.filter(
+      (e) => String(e.attendance_lineage_id) === params.sessionId,
+    )
+    const currentStatus = resolveCurrentAttendanceStatus(
+      lineageEvents.map((e) => ({ status: e.status as ClassCourseAttendanceStatus })),
+    )
+    const mapped: AttendanceEventForRemaining[] = studentEvents.map((e) => ({
+      course_unit_id: params.courseUnitId,
+      status: e.status as ClassCourseAttendanceStatus,
+      recorded_at: String(e.recorded_at),
+      attendance_lineage_id: String(e.attendance_lineage_id),
+    }))
     return {
-      studentId: String(row.student_id),
+      studentId: sid,
       label:
         profile?.full_name ||
         profile?.display_name ||
         profile?.email ||
-        String(row.student_id),
-      currentStatus: latestByStudent.get(String(row.student_id)) ?? 'not_done',
+        sid,
+      currentStatus,
+      blockedByOtherEffectiveAttend:
+        hasEffectiveAttended(mapped) && currentStatus !== 'attended',
     }
   })
 
@@ -296,10 +354,11 @@ export async function removeSessionAttendee(params: {
     .select('status, recorded_at')
     .eq('course_unit_id', params.courseUnitId)
     .eq('student_id', params.studentId)
+    .eq('attendance_lineage_id', params.sessionId)
     .order('recorded_at', { ascending: false })
 
   const guard = canRemoveSessionAttendee({
-    eventsNewestFirst: (events ?? []).map((e) => ({
+    lineageEventsNewestFirst: (events ?? []).map((e) => ({
       status: e.status as ClassCourseAttendanceStatus,
     })),
   })
@@ -334,7 +393,7 @@ export async function cancelClassCourseAssignment(params: {
 
   const { data: events } = await gate.admin
     .from('class_course_attendance_events')
-    .select('status, recorded_at')
+    .select('status, recorded_at, attendance_lineage_id, course_unit_id')
     .eq('course_unit_id', params.courseUnitId)
     .eq('student_id', params.studentId)
     .order('recorded_at', { ascending: false })
@@ -349,8 +408,11 @@ export async function cancelClassCourseAssignment(params: {
     .eq('class_schedule_sessions.course_unit_id', params.courseUnitId)
 
   const guard = canCancelClassCourseAssignment({
-    eventsNewestFirst: (events ?? []).map((e) => ({
+    events: (events ?? []).map((e) => ({
+      course_unit_id: String(e.course_unit_id),
       status: e.status as ClassCourseAttendanceStatus,
+      recorded_at: String(e.recorded_at),
+      attendance_lineage_id: String(e.attendance_lineage_id),
     })),
     sessionAttendeeCount: count ?? 0,
   })
@@ -395,6 +457,16 @@ export async function loadStudentCourseRemaining(studentId: string): Promise<{
       status: ClassCourseAttendanceStatus
       eventDate: string
       recordedAt: string
+      attendanceLineageId: string
+      sessionId: string | null
+      source: string
+    }[]
+    lineages: {
+      attendanceLineageId: string
+      currentStatus: ClassCourseAttendanceStatus
+      source: string
+      sessionId: string | null
+      latestEventDate: string
     }[]
   }[]
   summary: {
@@ -423,22 +495,33 @@ export async function loadStudentCourseRemaining(studentId: string): Promise<{
   if (error) return { ok: false, error: '割当の取得に失敗しました' }
 
   const unitIds = (assignments ?? []).map((a) => String(a.course_unit_id))
+  type EventRow = {
+    course_unit_id: string
+    status: string
+    event_date: string
+    recorded_at: string
+    attendance_lineage_id: string
+    session_id: string | null
+    source: string | null
+  }
   const { data: events } = unitIds.length
     ? await admin
         .from('class_course_attendance_events')
-        .select('course_unit_id, status, event_date, recorded_at')
+        .select(
+          'course_unit_id, status, event_date, recorded_at, attendance_lineage_id, session_id, source',
+        )
         .eq('student_id', studentId)
         .in('course_unit_id', unitIds)
         .order('recorded_at', { ascending: false })
-    : { data: [] as never[] }
+    : { data: [] as EventRow[] }
 
   const { buildClassCourseDisplayName } = await import('@/lib/class-course/catalog')
-  const { computeRemainingCounts, resolveCurrentAttendanceStatus } = await import(
+  const { computeRemainingCounts, latestStatusByLineage } = await import(
     '@/lib/class-course/remaining'
   )
 
-  const eventsByUnit = new Map<string, typeof events>()
-  for (const ev of events ?? []) {
+  const eventsByUnit = new Map<string, EventRow[]>()
+  for (const ev of (events ?? []) as EventRow[]) {
     const key = String(ev.course_unit_id)
     const list = eventsByUnit.get(key) ?? []
     list.push(ev)
@@ -456,10 +539,29 @@ export async function loadStudentCourseRemaining(studentId: string): Promise<{
       seq_no: number
     } | null
     const unitEvents = eventsByUnit.get(String(a.course_unit_id)) ?? []
-    const currentStatus = resolveCurrentAttendanceStatus(
-      unitEvents.map((e) => ({ status: e.status as ClassCourseAttendanceStatus })),
-    )
-    const attended = currentStatus === 'attended'
+    const forRemaining: AttendanceEventForRemaining[] = unitEvents.map((e) => ({
+      course_unit_id: String(e.course_unit_id),
+      status: e.status as ClassCourseAttendanceStatus,
+      recorded_at: String(e.recorded_at),
+      attendance_lineage_id: String(e.attendance_lineage_id),
+    }))
+    const currentStatus = resolveUnitEffectiveStatus(forRemaining)
+    const attended = hasEffectiveAttended(forRemaining)
+    const statusByLineage = latestStatusByLineage(forRemaining)
+    const lineageMeta = new Map<
+      string,
+      { source: string; sessionId: string | null; latestEventDate: string }
+    >()
+    for (const e of unitEvents) {
+      const lid = String(e.attendance_lineage_id)
+      if (lineageMeta.has(lid)) continue
+      lineageMeta.set(lid, {
+        source: String(e.source ?? 'manual'),
+        sessionId: e.session_id ? String(e.session_id) : null,
+        latestEventDate: String(e.event_date),
+      })
+    }
+
     return {
       courseUnitId: String(a.course_unit_id),
       displayName: unit
@@ -481,7 +583,20 @@ export async function loadStudentCourseRemaining(studentId: string): Promise<{
         status: e.status as ClassCourseAttendanceStatus,
         eventDate: String(e.event_date),
         recordedAt: String(e.recorded_at),
+        attendanceLineageId: String(e.attendance_lineage_id),
+        sessionId: e.session_id ? String(e.session_id) : null,
+        source: String(e.source ?? 'manual'),
       })),
+      lineages: [...statusByLineage.entries()].map(([lineageId, status]) => {
+        const meta = lineageMeta.get(lineageId)
+        return {
+          attendanceLineageId: lineageId,
+          currentStatus: status,
+          source: meta?.source ?? 'manual',
+          sessionId: meta?.sessionId ?? null,
+          latestEventDate: meta?.latestEventDate ?? '',
+        }
+      }),
     }
   })
 
@@ -505,10 +620,11 @@ export async function loadStudentCourseRemaining(studentId: string): Promise<{
   const summary = [...groups.values()].map((g) => {
     const counts = computeRemainingCounts({
       activeAssignmentUnitIds: g.unitIds,
-      attendanceEvents: (events ?? []).map((e) => ({
+      attendanceEvents: ((events ?? []) as EventRow[]).map((e) => ({
         course_unit_id: String(e.course_unit_id),
         status: e.status as ClassCourseAttendanceStatus,
         recorded_at: String(e.recorded_at),
+        attendance_lineage_id: String(e.attendance_lineage_id),
       })),
     })
     return {

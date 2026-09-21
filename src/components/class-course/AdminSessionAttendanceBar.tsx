@@ -75,7 +75,7 @@ export function AdminSessionAttendanceBar(props: {
         setError(result.error)
         return
       }
-      setMessage('保存しました')
+      setMessage(result.skipped ? (result.message ?? 'すでに実施済みです') : '保存しました')
       router.refresh()
     })
   }

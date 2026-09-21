@@ -2,71 +2,107 @@ import { describe, expect, it } from 'vitest'
 import {
   canRecordAttendanceOnScheduleDate,
   computeRemainingCounts,
-  isAlreadyEffectivelyAttended,
+  hasEffectiveAttended,
+  latestStatusByLineage,
   resolveCurrentAttendanceStatus,
+  resolveUnitEffectiveStatus,
 } from '@/lib/class-course/remaining'
 
-describe('computeRemainingCounts', () => {
-  it('uses latest status so attended→not_done restores remaining', () => {
-    const result = computeRemainingCounts({
-      activeAssignmentUnitIds: ['u1', 'u2'],
-      attendanceEvents: [
-        // newest first
-        { course_unit_id: 'u1', status: 'not_done', recorded_at: '2026-09-21T12:00:00Z' },
-        { course_unit_id: 'u1', status: 'attended', recorded_at: '2026-09-20T12:00:00Z' },
-        { course_unit_id: 'u2', status: 'attended', recorded_at: '2026-09-19T12:00:00Z' },
-      ],
-    })
-    expect(result).toEqual({
-      assignedCount: 2,
-      attendedCount: 1,
-      remainingCount: 1,
-    })
+describe('lineage-based remaining (makeup scenario)', () => {
+  it('S1 absent → S2 attended digests once; correcting S1 keeps digest', () => {
+    const unit = 'u1'
+    const s1 = 'session-s1'
+    const s2 = 'session-s2'
+
+    const afterS2: Parameters<typeof computeRemainingCounts>[0]['attendanceEvents'] = [
+      { course_unit_id: unit, attendance_lineage_id: s2, status: 'attended', recorded_at: '2026-09-20T12:00:00Z' },
+      { course_unit_id: unit, attendance_lineage_id: s1, status: 'absent', recorded_at: '2026-09-10T12:00:00Z' },
+    ]
+    expect(
+      computeRemainingCounts({
+        activeAssignmentUnitIds: [unit],
+        attendanceEvents: afterS2,
+      }),
+    ).toEqual({ assignedCount: 1, attendedCount: 1, remainingCount: 0 })
+
+    const afterCorrectS1 = [
+      {
+        course_unit_id: unit,
+        attendance_lineage_id: s1,
+        status: 'not_done' as const,
+        recorded_at: '2026-09-21T12:00:00Z',
+      },
+      ...afterS2,
+    ]
+    expect(
+      computeRemainingCounts({
+        activeAssignmentUnitIds: [unit],
+        attendanceEvents: afterCorrectS1,
+      }),
+    ).toEqual({ assignedCount: 1, attendedCount: 1, remainingCount: 0 })
+    expect(hasEffectiveAttended(afterCorrectS1)).toBe(true)
+    expect(latestStatusByLineage(afterCorrectS1).get(s1)).toBe('not_done')
+    expect(latestStatusByLineage(afterCorrectS1).get(s2)).toBe('attended')
+
+    const afterCorrectS2 = [
+      {
+        course_unit_id: unit,
+        attendance_lineage_id: s2,
+        status: 'not_done' as const,
+        recorded_at: '2026-09-22T12:00:00Z',
+      },
+      ...afterCorrectS1,
+    ]
+    expect(
+      computeRemainingCounts({
+        activeAssignmentUnitIds: [unit],
+        attendanceEvents: afterCorrectS2,
+      }),
+    ).toEqual({ assignedCount: 1, attendedCount: 0, remainingCount: 1 })
   })
 
-  it('digests once for absent→attended makeup', () => {
-    const result = computeRemainingCounts({
-      activeAssignmentUnitIds: ['u1'],
-      attendanceEvents: [
-        { course_unit_id: 'u1', status: 'attended', recorded_at: '2026-09-21T12:00:00Z' },
-        { course_unit_id: 'u1', status: 'absent', recorded_at: '2026-09-10T12:00:00Z' },
-      ],
-    })
-    expect(result).toEqual({
-      assignedCount: 1,
-      attendedCount: 1,
-      remainingCount: 0,
-    })
+  it('blocks treating another lineage as attended when one is already effective', () => {
+    const events = [
+      {
+        course_unit_id: 'u1',
+        attendance_lineage_id: 's2',
+        status: 'attended' as const,
+        recorded_at: '2026-09-20T12:00:00Z',
+      },
+      {
+        course_unit_id: 'u1',
+        attendance_lineage_id: 's1',
+        status: 'absent' as const,
+        recorded_at: '2026-09-10T12:00:00Z',
+      },
+    ]
+    expect(hasEffectiveAttended(events)).toBe(true)
+    expect(resolveUnitEffectiveStatus(events)).toBe('attended')
   })
 
-  it('does not digest when latest is absent even if older attended exists', () => {
-    const result = computeRemainingCounts({
-      activeAssignmentUnitIds: ['u1'],
-      attendanceEvents: [
-        { course_unit_id: 'u1', status: 'absent', recorded_at: '2026-09-21T12:00:00Z' },
-        { course_unit_id: 'u1', status: 'attended', recorded_at: '2026-09-10T12:00:00Z' },
-      ],
-    })
-    expect(result.attendedCount).toBe(0)
-    expect(result.remainingCount).toBe(1)
+  it('keeps deleted-session lineage id distinct from manual', () => {
+    const events = [
+      {
+        course_unit_id: 'u1',
+        attendance_lineage_id: 'former-session-uuid',
+        status: 'attended' as const,
+        recorded_at: '2026-09-20T12:00:00Z',
+      },
+      {
+        course_unit_id: 'u1',
+        attendance_lineage_id: 'manual-lineage',
+        status: 'not_done' as const,
+        recorded_at: '2026-09-21T12:00:00Z',
+      },
+    ]
+    expect(latestStatusByLineage(events).size).toBe(2)
+    expect(hasEffectiveAttended(events)).toBe(true)
   })
 })
 
-describe('resolveCurrentAttendanceStatus', () => {
+describe('resolveCurrentAttendanceStatus (single lineage)', () => {
   it('defaults to not_done', () => {
     expect(resolveCurrentAttendanceStatus([])).toBe('not_done')
-  })
-})
-
-describe('isAlreadyEffectivelyAttended', () => {
-  it('true only when latest is attended', () => {
-    expect(
-      isAlreadyEffectivelyAttended([
-        { status: 'not_done' },
-        { status: 'attended' },
-      ]),
-    ).toBe(false)
-    expect(isAlreadyEffectivelyAttended([{ status: 'attended' }])).toBe(true)
   })
 })
 
