@@ -1,8 +1,15 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { recordClassCourseAttendance } from '@/app/class-course/attendance-actions'
+import {
+  previewBulkMarkAttended,
+  recordClassCourseAttendance,
+  recordClassCourseAttendanceForAllAttendees,
+  removeSessionAttendee,
+} from '@/app/class-course/attendance-actions'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import type { ClassCourseAttendanceStatus } from '@/types/class-course'
 
 export type SessionAttendeeRow = {
@@ -25,15 +32,22 @@ export function AdminSessionAttendanceBar(props: {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const [confirmBulk, setConfirmBulk] = useState(false)
+  const [bulkPreview, setBulkPreview] = useState<{
+    toSaveCount: number
+    absentLabels: string[]
+    alreadyAttendedCount: number
+  } | null>(null)
 
   if (props.attendees.length === 0) return null
 
+  const courseUnitId = props.attendees[0]!.courseUnitId
   const blockedNew =
     props.dayCancelled || props.sessionCancelled || !props.canRecord
 
   function save(
     studentId: string,
-    courseUnitId: string,
+    unitId: string,
     status: ClassCourseAttendanceStatus,
   ) {
     if (blockedNew && status !== 'not_done') {
@@ -50,7 +64,7 @@ export function AdminSessionAttendanceBar(props: {
     setMessage(null)
     startTransition(async () => {
       const result = await recordClassCourseAttendance({
-        courseUnitId,
+        courseUnitId: unitId,
         studentId,
         status,
         eventDate: props.eventDate,
@@ -66,9 +80,87 @@ export function AdminSessionAttendanceBar(props: {
     })
   }
 
+  function openBulkConfirm() {
+    setError(null)
+    setMessage(null)
+    startTransition(async () => {
+      const preview = await previewBulkMarkAttended({
+        sessionId: props.sessionId,
+        courseUnitId,
+      })
+      if (!preview.ok) {
+        setError(preview.error)
+        return
+      }
+      setBulkPreview(preview)
+      setConfirmBulk(true)
+    })
+  }
+
+  function runBulk() {
+    startTransition(async () => {
+      const result = await recordClassCourseAttendanceForAllAttendees({
+        sessionId: props.sessionId,
+        courseUnitId,
+        eventDate: props.eventDate,
+      })
+      setConfirmBulk(false)
+      setBulkPreview(null)
+      if (!result.ok) {
+        setError(result.error)
+        return
+      }
+      setMessage(result.message)
+      router.refresh()
+    })
+  }
+
+  function removeAttendee(studentId: string, unitId: string) {
+    setError(null)
+    setMessage(null)
+    startTransition(async () => {
+      const result = await removeSessionAttendee({
+        sessionId: props.sessionId,
+        studentId,
+        courseUnitId: unitId,
+      })
+      if (!result.ok) {
+        setError(result.error)
+        return
+      }
+      setMessage('対象から外しました（割当は残ります）')
+      router.refresh()
+    })
+  }
+
+  const bulkDescription = bulkPreview
+    ? [
+        `${bulkPreview.toSaveCount}名を実施にします。`,
+        bulkPreview.absentLabels.length > 0
+          ? `欠席から実施へ訂正: ${bulkPreview.absentLabels.join('、')}`
+          : null,
+        bulkPreview.alreadyAttendedCount > 0
+          ? `実施済みスキップ: ${bulkPreview.alreadyAttendedCount}名`
+          : null,
+        '実施済みは二重消化しません。履歴は個別操作と同様に追記されます。',
+      ]
+        .filter(Boolean)
+        .join('\n')
+    : '対象者全員を実施にします。'
+
   return (
     <div className="mt-3 space-y-2 rounded-lg border border-border bg-muted/20 p-3">
-      <p className="text-xs font-semibold text-muted">実施状況</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-muted">実施状況</p>
+        <button
+          type="button"
+          disabled={pending || blockedNew}
+          className="rounded border border-border bg-background px-2 py-1 text-xs disabled:opacity-50"
+          onClick={openBulkConfirm}
+        >
+          対象者全員を実施にする
+        </button>
+      </div>
       <ul className="space-y-2">
         {props.attendees.map((row) => (
           <li
@@ -76,7 +168,12 @@ export function AdminSessionAttendanceBar(props: {
             className="flex flex-wrap items-center justify-between gap-2 text-sm"
           >
             <span>
-              {row.label}
+              <Link
+                href={`/admin/class-schedule/students/${row.studentId}`}
+                className="text-primary underline"
+              >
+                {row.label}
+              </Link>
               <span className="ml-2 text-xs text-muted">
                 (
                 {row.currentStatus === 'attended'
@@ -105,12 +202,35 @@ export function AdminSessionAttendanceBar(props: {
                   {pendingKey === `${row.studentId}:${status}` ? '…' : label}
                 </button>
               ))}
+              <button
+                type="button"
+                disabled={pending}
+                className="rounded px-2 py-1 text-xs text-error hover:underline disabled:opacity-50"
+                onClick={() => removeAttendee(row.studentId, row.courseUnitId)}
+              >
+                対象外
+              </button>
             </span>
           </li>
         ))}
       </ul>
-      {error ? <p className="text-xs text-red-600">{error}</p> : null}
-      {message ? <p className="text-xs text-muted">{message}</p> : null}
+      {error ? <p className="text-xs text-red-600 whitespace-pre-wrap">{error}</p> : null}
+      {message ? <p className="text-xs text-muted whitespace-pre-wrap">{message}</p> : null}
+
+      <ConfirmDialog
+        open={confirmBulk}
+        title="対象者全員を実施にしますか？"
+        description={bulkDescription}
+        confirmLabel="全員を実施にする"
+        busy={pending}
+        onConfirm={runBulk}
+        onCancel={() => {
+          if (!pending) {
+            setConfirmBulk(false)
+            setBulkPreview(null)
+          }
+        }}
+      />
     </div>
   )
 }

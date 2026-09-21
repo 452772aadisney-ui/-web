@@ -5,8 +5,27 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireSuperAdmin } from '@/lib/class-schedule/access'
 import { requireAdminClassScheduleRpcClient } from '@/lib/class-schedule/rpc-auth'
 import { canRecordAttendanceOnScheduleDate } from '@/lib/class-course/remaining'
+import {
+  attendeeRemoveErrorMessage,
+  assignmentCancelErrorMessage,
+  canCancelClassCourseAssignment,
+  canRemoveSessionAttendee,
+  planBulkMarkAttended,
+  summarizeBulkAttendResult,
+} from '@/lib/class-course/guards'
 import { getJstDateKey } from '@/lib/study/dates'
 import type { ClassCourseAttendanceStatus } from '@/types/class-course'
+
+function revalidateAttendancePaths(studentId?: string, dayId?: string) {
+  revalidatePath('/admin/class-schedule')
+  revalidatePath('/admin/class-schedule/courses')
+  if (studentId) {
+    revalidatePath(`/admin/class-schedule/students/${studentId}`)
+  }
+  if (dayId) {
+    revalidatePath(`/admin/class-schedule/${dayId}`)
+  }
+}
 
 export async function recordClassCourseAttendance(params: {
   courseUnitId: string
@@ -76,8 +95,7 @@ export async function recordClassCourseAttendance(params: {
     return { ok: false, error: '保存に失敗しました' }
   }
 
-  revalidatePath('/admin/class-schedule')
-  revalidatePath(`/admin/class-schedule/students/${params.studentId}`)
+  revalidateAttendancePaths(params.studentId)
   return { ok: true }
 }
 
@@ -85,9 +103,41 @@ export async function recordClassCourseAttendanceForAllAttendees(params: {
   sessionId: string
   courseUnitId: string
   eventDate: string
-}): Promise<{ ok: true; saved: number } | { ok: false; error: string }> {
+}): Promise<
+  | { ok: true; message: string; saved: number; skipped: number }
+  | { ok: false; error: string }
+> {
   const gate = await requireAdminClassScheduleRpcClient()
   if (!gate.ok) return { ok: false, error: gate.error }
+
+  const todayKey = getJstDateKey()
+  if (
+    !canRecordAttendanceOnScheduleDate({
+      scheduleDateKey: params.eventDate,
+      todayKeyJst: todayKey,
+    })
+  ) {
+    return { ok: false, error: '未来日の実施は登録できません' }
+  }
+
+  const { data: session } = await gate.admin
+    .from('class_schedule_sessions')
+    .select('id, status, course_unit_id, class_schedule_days(status, schedule_date)')
+    .eq('id', params.sessionId)
+    .maybeSingle()
+
+  if (!session) return { ok: false, error: 'コマが見つかりません' }
+  const day = session.class_schedule_days as
+    | { status?: string; schedule_date?: string }
+    | { status?: string; schedule_date?: string }[]
+    | null
+  const dayRow = Array.isArray(day) ? day[0] : day
+  if (dayRow?.status === 'cancelled' || session.status === 'cancelled') {
+    return { ok: false, error: '中止コマでは一括実施できません' }
+  }
+  if (String(session.course_unit_id) !== params.courseUnitId) {
+    return { ok: false, error: '共通授業が一致しません' }
+  }
 
   const { data: attendees } = await gate.admin
     .from('class_schedule_session_attendees')
@@ -95,18 +145,229 @@ export async function recordClassCourseAttendanceForAllAttendees(params: {
     .eq('session_id', params.sessionId)
 
   const studentIds = [...new Set((attendees ?? []).map((a) => String(a.student_id)))]
+  if (studentIds.length === 0) {
+    return { ok: false, error: '対象生徒がいません' }
+  }
+
+  const { data: events } = await gate.admin
+    .from('class_course_attendance_events')
+    .select('student_id, status, recorded_at')
+    .eq('course_unit_id', params.courseUnitId)
+    .in('student_id', studentIds)
+    .order('recorded_at', { ascending: false })
+
+  const latestByStudent = new Map<string, ClassCourseAttendanceStatus>()
+  for (const ev of events ?? []) {
+    const sid = String(ev.student_id)
+    if (!latestByStudent.has(sid)) {
+      latestByStudent.set(sid, ev.status as ClassCourseAttendanceStatus)
+    }
+  }
+
+  const plan = planBulkMarkAttended(
+    studentIds.map((studentId) => ({
+      studentId,
+      label: studentId,
+      currentStatus: latestByStudent.get(studentId) ?? 'not_done',
+    })),
+  )
+
   let saved = 0
-  for (const studentId of studentIds) {
+  let failed = 0
+  for (const row of plan.toSave) {
     const result = await recordClassCourseAttendance({
       courseUnitId: params.courseUnitId,
-      studentId,
+      studentId: row.studentId,
       status: 'attended',
       eventDate: params.eventDate,
       sessionId: params.sessionId,
     })
     if (result.ok) saved += 1
+    else failed += 1
   }
-  return { ok: true, saved }
+
+  const summary = summarizeBulkAttendResult({
+    attempted: plan.toSave.length,
+    saved,
+    skippedAlreadyAttended: plan.alreadyAttended.length,
+    failed,
+  })
+
+  revalidateAttendancePaths(undefined)
+  if (!summary.ok) return summary
+  return {
+    ok: true,
+    message: summary.message,
+    saved,
+    skipped: plan.alreadyAttended.length,
+  }
+}
+
+export async function previewBulkMarkAttended(params: {
+  sessionId: string
+  courseUnitId: string
+}): Promise<
+  | {
+      ok: true
+      toSaveCount: number
+      absentLabels: string[]
+      alreadyAttendedCount: number
+    }
+  | { ok: false; error: string }
+> {
+  const access = await requireSuperAdmin()
+  if (!access.ok) return { ok: false, error: access.error }
+  const admin = createAdminClient()
+  if (!admin) return { ok: false, error: '読み込みに失敗しました' }
+
+  const { data: attendees } = await admin
+    .from('class_schedule_session_attendees')
+    .select('student_id, profiles(full_name, display_name, email)')
+    .eq('session_id', params.sessionId)
+
+  const rows = attendees ?? []
+  const studentIds = rows.map((r) => String(r.student_id))
+  const { data: events } =
+    studentIds.length > 0
+      ? await admin
+          .from('class_course_attendance_events')
+          .select('student_id, status, recorded_at')
+          .eq('course_unit_id', params.courseUnitId)
+          .in('student_id', studentIds)
+          .order('recorded_at', { ascending: false })
+      : { data: [] as never[] }
+
+  const latestByStudent = new Map<string, ClassCourseAttendanceStatus>()
+  for (const ev of events ?? []) {
+    const sid = String(ev.student_id)
+    if (!latestByStudent.has(sid)) {
+      latestByStudent.set(sid, ev.status as ClassCourseAttendanceStatus)
+    }
+  }
+
+  const labeled = rows.map((row) => {
+    const profileRaw = row.profiles
+    const profile = (
+      Array.isArray(profileRaw) ? profileRaw[0] : profileRaw
+    ) as {
+      full_name?: string
+      display_name?: string
+      email?: string
+    } | null
+    return {
+      studentId: String(row.student_id),
+      label:
+        profile?.full_name ||
+        profile?.display_name ||
+        profile?.email ||
+        String(row.student_id),
+      currentStatus: latestByStudent.get(String(row.student_id)) ?? 'not_done',
+    }
+  })
+
+  const plan = planBulkMarkAttended(labeled)
+  return {
+    ok: true,
+    toSaveCount: plan.toSave.length,
+    absentLabels: plan.absentToCorrect.map((p) => p.label),
+    alreadyAttendedCount: plan.alreadyAttended.length,
+  }
+}
+
+export async function removeSessionAttendee(params: {
+  sessionId: string
+  studentId: string
+  courseUnitId: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const gate = await requireAdminClassScheduleRpcClient()
+  if (!gate.ok) return { ok: false, error: gate.error }
+
+  const { data: events } = await gate.admin
+    .from('class_course_attendance_events')
+    .select('status, recorded_at')
+    .eq('course_unit_id', params.courseUnitId)
+    .eq('student_id', params.studentId)
+    .order('recorded_at', { ascending: false })
+
+  const guard = canRemoveSessionAttendee({
+    eventsNewestFirst: (events ?? []).map((e) => ({
+      status: e.status as ClassCourseAttendanceStatus,
+    })),
+  })
+  if (!guard.ok) {
+    return { ok: false, error: attendeeRemoveErrorMessage() }
+  }
+
+  const { error } = await gate.admin.rpc('remove_class_schedule_session_attendee', {
+    p_session_id: params.sessionId,
+    p_student_id: params.studentId,
+    p_actor_id: gate.profile.id,
+  })
+
+  if (error) {
+    const msg = String(error.message ?? '')
+    if (msg.includes('attendance record')) {
+      return { ok: false, error: attendeeRemoveErrorMessage() }
+    }
+    return { ok: false, error: '対象外しに失敗しました' }
+  }
+
+  revalidateAttendancePaths(params.studentId)
+  return { ok: true }
+}
+
+export async function cancelClassCourseAssignment(params: {
+  courseUnitId: string
+  studentId: string
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const gate = await requireAdminClassScheduleRpcClient()
+  if (!gate.ok) return { ok: false, error: gate.error }
+
+  const { data: events } = await gate.admin
+    .from('class_course_attendance_events')
+    .select('status, recorded_at')
+    .eq('course_unit_id', params.courseUnitId)
+    .eq('student_id', params.studentId)
+    .order('recorded_at', { ascending: false })
+
+  const { count } = await gate.admin
+    .from('class_schedule_session_attendees')
+    .select('id, class_schedule_sessions!inner(course_unit_id)', {
+      count: 'exact',
+      head: true,
+    })
+    .eq('student_id', params.studentId)
+    .eq('class_schedule_sessions.course_unit_id', params.courseUnitId)
+
+  const guard = canCancelClassCourseAssignment({
+    eventsNewestFirst: (events ?? []).map((e) => ({
+      status: e.status as ClassCourseAttendanceStatus,
+    })),
+    sessionAttendeeCount: count ?? 0,
+  })
+  if (!guard.ok) {
+    return { ok: false, error: assignmentCancelErrorMessage(guard.reason) }
+  }
+
+  const { error } = await gate.admin.rpc('cancel_class_course_assignment', {
+    p_course_unit_id: params.courseUnitId,
+    p_student_id: params.studentId,
+    p_actor_id: gate.profile.id,
+  })
+
+  if (error) {
+    const msg = String(error.message ?? '')
+    if (msg.includes('attended')) {
+      return { ok: false, error: assignmentCancelErrorMessage('has_attended') }
+    }
+    if (msg.includes('session attendees')) {
+      return { ok: false, error: assignmentCancelErrorMessage('still_on_sessions') }
+    }
+    return { ok: false, error: '割当の取消に失敗しました' }
+  }
+
+  revalidateAttendancePaths(params.studentId)
+  return { ok: true }
 }
 
 export async function loadStudentCourseRemaining(studentId: string): Promise<{
