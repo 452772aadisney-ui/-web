@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildClassCourseDisplayName,
+  buildClassCourseGroupHeading,
+  buildClassCourseSelectLabel,
+  compareClassCourseUnitOrder,
+  CLASS_COURSE_FEE_KIND_LABELS,
   formatClassCourseSeq,
   resolveClassCourseFeeKind,
   resolveAcademicYearFromJstDateKey,
@@ -48,6 +52,71 @@ describe('resolveClassCourseFeeKind', () => {
     expect(resolveClassCourseFeeKind('first_half', 'regular')).toBe('monthly_regular')
     expect(resolveClassCourseFeeKind('summer', 'regular')).toBe('course')
     expect(resolveClassCourseFeeKind('summer', 'addon')).toBe('addon')
+  })
+
+  it('labels monthly_regular as レギュラー without 月謝', () => {
+    expect(CLASS_COURSE_FEE_KIND_LABELS.monthly_regular).toBe('レギュラー')
+  })
+})
+
+describe('compareClassCourseUnitOrder', () => {
+  it('orders by seq_no numerically within the same scope', () => {
+    const rows = [
+      { academicYear: 2026, term: 'second_half', subject: 'english_reading', track: 'regular', seqNo: 10 },
+      { academicYear: 2026, term: 'second_half', subject: 'english_reading', track: 'regular', seqNo: 2 },
+      { academicYear: 2026, term: 'second_half', subject: 'english_reading', track: 'regular', seqNo: 51 },
+      { academicYear: 2026, term: 'second_half', subject: 'english_reading', track: 'regular', seqNo: 1 },
+    ] as const
+    const sorted = [...rows].sort(compareClassCourseUnitOrder)
+    expect(sorted.map((r) => r.seqNo)).toEqual([1, 2, 10, 51])
+  })
+
+  it('keeps different tracks and years from mixing by display name', () => {
+    const rows = [
+      { academicYear: 2026, term: 'second_half', subject: 'english_reading', track: 'addon', seqNo: 1 },
+      { academicYear: 2025, term: 'second_half', subject: 'english_reading', track: 'regular', seqNo: 1 },
+      { academicYear: 2026, term: 'second_half', subject: 'english_reading', track: 'regular', seqNo: 1 },
+    ] as const
+    const sorted = [...rows].sort(compareClassCourseUnitOrder)
+    expect(sorted.map((r) => `${r.academicYear}:${r.track}:${r.seqNo}`)).toEqual([
+      '2025:regular:1',
+      '2026:regular:1',
+      '2026:addon:1',
+    ])
+  })
+})
+
+describe('select / group labels', () => {
+  it('builds distinguishable select labels', () => {
+    expect(
+      buildClassCourseSelectLabel({
+        academicYear: 2026,
+        subject: 'english_reading',
+        term: 'second_half',
+        track: 'regular',
+        seqNo: 3,
+      }),
+    ).toContain('2026年度')
+    expect(
+      buildClassCourseSelectLabel({
+        academicYear: 2026,
+        subject: 'english_reading',
+        term: 'second_half',
+        track: 'addon',
+        seqNo: 3,
+      }),
+    ).toContain('単発追加')
+  })
+
+  it('builds group headings', () => {
+    expect(
+      buildClassCourseGroupHeading({
+        academicYear: 2026,
+        subject: 'english_reading',
+        term: 'second_half',
+        track: 'regular',
+      }),
+    ).toBe('2026年度・英文読解・後期・通常枠')
   })
 })
 

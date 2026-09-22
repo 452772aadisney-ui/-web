@@ -387,15 +387,21 @@ function AddStudentsForm(props: {
         onClick={() => {
           setError(null)
           startTransition(async () => {
-            const rows = await listCourseUnitsForScope({
+            const result = await listCourseUnitsForScope({
               academicYear,
               term,
               subject,
               track,
             })
-            setUnits(rows)
+            if (!result.ok) {
+              setUnits([])
+              setSelectedUnits(new Set())
+              setError(result.error)
+              return
+            }
+            setUnits(result.units)
             setSelectedUnits(new Set())
-            if (rows.length === 0) {
+            if (result.units.length === 0) {
               setMessage(`この範囲（${scopeKey}）に登録済み授業はありません。`)
             } else {
               setMessage(null)

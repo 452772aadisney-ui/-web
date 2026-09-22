@@ -453,6 +453,7 @@ export async function loadStudentCourseRemaining(studentId: string): Promise<{
     seqNo: number
     currentStatus: ClassCourseAttendanceStatus
     attended: boolean
+    effectiveEventDate: string | null
     events: {
       status: ClassCourseAttendanceStatus
       eventDate: string
@@ -515,7 +516,9 @@ export async function loadStudentCourseRemaining(studentId: string): Promise<{
         .order('recorded_at', { ascending: false })
     : { data: [] as EventRow[] }
 
-  const { buildClassCourseDisplayName } = await import('@/lib/class-course/catalog')
+  const { buildClassCourseDisplayName, compareClassCourseUnitOrder } = await import(
+    '@/lib/class-course/catalog'
+  )
   const { computeRemainingCounts, latestStatusByLineage } = await import(
     '@/lib/class-course/remaining'
   )
@@ -562,6 +565,20 @@ export async function loadStudentCourseRemaining(studentId: string): Promise<{
       })
     }
 
+    const lineages = [...statusByLineage.entries()].map(([lineageId, status]) => {
+      const meta = lineageMeta.get(lineageId)
+      return {
+        attendanceLineageId: lineageId,
+        currentStatus: status,
+        source: meta?.source ?? 'manual',
+        sessionId: meta?.sessionId ?? null,
+        latestEventDate: meta?.latestEventDate ?? '',
+      }
+    })
+
+    const effectiveLineage =
+      lineages.find((l) => l.currentStatus === currentStatus) ?? null
+
     return {
       courseUnitId: String(a.course_unit_id),
       displayName: unit
@@ -579,6 +596,10 @@ export async function loadStudentCourseRemaining(studentId: string): Promise<{
       seqNo: Number(unit?.seq_no ?? 0),
       currentStatus,
       attended,
+      effectiveEventDate:
+        currentStatus === 'not_done'
+          ? null
+          : (effectiveLineage?.latestEventDate ?? null),
       events: unitEvents.map((e) => ({
         status: e.status as ClassCourseAttendanceStatus,
         eventDate: String(e.event_date),
@@ -587,18 +608,28 @@ export async function loadStudentCourseRemaining(studentId: string): Promise<{
         sessionId: e.session_id ? String(e.session_id) : null,
         source: String(e.source ?? 'manual'),
       })),
-      lineages: [...statusByLineage.entries()].map(([lineageId, status]) => {
-        const meta = lineageMeta.get(lineageId)
-        return {
-          attendanceLineageId: lineageId,
-          currentStatus: status,
-          source: meta?.source ?? 'manual',
-          sessionId: meta?.sessionId ?? null,
-          latestEventDate: meta?.latestEventDate ?? '',
-        }
-      }),
+      lineages,
     }
   })
+
+  rows.sort((a, b) =>
+    compareClassCourseUnitOrder(
+      {
+        academicYear: a.academicYear,
+        term: a.term,
+        subject: a.subject,
+        track: a.track,
+        seqNo: a.seqNo,
+      },
+      {
+        academicYear: b.academicYear,
+        term: b.term,
+        subject: b.subject,
+        track: b.track,
+        seqNo: b.seqNo,
+      },
+    ),
+  )
 
   const groups = new Map<
     string,

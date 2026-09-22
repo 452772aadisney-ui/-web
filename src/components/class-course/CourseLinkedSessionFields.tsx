@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import {
   CLASS_COURSE_SUBJECTS,
   CLASS_COURSE_SUBJECT_LABELS,
@@ -36,6 +36,7 @@ export type CourseSessionDraft = {
 
 type UnitOption = { id: string; seqNo: number; displayName: string }
 type StudentOption = { id: string; label: string }
+type LoadState = 'idle' | 'loading' | 'ready' | 'error'
 
 export function defaultCourseSessionDraft(todayKey: string): CourseSessionDraft {
   return {
@@ -78,50 +79,78 @@ export function CourseLinkedSessionFields(props: {
     props.attendeeInputName ?? `${prefix}attendeeIds_${props.index}`
   const v = props.value
   const [units, setUnits] = useState<UnitOption[]>([])
+  const [unitsState, setUnitsState] = useState<LoadState>('idle')
+  const [unitsError, setUnitsError] = useState<string | null>(null)
   const [assignees, setAssignees] = useState<StudentOption[]>([])
-  const [pending, startTransition] = useTransition()
+  const [assigneeState, setAssigneeState] = useState<LoadState>('idle')
+  const [assigneeError, setAssigneeError] = useState<string | null>(null)
+  const [, startTransition] = useTransition()
+  const unitsRequestRef = useRef(0)
+  const assigneesRequestRef = useRef(0)
 
   useEffect(() => {
-    if (v.mode !== 'course') return
-    let cancelled = false
+    if (v.mode !== 'course') {
+      setUnits([])
+      setUnitsState('idle')
+      setUnitsError(null)
+      return
+    }
+    const requestId = ++unitsRequestRef.current
+    setUnitsState('loading')
+    setUnitsError(null)
     startTransition(async () => {
-      const rows = await listCourseUnitsForScope({
+      const result = await listCourseUnitsForScope({
         academicYear: v.academicYear,
         term: v.term,
         subject: v.subject,
         track: v.track,
       })
-      if (cancelled) return
-      setUnits(rows)
-      if (v.courseUnitId && !rows.some((r) => r.id === v.courseUnitId)) {
+      if (requestId !== unitsRequestRef.current) return
+      if (!result.ok) {
+        setUnits([])
+        setUnitsState('error')
+        setUnitsError(result.error)
+        return
+      }
+      setUnits(result.units)
+      setUnitsState('ready')
+      if (v.courseUnitId && !result.units.some((r) => r.id === v.courseUnitId)) {
         props.onChange({ ...v, courseUnitId: '', attendeeIds: [] })
       }
     })
-    return () => {
-      cancelled = true
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on scope only
   }, [v.mode, v.academicYear, v.term, v.subject, v.track])
 
   useEffect(() => {
     if (v.mode !== 'course' || !v.courseUnitId) {
+      assigneesRequestRef.current += 1
       setAssignees([])
+      setAssigneeState('idle')
+      setAssigneeError(null)
       return
     }
-    let cancelled = false
+    const requestId = ++assigneesRequestRef.current
+    const unitId = v.courseUnitId
+    setAssignees([])
+    setAssigneeState('loading')
+    setAssigneeError(null)
     startTransition(async () => {
-      const rows = await listAssignedStudentsForCourseUnit(v.courseUnitId)
-      if (cancelled) return
-      setAssignees(rows)
-      const allowed = new Set(rows.map((r) => r.id))
+      const result = await listAssignedStudentsForCourseUnit(unitId)
+      if (requestId !== assigneesRequestRef.current) return
+      if (!result.ok) {
+        setAssignees([])
+        setAssigneeState('error')
+        setAssigneeError(result.error)
+        return
+      }
+      setAssignees(result.students)
+      setAssigneeState('ready')
+      const allowed = new Set(result.students.map((r) => r.id))
       const nextAttendees = v.attendeeIds.filter((id) => allowed.has(id))
       if (nextAttendees.length !== v.attendeeIds.length) {
         props.onChange({ ...v, attendeeIds: nextAttendees })
       }
     })
-    return () => {
-      cancelled = true
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [v.mode, v.courseUnitId])
 
@@ -251,7 +280,7 @@ export function CourseLinkedSessionFields(props: {
               }
             >
               <option value="">
-                {pending ? '読み込み中…' : '選択してください'}
+                {unitsState === 'loading' ? '読み込み中…' : '選択してください'}
               </option>
               {units.map((unit) => (
                 <option key={unit.id} value={unit.id}>
@@ -260,15 +289,30 @@ export function CourseLinkedSessionFields(props: {
               ))}
             </select>
           </label>
+          {unitsState === 'error' && unitsError ? (
+            <p className="text-xs text-red-600">{unitsError}</p>
+          ) : null}
+          {unitsState === 'ready' && units.length === 0 ? (
+            <p className="text-xs text-muted">
+              この条件の共通授業がありません。先に授業回数登録で作成してください。
+            </p>
+          ) : null}
 
           {v.courseUnitId ? (
             <div className="space-y-1">
               <p className="text-sm font-medium">この日時の対象生徒</p>
-              {assignees.length === 0 ? (
+              {assigneeState === 'loading' ? (
+                <p className="text-xs text-muted">割当生徒を読み込み中…</p>
+              ) : null}
+              {assigneeState === 'error' && assigneeError ? (
+                <p className="text-xs text-red-600">{assigneeError}</p>
+              ) : null}
+              {assigneeState === 'ready' && assignees.length === 0 ? (
                 <p className="text-xs text-muted">
                   この授業に割り当て済みの生徒がいません。先に授業回数登録で割り当ててください。
                 </p>
-              ) : (
+              ) : null}
+              {assigneeState === 'ready' && assignees.length > 0 ? (
                 <ul className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
                   {assignees.map((student) => (
                     <li key={student.id}>
@@ -290,7 +334,7 @@ export function CourseLinkedSessionFields(props: {
                     </li>
                   ))}
                 </ul>
-              )}
+              ) : null}
             </div>
           ) : null}
           {/* subject is server-generated for course mode */}

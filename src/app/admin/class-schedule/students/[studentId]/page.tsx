@@ -2,11 +2,9 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requireSuperAdminOrRedirect } from '@/lib/class-schedule/access'
 import {
-  CLASS_COURSE_FEE_KIND_LABELS,
-  CLASS_COURSE_SUBJECT_LABELS,
-  CLASS_COURSE_TERM_LABELS,
-  CLASS_COURSE_TRACK_LABELS,
-  resolveClassCourseFeeKind,
+  buildClassCourseGroupHeading,
+  buildClassCourseSelectLabel,
+  compareClassCourseUnitOrder,
   type ClassCourseSubject,
   type ClassCourseTerm,
   type ClassCourseTrack,
@@ -17,8 +15,8 @@ import { AdminPageShell } from '@/components/layout/AdminPageShell'
 import { AdminNarrowContent } from '@/components/layout/AdminNarrowContent'
 import { getJstDateKey } from '@/lib/study/dates'
 import { ManualAttendanceForm } from '@/components/class-course/ManualAttendanceForm'
-import { CancelAssignmentButton } from '@/components/class-course/CancelAssignmentButton'
-import { StudentCourseLineagePanel } from '@/components/class-course/StudentCourseLineagePanel'
+import { StudentCourseGroupTables } from '@/components/class-course/StudentCourseGroupTables'
+import { computeRemainingCounts } from '@/lib/class-course/remaining'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,7 +40,7 @@ export default async function AdminClassCourseStudentPage({
   const loaded = await loadStudentCourseRemaining(studentId)
   if (!loaded.ok) {
     return (
-      <AdminPageShell title="生徒別 授業回数" backHref="/admin/class-schedule">
+      <AdminPageShell title="生徒別 授業回数" backHref="/admin/class-schedule/students">
         <p className="text-sm text-red-600">{loaded.error}</p>
       </AdminPageShell>
     )
@@ -52,101 +50,106 @@ export default async function AdminClassCourseStudentPage({
     profile.full_name || profile.display_name || profile.email || profile.id
   const todayKey = getJstDateKey()
 
+  const groupMap = new Map<
+    string,
+    {
+      key: string
+      heading: string
+      academicYear: number
+      term: ClassCourseTerm
+      subject: ClassCourseSubject
+      track: ClassCourseTrack
+      rows: (typeof loaded.rows)[number][]
+    }
+  >()
+
+  for (const row of loaded.rows) {
+    const key = `${row.academicYear}:${row.term}:${row.subject}:${row.track}`
+    const existing = groupMap.get(key)
+    if (existing) {
+      existing.rows.push(row)
+      continue
+    }
+    groupMap.set(key, {
+      key,
+      heading: buildClassCourseGroupHeading({
+        academicYear: row.academicYear,
+        subject: row.subject as ClassCourseSubject,
+        term: row.term as ClassCourseTerm,
+        track: row.track as ClassCourseTrack,
+      }),
+      academicYear: row.academicYear,
+      term: row.term as ClassCourseTerm,
+      subject: row.subject as ClassCourseSubject,
+      track: row.track as ClassCourseTrack,
+      rows: [row],
+    })
+  }
+
+  const groups = [...groupMap.values()]
+    .map((g) => {
+      const sortedRows = [...g.rows].sort((a, b) => a.seqNo - b.seqNo)
+      const counts = computeRemainingCounts({
+        activeAssignmentUnitIds: sortedRows.map((r) => r.courseUnitId),
+        attendanceEvents: sortedRows.flatMap((r) =>
+          r.events.map((e) => ({
+            course_unit_id: r.courseUnitId,
+            status: e.status,
+            recorded_at: e.recordedAt,
+            attendance_lineage_id: e.attendanceLineageId,
+          })),
+        ),
+      })
+      return {
+        key: g.key,
+        heading: g.heading,
+        assignedCount: counts.assignedCount,
+        attendedCount: counts.attendedCount,
+        remainingCount: counts.remainingCount,
+        rows: sortedRows,
+        sortKey: {
+          academicYear: g.academicYear,
+          term: g.term,
+          subject: g.subject,
+          track: g.track,
+          seqNo: 0,
+        },
+      }
+    })
+    .sort((a, b) => compareClassCourseUnitOrder(a.sortKey, b.sortKey))
+
+  const manualUnits = loaded.rows.map((r) => ({
+    id: r.courseUnitId,
+    label: buildClassCourseSelectLabel({
+      academicYear: r.academicYear,
+      subject: r.subject as ClassCourseSubject,
+      term: r.term as ClassCourseTerm,
+      track: r.track as ClassCourseTrack,
+      seqNo: r.seqNo,
+    }),
+  }))
+
   return (
     <AdminPageShell
       title={`${label} · 授業回数`}
-      backHref="/admin/class-schedule/courses"
-      backLabel="授業回数登録"
+      backHref="/admin/class-schedule/students"
+      backLabel="生徒別 実施・残回数"
     >
       <AdminNarrowContent>
         <section className="mb-8 space-y-3">
-          <h2 className="text-lg font-bold">残回数（年度・時期・科目・枠）</h2>
-          {loaded.summary.length === 0 ? (
-            <p className="text-sm text-muted">割り当てはまだありません。</p>
-          ) : (
-            <ul className="space-y-2">
-              {loaded.summary.map((row) => {
-                const fee = resolveClassCourseFeeKind(
-                  row.term as ClassCourseTerm,
-                  row.track as ClassCourseTrack,
-                )
-                return (
-                  <li
-                    key={`${row.academicYear}-${row.term}-${row.subject}-${row.track}`}
-                    className="rounded-lg border border-border p-3 text-sm"
-                  >
-                    <p className="font-medium">
-                      {row.academicYear}年度{' '}
-                      {CLASS_COURSE_TERM_LABELS[row.term as ClassCourseTerm]}{' '}
-                      {CLASS_COURSE_SUBJECT_LABELS[row.subject as ClassCourseSubject]}{' '}
-                      （{CLASS_COURSE_TRACK_LABELS[row.track as ClassCourseTrack]} /{' '}
-                      {CLASS_COURSE_FEE_KIND_LABELS[fee]}）
-                    </p>
-                    <p className="mt-1 text-muted">
-                      割当 {row.assignedCount} · 実施 {row.attendedCount} · 残{' '}
-                      {row.remainingCount}
-                    </p>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </section>
-
-        <section className="mb-8 space-y-3">
-          <h2 className="text-lg font-bold">授業一覧と履歴</h2>
-          <ul className="space-y-3">
-            {loaded.rows.map((row) => (
-              <li key={row.courseUnitId} className="rounded-lg border border-border p-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="font-medium">{row.displayName}</p>
-                    <p className="text-sm text-muted">
-                      現在:{' '}
-                      {row.currentStatus === 'attended'
-                        ? '実施'
-                        : row.currentStatus === 'absent'
-                          ? '欠席'
-                          : '未実施'}
-                      {row.attended ? '（消化済み）' : ''}
-                    </p>
-                  </div>
-                  <CancelAssignmentButton
-                    studentId={studentId}
-                    courseUnitId={row.courseUnitId}
-                    disabled={row.currentStatus === 'attended'}
-                  />
-                </div>
-                {row.events.length > 0 ? (
-                  <ul className="mt-2 space-y-1 text-xs text-muted">
-                    {row.events.map((ev, index) => (
-                      <li key={`${row.courseUnitId}-${ev.recordedAt}-${index}`}>
-                        {ev.eventDate} ·{' '}
-                        {ev.status === 'attended'
-                          ? '実施'
-                          : ev.status === 'absent'
-                            ? '欠席'
-                            : '未実施'}
-                        {' · '}
-                        {ev.source === 'session'
-                          ? ev.sessionId
-                            ? 'コマ'
-                            : 'コマ（削除済）'
-                          : '手入力'}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                <StudentCourseLineagePanel
-                  studentId={studentId}
-                  todayKey={todayKey}
-                  courseUnitId={row.courseUnitId}
-                  displayName={row.displayName}
-                  lineages={row.lineages}
-                />
-              </li>
-            ))}
-          </ul>
+          <h2 className="text-lg font-bold">講座別の実施・残回数</h2>
+          <StudentCourseGroupTables
+            studentId={studentId}
+            todayKey={todayKey}
+            groups={groups.map(({ key, heading, assignedCount, attendedCount, remainingCount, rows }) => ({
+              key,
+              heading,
+              assignedCount,
+              attendedCount,
+              remainingCount,
+              rows,
+            }))}
+          />
         </section>
 
         <section className="space-y-3">
@@ -154,14 +157,15 @@ export default async function AdminClassCourseStudentPage({
           <ManualAttendanceForm
             studentId={studentId}
             todayKey={todayKey}
-            units={loaded.rows.map((r) => ({
-              id: r.courseUnitId,
-              label: r.displayName,
-            }))}
+            units={manualUnits}
           />
         </section>
 
         <p className="mt-8 text-sm">
+          <Link href="/admin/class-schedule/courses" className="text-primary underline">
+            授業回数登録
+          </Link>
+          {' · '}
           <Link href="/admin/students" className="text-primary underline">
             生徒一覧
           </Link>

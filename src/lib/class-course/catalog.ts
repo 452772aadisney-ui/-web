@@ -65,7 +65,7 @@ export function resolveClassCourseFeeKind(
 }
 
 export const CLASS_COURSE_FEE_KIND_LABELS: Record<ClassCourseFeeKind, string> = {
-  monthly_regular: 'レギュラー（月謝）',
+  monthly_regular: 'レギュラー',
   course: '講習（別料金）',
   addon: '単発追加（別料金）',
 }
@@ -118,4 +118,68 @@ export function resolveAcademicYearFromJstDateKey(dateKey: string): number {
 
 export function academicYearRangeLabel(academicYear: number): string {
   return `${academicYear}年度（${academicYear}/3/1〜${academicYear + 1}/2/28）`
+}
+
+/** 手入力セレクト等向け。年度・講座・枠を見分けられる表示（並び替え用ではない）。 */
+export function buildClassCourseSelectLabel(params: {
+  academicYear: number
+  subject: ClassCourseSubject
+  term: ClassCourseTerm
+  track: ClassCourseTrack
+  seqNo: number
+}): string {
+  const fee = resolveClassCourseFeeKind(params.term, params.track)
+  return [
+    `${params.academicYear}年度`,
+    CLASS_COURSE_SUBJECT_LABELS[params.subject],
+    CLASS_COURSE_TERM_LABELS[params.term],
+    CLASS_COURSE_TRACK_LABELS[params.track],
+    CLASS_COURSE_FEE_KIND_LABELS[fee],
+    formatClassCourseSeq(params.seqNo),
+  ].join(' · ')
+}
+
+/** グループ見出し: 2026年度・英文読解・後期・通常枠 */
+export function buildClassCourseGroupHeading(params: {
+  academicYear: number
+  subject: ClassCourseSubject
+  term: ClassCourseTerm
+  track: ClassCourseTrack
+}): string {
+  return [
+    `${params.academicYear}年度`,
+    CLASS_COURSE_SUBJECT_LABELS[params.subject],
+    CLASS_COURSE_TERM_LABELS[params.term],
+    CLASS_COURSE_TRACK_LABELS[params.track],
+  ].join('・')
+}
+
+/** 数値 seq とカタログ順で並べる（表示文字列・UUID・作成順に依存しない）。 */
+export function compareClassCourseUnitOrder(
+  a: {
+    academicYear: number
+    term: ClassCourseTerm | string
+    subject: ClassCourseSubject | string
+    track: ClassCourseTrack | string
+    seqNo: number
+  },
+  b: {
+    academicYear: number
+    term: ClassCourseTerm | string
+    subject: ClassCourseSubject | string
+    track: ClassCourseTrack | string
+    seqNo: number
+  },
+): number {
+  if (a.academicYear !== b.academicYear) return a.academicYear - b.academicYear
+  const termA = CLASS_COURSE_TERMS.indexOf(a.term as ClassCourseTerm)
+  const termB = CLASS_COURSE_TERMS.indexOf(b.term as ClassCourseTerm)
+  if (termA !== termB) return termA - termB
+  const subjectA = CLASS_COURSE_SUBJECTS.indexOf(a.subject as ClassCourseSubject)
+  const subjectB = CLASS_COURSE_SUBJECTS.indexOf(b.subject as ClassCourseSubject)
+  if (subjectA !== subjectB) return subjectA - subjectB
+  const trackA = CLASS_COURSE_TRACKS.indexOf(a.track as ClassCourseTrack)
+  const trackB = CLASS_COURSE_TRACKS.indexOf(b.track as ClassCourseTrack)
+  if (trackA !== trackB) return trackA - trackB
+  return a.seqNo - b.seqNo
 }

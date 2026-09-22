@@ -54,6 +54,12 @@ export default async function AdminClassSchedulePage({
           </p>
           <div className="flex flex-wrap gap-2">
             <Link
+              href="/admin/class-schedule/students"
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium"
+            >
+              生徒別 実施・残回数
+            </Link>
+            <Link
               href="/admin/class-schedule/courses"
               className="rounded-lg border border-border px-4 py-2 text-sm font-medium"
             >

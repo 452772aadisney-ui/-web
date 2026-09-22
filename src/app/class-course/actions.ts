@@ -220,12 +220,13 @@ export async function listCourseUnitsForScope(params: {
   subject: ClassCourseSubject
   track: ClassCourseTrack
 }): Promise<
-  { id: string; seqNo: number; displayName: string }[]
+  | { ok: true; units: { id: string; seqNo: number; displayName: string }[] }
+  | { ok: false; error: string }
 > {
   const access = await requireSuperAdmin()
-  if (!access.ok) return []
+  if (!access.ok) return { ok: false, error: access.error }
   const admin = createAdminClient()
-  if (!admin) return []
+  if (!admin) return { ok: false, error: '読み込みに失敗しました' }
 
   const { data, error } = await admin
     .from('class_course_units')
@@ -236,37 +237,56 @@ export async function listCourseUnitsForScope(params: {
     .eq('track', params.track)
     .order('seq_no', { ascending: true })
 
-  if (error || !data) return []
+  if (error) {
+    console.error('[class-course] list units failed', error.code)
+    return { ok: false, error: '授業一覧の取得に失敗しました' }
+  }
 
-  return data.map((row) => ({
-    id: String(row.id),
-    seqNo: Number(row.seq_no),
-    displayName: buildClassCourseDisplayName({
-      subject: row.subject as ClassCourseSubject,
-      term: row.term as ClassCourseTerm,
-      track: row.track as ClassCourseTrack,
+  const units = (data ?? [])
+    .map((row) => ({
+      id: String(row.id),
       seqNo: Number(row.seq_no),
-    }),
-  }))
+      displayName: buildClassCourseDisplayName({
+        subject: row.subject as ClassCourseSubject,
+        term: row.term as ClassCourseTerm,
+        track: row.track as ClassCourseTrack,
+        seqNo: Number(row.seq_no),
+      }),
+    }))
+    .sort((a, b) => a.seqNo - b.seqNo)
+
+  return { ok: true, units }
 }
 
+/**
+ * 割当済み生徒。
+ * assignments は student_id / created_by の両方が profiles を参照するため、
+ * 曖昧な `profiles(...)` embed は PostgREST エラーになる → 必ず student_id を明示する。
+ */
 export async function listAssignedStudentsForCourseUnit(
   courseUnitId: string,
-): Promise<{ id: string; label: string }[]> {
+): Promise<
+  | { ok: true; students: { id: string; label: string }[] }
+  | { ok: false; error: string }
+> {
   const access = await requireSuperAdmin()
-  if (!access.ok) return []
+  if (!access.ok) return { ok: false, error: access.error }
   const admin = createAdminClient()
-  if (!admin || !courseUnitId) return []
+  if (!admin) return { ok: false, error: '読み込みに失敗しました' }
+  if (!courseUnitId) return { ok: true, students: [] }
 
   const { data, error } = await admin
     .from('class_course_assignments')
-    .select('student_id, profiles(full_name, display_name, email)')
+    .select('student_id, profiles!student_id(full_name, display_name, email)')
     .eq('course_unit_id', courseUnitId)
     .eq('status', 'active')
 
-  if (error || !data) return []
+  if (error) {
+    console.error('[class-course] list assignees failed', error.code, error.message)
+    return { ok: false, error: '割当生徒の取得に失敗しました' }
+  }
 
-  return data.map((row) => {
+  const students = (data ?? []).map((row) => {
     const profileRaw = row.profiles
     const profile = (
       Array.isArray(profileRaw) ? profileRaw[0] : profileRaw
@@ -284,6 +304,9 @@ export async function listAssignedStudentsForCourseUnit(
         String(row.student_id),
     }
   })
+
+  students.sort((a, b) => a.label.localeCompare(b.label, 'ja'))
+  return { ok: true, students }
 }
 
 export async function getCourseUnitScope(courseUnitId: string): Promise<{
