@@ -7,11 +7,13 @@ import {
 } from '@/lib/auth/admin-access'
 import { notifyStudyFeedbackReceived } from '@/lib/email/notifications'
 import { isStudyFeedbackStampId } from '@/lib/study/feedback'
+import { detectStudyDayFeedbackWriteConflict } from '@/lib/study/pending-feedback'
 import { createClient } from '@/lib/supabase/server'
 
 export type StudyDailyFeedbackActionState = {
   error?: string
   success?: boolean
+  feedbackId?: string
 }
 
 export async function upsertStudyDayFeedback(
@@ -27,6 +29,8 @@ export async function upsertStudyDayFeedback(
   const studiedOn = String(formData.get('studiedOn') ?? '').trim()
   const stamp = String(formData.get('stamp') ?? '').trim()
   const comment = String(formData.get('comment') ?? '').trim()
+  const expectedFeedbackId = String(formData.get('expectedFeedbackId') ?? '').trim()
+  const expectedComment = String(formData.get('expectedComment') ?? '')
 
   if (!studentId || !studiedOn) {
     return { error: '生徒または日付が指定されていません' }
@@ -49,6 +53,15 @@ export async function upsertStudyDayFeedback(
     .eq('student_id', studentId)
     .eq('studied_on', studiedOn)
     .maybeSingle<{ id: string; comment: string }>()
+
+  const conflict = detectStudyDayFeedbackWriteConflict({
+    existing: existing ?? null,
+    expectedFeedbackId,
+    expectedComment,
+  })
+  if (conflict.conflict) {
+    return { error: conflict.error }
+  }
 
   const payload = {
     student_id: studentId,
@@ -100,5 +113,5 @@ export async function upsertStudyDayFeedback(
   revalidatePath('/dashboard/study/history')
   revalidatePath('/dashboard')
 
-  return { success: true }
+  return { success: true, feedbackId: savedFeedback?.id }
 }

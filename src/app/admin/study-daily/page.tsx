@@ -56,6 +56,7 @@ export default async function AdminStudyDailyPage({
             <h2 className="text-lg font-bold">学習記録の確認とフィードバック</h2>
             <p className="mt-1 text-sm text-muted">
               選択した日に学習記録が登録された生徒を表示します。スタンプとコメントを送ると、生徒の学習履歴に表示され、メールでも通知されます。
+              画面上部やメニューの未返信件数は「今日」分です。昨日以前の未対応は「未対応の学習記録」からまとめて確認できます。
             </p>
           </div>
           <Link

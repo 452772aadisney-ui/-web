@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   buildPendingStudyDayPairs,
   defaultPendingListDateLabel,
+  detectStudyDayFeedbackWriteConflict,
   isStudyDayFeedbackIncomplete,
   matchesPendingStudentName,
   paginatePendingPairs,
   pendingStudyDayKey,
   resolvePendingDateFilter,
+  retainedItemMatchesPendingFilter,
   sortPendingStudyDayPairs,
 } from '@/lib/study/pending-feedback'
 
@@ -133,5 +135,121 @@ describe('matchesPendingStudentName', () => {
     expect(matchesPendingStudentName('山田太郎', '')).toBe(true)
     expect(matchesPendingStudentName('山田太郎', '山田')).toBe(true)
     expect(matchesPendingStudentName('山田太郎', '鈴木')).toBe(false)
+  })
+})
+
+describe('day-level pending after new logs', () => {
+  it('does not reopen a day that already has feedback', () => {
+    const pairs = buildPendingStudyDayPairs(
+      [
+        { studentId: 'a', studiedOn: '2026-09-21' },
+        { studentId: 'a', studiedOn: '2026-09-21' },
+      ],
+      new Set([pendingStudyDayKey('a', '2026-09-21')]),
+    )
+    expect(pairs).toEqual([])
+    expect(isStudyDayFeedbackIncomplete({
+      id: 'fb',
+      student_id: 'a',
+      studied_on: '2026-09-21',
+      stamp: 'good',
+      comment: 'ok',
+      admin_id: 'admin',
+      created_at: '',
+      updated_at: '',
+    })).toBe(false)
+  })
+})
+
+describe('detectStudyDayFeedbackWriteConflict', () => {
+  it('blocks create when another admin already inserted a row', () => {
+    expect(
+      detectStudyDayFeedbackWriteConflict({
+        existing: { id: 'fb-1', comment: '先に返信' },
+        expectedFeedbackId: '',
+        expectedComment: '',
+      }),
+    ).toEqual({
+      conflict: true,
+      error: '別の管理者が先に対応済みです。画面を更新して内容を確認してください。',
+    })
+  })
+
+  it('blocks update when the comment snapshot no longer matches', () => {
+    expect(
+      detectStudyDayFeedbackWriteConflict({
+        existing: { id: 'fb-1', comment: '更新後' },
+        expectedFeedbackId: 'fb-1',
+        expectedComment: '更新前',
+      }).conflict,
+    ).toBe(true)
+  })
+
+  it('allows insert when no row exists and update when snapshot matches', () => {
+    expect(
+      detectStudyDayFeedbackWriteConflict({
+        existing: null,
+        expectedFeedbackId: '',
+        expectedComment: '',
+      }),
+    ).toEqual({ conflict: false })
+    expect(
+      detectStudyDayFeedbackWriteConflict({
+        existing: { id: 'fb-1', comment: '同一' },
+        expectedFeedbackId: 'fb-1',
+        expectedComment: '同一',
+      }),
+    ).toEqual({ conflict: false })
+  })
+})
+
+describe('retainedItemMatchesPendingFilter', () => {
+  it('drops retained cards outside the active date or name filter', () => {
+    expect(
+      retainedItemMatchesPendingFilter(
+        { studiedOn: '2026-09-23', studentName: '山田' },
+        {
+          dateFilter: { mode: 'beforeToday', beforeExclusive: '2026-09-23' },
+          query: '',
+        },
+      ),
+    ).toBe(false)
+
+    expect(
+      retainedItemMatchesPendingFilter(
+        { studiedOn: '2026-09-21', studentName: '山田' },
+        {
+          dateFilter: { mode: 'exact', date: '2026-09-22' },
+          query: '',
+        },
+      ),
+    ).toBe(false)
+
+    expect(
+      retainedItemMatchesPendingFilter(
+        { studiedOn: '2026-09-21', studentName: '山田太郎' },
+        {
+          dateFilter: { mode: 'exact', date: '2026-09-21' },
+          query: '鈴木',
+        },
+      ),
+    ).toBe(false)
+
+    expect(
+      retainedItemMatchesPendingFilter(
+        { studiedOn: '2026-09-21', studentName: '山田太郎' },
+        {
+          dateFilter: { mode: 'exact', date: '2026-09-21' },
+          query: '山田',
+        },
+      ),
+    ).toBe(true)
+  })
+})
+
+describe('paginatePendingPairs empty after last page cleared', () => {
+  it('returns page 1 with empty items when total becomes 0', () => {
+    const result = paginatePendingPairs([], 5, 10)
+    expect(result).toEqual({ pageItems: [], totalCount: 0, page: 1 })
   })
 })

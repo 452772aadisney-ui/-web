@@ -68,7 +68,9 @@ export default async function AdminPendingStudyFeedbackPage({
       <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <h2 className="text-lg font-bold">未対応の学習記録</h2>
         <p className="mt-1 text-sm text-muted">
-          スタンプ未返信の学習日を、生徒×学習日のまとまりで表示します。一覧を開いただけでは対応済みになりません。初期表示は昨日以前です。日付を指定すると当日分も確認できます。
+          スタンプ未返信の学習日を、生徒×学習日のまとまりで表示します。一覧を開いただけでは対応済みになりません。
+          初期表示は昨日以前で、ナビ等の「当日の未返信」バッジとは対象日が異なります。日付を指定すると当日分も確認できます。
+          一度スタンプした日は、その後に学習記録が増えても未対応一覧には戻りません。
         </p>
 
         <form
@@ -131,7 +133,12 @@ export default async function AdminPendingStudyFeedbackPage({
         </p>
 
         <div className="mt-6">
-          <AdminPendingStudyFeedbackList items={pageResult.items} />
+          <AdminPendingStudyFeedbackList
+            items={pageResult.items}
+            filterKey={`${dateParam ?? ''}|${query}`}
+            dateFilter={dateFilter}
+            query={query}
+          />
         </div>
 
         {pageResult.totalCount > 0 && (

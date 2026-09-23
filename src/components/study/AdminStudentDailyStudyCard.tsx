@@ -13,6 +13,7 @@ import {
   STUDY_FEEDBACK_STAMPS,
   type StudyDayFeedback,
   type StudyFeedbackStampId,
+  isStudyFeedbackStampId,
 } from '@/lib/study/feedback'
 import { getPersonName } from '@/lib/auth/display-name'
 import { useActionToast } from '@/hooks/useActionToast'
@@ -33,7 +34,9 @@ interface AdminStudentDailyStudyCardProps {
   /** daily: collapse completed cards. pending: always show editable form. */
   variant?: 'daily' | 'pending'
   commentValue?: string
+  stampValue?: string
   onCommentChange?: (value: string) => void
+  onStampChange?: (value: StudyFeedbackStampId) => void
   onSaveSuccess?: (result: AdminStudentDailyStudyCardSaveResult) => void
   dailyHref?: string
 }
@@ -59,7 +62,9 @@ export function AdminStudentDailyStudyCard({
   studiedOn,
   variant = 'daily',
   commentValue,
+  stampValue,
   onCommentChange,
+  onStampChange,
   onSaveSuccess,
   dailyHref,
 }: AdminStudentDailyStudyCardProps) {
@@ -76,7 +81,9 @@ export function AdminStudentDailyStudyCard({
       feedback={feedback}
       variant={variant}
       commentValue={commentValue}
+      stampValue={stampValue}
       onCommentChange={onCommentChange}
+      onStampChange={onStampChange}
       onSaveSuccess={onSaveSuccess}
       dailyHref={dailyHref}
     />
@@ -89,7 +96,9 @@ function StudyFeedbackFormCard({
   feedback,
   variant,
   commentValue,
+  stampValue,
   onCommentChange,
+  onStampChange,
   onSaveSuccess,
   dailyHref,
 }: {
@@ -98,7 +107,9 @@ function StudyFeedbackFormCard({
   feedback: StudyDayFeedback | null
   variant: 'daily' | 'pending'
   commentValue?: string
+  stampValue?: string
   onCommentChange?: (value: string) => void
+  onStampChange?: (value: StudyFeedbackStampId) => void
   onSaveSuccess?: (result: AdminStudentDailyStudyCardSaveResult) => void
   dailyHref?: string
 }) {
@@ -107,6 +118,17 @@ function StudyFeedbackFormCard({
   const todayKey = getJstDateKey()
   const formRef = useRef<HTMLFormElement>(null)
   const submissionStarted = useRef(false)
+
+  const controlledComment = onCommentChange != null
+  const controlledStamp = onStampChange != null
+  const selectedStamp =
+    controlledStamp && stampValue && isStudyFeedbackStampId(stampValue)
+      ? stampValue
+      : defaultStamp
+
+  // Snapshot at last successful load / save — used to refuse blind overwrites.
+  const expectedFeedbackId = feedback?.id?.startsWith('local-') ? '' : (feedback?.id ?? '')
+  const expectedComment = feedback?.comment ?? ''
 
   useActionToast(state, {
     successMessage: 'フィードバックを保存しました',
@@ -125,18 +147,21 @@ function StudyFeedbackFormCard({
     const form = formRef.current
     const stamp = String(new FormData(form).get('stamp') ?? '').trim()
     const comment = String(new FormData(form).get('comment') ?? '')
-    if (!STUDY_FEEDBACK_STAMPS.some((s) => s.id === stamp)) return
+    if (!isStudyFeedbackStampId(stamp)) return
 
-    const stampId = stamp as StudyFeedbackStampId
     const now = new Date().toISOString()
+    const feedbackId =
+      state.feedbackId?.trim() ||
+      (feedback?.id && !feedback.id.startsWith('local-') ? feedback.id : `local-${summary.student.id}-${studiedOn}`)
+
     onSaveSuccess({
-      stamp: stampId,
+      stamp,
       comment,
       feedback: {
-        id: feedback?.id ?? `local-${summary.student.id}-${studiedOn}`,
+        id: feedbackId,
         student_id: summary.student.id,
         studied_on: studiedOn,
-        stamp: stampId,
+        stamp,
         comment,
         admin_id: feedback?.admin_id ?? '',
         created_at: feedback?.created_at ?? now,
@@ -145,6 +170,7 @@ function StudyFeedbackFormCard({
     })
   }, [
     state.success,
+    state.feedbackId,
     pending,
     onSaveSuccess,
     feedback,
@@ -152,7 +178,6 @@ function StudyFeedbackFormCard({
     studiedOn,
   ])
 
-  const controlledComment = onCommentChange != null
   const textareaValue = controlledComment ? (commentValue ?? '') : undefined
 
   return (
@@ -190,6 +215,8 @@ function StudyFeedbackFormCard({
       <form ref={formRef} action={formAction} className="mt-6 space-y-4 border-t border-border pt-6">
         <input type="hidden" name="studentId" value={summary.student.id} />
         <input type="hidden" name="studiedOn" value={studiedOn} />
+        <input type="hidden" name="expectedFeedbackId" value={expectedFeedbackId} />
+        <input type="hidden" name="expectedComment" value={expectedComment} />
 
         <div>
           <p className="mb-2 text-sm font-medium">スタンプ</p>
@@ -203,9 +230,14 @@ function StudyFeedbackFormCard({
                   type="radio"
                   name="stamp"
                   value={stamp.id}
-                  defaultChecked={defaultStamp === stamp.id}
                   required
                   className="sr-only"
+                  {...(controlledStamp
+                    ? {
+                        checked: selectedStamp === stamp.id,
+                        onChange: () => onStampChange?.(stamp.id),
+                      }
+                    : { defaultChecked: defaultStamp === stamp.id })}
                 />
                 <span aria-hidden>{stamp.emoji}</span>
                 {stamp.label}
