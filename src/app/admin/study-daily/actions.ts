@@ -96,6 +96,7 @@ export async function upsertStudyDayFeedback(
   }
 
   revalidatePath('/admin/study-daily')
+  revalidatePath('/admin/study-daily/pending')
   revalidatePath('/dashboard/study/history')
   revalidatePath('/dashboard')
 

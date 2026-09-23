@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getCurrentProfile } from '@/lib/auth/get-profile'
 import { getDashboardPathForRole } from '@/lib/auth/routes'
@@ -9,6 +10,7 @@ import {
   fetchIncompleteStudyFeedbackCount,
   fetchStudentDailyStudySummaries,
 } from '@/lib/study/feedback-queries'
+import { isStudyDayFeedbackIncomplete } from '@/lib/study/pending-feedback'
 
 export default async function AdminStudyDailyPage({
   searchParams,
@@ -34,23 +36,35 @@ export default async function AdminStudyDailyPage({
   }
 
   const summaries = await fetchStudentDailyStudySummaries(selectedDate)
-  const selectedDayIncompleteCount = summaries.filter((summary) => !summary.feedback).length
+  const selectedDayIncompleteCount = summaries.filter((summary) =>
+    isStudyDayFeedbackIncomplete(summary.feedback),
+  ).length
   const prevDayIncompleteCount = await fetchIncompleteStudyFeedbackCount(
     shiftDateKey(selectedDate, -1),
   )
   const sortedSummaries = [...summaries].sort((a, b) => {
-    const aComplete = a.feedback ? 1 : 0
-    const bComplete = b.feedback ? 1 : 0
+    const aComplete = isStudyDayFeedbackIncomplete(a.feedback) ? 0 : 1
+    const bComplete = isStudyDayFeedbackIncomplete(b.feedback) ? 0 : 1
     return aComplete - bComplete
   })
 
   return (
     <AdminPageShell title="毎日管理" backHref="/admin" backLabel="管理画面">
       <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <h2 className="text-lg font-bold">学習記録の確認とフィードバック</h2>
-        <p className="mt-1 text-sm text-muted">
-          選択した日に学習記録が登録された生徒を表示します。スタンプとコメントを送ると、生徒の学習履歴に表示され、メールでも通知されます。
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold">学習記録の確認とフィードバック</h2>
+            <p className="mt-1 text-sm text-muted">
+              選択した日に学習記録が登録された生徒を表示します。スタンプとコメントを送ると、生徒の学習履歴に表示され、メールでも通知されます。
+            </p>
+          </div>
+          <Link
+            href="/admin/study-daily/pending"
+            className="inline-flex items-center rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium hover:bg-card"
+          >
+            未対応の学習記録
+          </Link>
+        </div>
 
         <AdminStudyDailyDateNav
           selectedDate={selectedDate}

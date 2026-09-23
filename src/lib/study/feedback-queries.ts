@@ -8,7 +8,16 @@ import {
   isStudyFeedbackUnread,
   normalizeFeedbackCommentForRead,
 } from '@/lib/study/feedback-unread'
-import { getTotalPages, parsePageParam } from '@/lib/pagination'
+import { getTotalPages, parsePageParam, DEFAULT_PAGE_SIZE } from '@/lib/pagination'
+import {
+  buildPendingStudyDayPairs,
+  isStudyDayFeedbackIncomplete,
+  matchesPendingStudentName,
+  paginatePendingPairs,
+  pendingStudyDayKey,
+  resolvePendingDateFilter,
+  sortPendingStudyDayPairs,
+} from '@/lib/study/pending-feedback'
 
 export type StudentDailyStudySummary = {
   student: {
@@ -137,11 +146,277 @@ export async function fetchStudentDailyStudySummaries(
   return summaries
 }
 
+export type PendingStudyFeedbackItem = StudentDailyStudySummary & {
+  studiedOn: string
+}
+
 export async function fetchIncompleteStudyFeedbackCount(
   studiedOn: string,
 ): Promise<number> {
   const summaries = await fetchStudentDailyStudySummaries(studiedOn)
-  return summaries.filter((summary) => !summary.feedback).length
+  return summaries.filter((summary) =>
+    isStudyDayFeedbackIncomplete(summary.feedback),
+  ).length
+}
+
+const PENDING_PAIR_PAGE_SIZE = 1000
+
+async function fetchAllStudyLogPairsForPendingFilter(
+  dateFilter: ReturnType<typeof resolvePendingDateFilter>,
+): Promise<Array<{ studentId: string; studiedOn: string }>> {
+  const supabase = await createClient()
+  const pairs: Array<{ studentId: string; studiedOn: string }> = []
+  let from = 0
+
+  for (;;) {
+    let query = supabase.from('study_logs').select('student_id, studied_on')
+    if (dateFilter.mode === 'exact') {
+      query = query.eq('studied_on', dateFilter.date)
+    } else {
+      query = query.lt('studied_on', dateFilter.beforeExclusive)
+    }
+
+    const { data, error } = await query.range(from, from + PENDING_PAIR_PAGE_SIZE - 1)
+    if (error || !data?.length) break
+
+    for (const row of data) {
+      pairs.push({
+        studentId: String(row.student_id),
+        studiedOn: String(row.studied_on),
+      })
+    }
+
+    if (data.length < PENDING_PAIR_PAGE_SIZE) break
+    from += PENDING_PAIR_PAGE_SIZE
+  }
+
+  return pairs
+}
+
+async function fetchFeedbackKeysForPendingFilter(
+  dateFilter: ReturnType<typeof resolvePendingDateFilter>,
+): Promise<Set<string>> {
+  const supabase = await createClient()
+  const keys = new Set<string>()
+  let from = 0
+
+  for (;;) {
+    let query = supabase
+      .from('study_day_feedback')
+      .select('student_id, studied_on')
+    if (dateFilter.mode === 'exact') {
+      query = query.eq('studied_on', dateFilter.date)
+    } else {
+      query = query.lt('studied_on', dateFilter.beforeExclusive)
+    }
+
+    const { data, error } = await query.range(from, from + PENDING_PAIR_PAGE_SIZE - 1)
+    if (error || !data?.length) break
+
+    for (const row of data) {
+      keys.add(pendingStudyDayKey(String(row.student_id), String(row.studied_on)))
+    }
+
+    if (data.length < PENDING_PAIR_PAGE_SIZE) break
+    from += PENDING_PAIR_PAGE_SIZE
+  }
+
+  return keys
+}
+
+async function hydratePendingStudyFeedbackItems(
+  pairs: Array<{ studentId: string; studiedOn: string }>,
+  profileById: Map<string, StudentDailyStudySummary['student']>,
+): Promise<PendingStudyFeedbackItem[]> {
+  if (pairs.length === 0) return []
+
+  const supabase = await createClient()
+  const studentIds = [...new Set(pairs.map((p) => p.studentId))]
+  const studiedOns = [...new Set(pairs.map((p) => p.studiedOn))]
+  const pairKeySet = new Set(
+    pairs.map((p) => pendingStudyDayKey(p.studentId, p.studiedOn)),
+  )
+
+  const [{ data: logs }, { data: feedbackRows }] = await Promise.all([
+    supabase
+      .from('study_logs')
+      .select('*')
+      .in('student_id', studentIds)
+      .in('studied_on', studiedOns)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('study_day_feedback')
+      .select('*')
+      .in('student_id', studentIds)
+      .in('studied_on', studiedOns),
+  ])
+
+  const logsByKey = new Map<string, StudyLog[]>()
+  for (const log of (logs ?? []) as StudyLog[]) {
+    const key = pendingStudyDayKey(log.student_id, log.studied_on)
+    if (!pairKeySet.has(key)) continue
+    const list = logsByKey.get(key) ?? []
+    list.push(log)
+    logsByKey.set(key, list)
+  }
+
+  const feedbackByKey = new Map(
+    ((feedbackRows ?? []) as StudyDayFeedback[]).map((feedback) => [
+      pendingStudyDayKey(feedback.student_id, feedback.studied_on),
+      feedback,
+    ]),
+  )
+
+  const items: PendingStudyFeedbackItem[] = []
+  for (const pair of pairs) {
+    const student = profileById.get(pair.studentId)
+    if (!student) continue
+    const key = pendingStudyDayKey(pair.studentId, pair.studiedOn)
+    const studentLogs = logsByKey.get(key) ?? []
+    if (studentLogs.length === 0) continue
+
+    items.push({
+      student,
+      logs: studentLogs,
+      totalMinutes: studentLogs.reduce((sum, log) => sum + log.duration_minutes, 0),
+      feedback: feedbackByKey.get(key) ?? null,
+      studiedOn: pair.studiedOn,
+    })
+  }
+
+  return items
+}
+
+export type PendingStudyFeedbackPage = {
+  items: PendingStudyFeedbackItem[]
+  totalCount: number
+  page: number
+  pageSize: number
+  dateFilter: ReturnType<typeof resolvePendingDateFilter>
+  query: string
+}
+
+/**
+ * Pending = day-level stamp missing (same as 毎日管理 incomplete badge),
+ * scoped by date filter + optional student name query. Pages by student×day.
+ */
+export async function fetchPendingStudyFeedbackPage(params: {
+  todayKey: string
+  date?: string | null
+  query?: string | null
+  page?: number
+  pageSize?: number
+}): Promise<PendingStudyFeedbackPage> {
+  const pageSize = params.pageSize ?? DEFAULT_PAGE_SIZE
+  const query = params.query?.trim() ?? ''
+  const dateFilter = resolvePendingDateFilter({
+    todayKey: params.todayKey,
+    date: params.date,
+  })
+
+  const empty: PendingStudyFeedbackPage = {
+    items: [],
+    totalCount: 0,
+    page: 1,
+    pageSize,
+    dateFilter,
+    query,
+  }
+
+  if (dateFilter.mode === 'exact') {
+    const summaries = await fetchStudentDailyStudySummaries(dateFilter.date)
+    const pendingSummaries = summaries.filter((summary) =>
+      isStudyDayFeedbackIncomplete(summary.feedback),
+    )
+    const filtered = query
+      ? pendingSummaries.filter((summary) =>
+          matchesPendingStudentName(getPersonName(summary.student), query),
+        )
+      : pendingSummaries
+
+    const requestedPage = params.page ?? 1
+    const { pageItems, totalCount, page } = paginatePendingPairs(
+      filtered,
+      requestedPage,
+      pageSize,
+    )
+
+    return {
+      items: pageItems.map((summary) => ({
+        ...summary,
+        studiedOn: dateFilter.date,
+      })),
+      totalCount,
+      page,
+      pageSize,
+      dateFilter,
+      query,
+    }
+  }
+
+  const [logPairs, feedbackKeys] = await Promise.all([
+    fetchAllStudyLogPairsForPendingFilter(dateFilter),
+    fetchFeedbackKeysForPendingFilter(dateFilter),
+  ])
+
+  if (logPairs.length === 0) return empty
+
+  let pendingPairs = buildPendingStudyDayPairs(logPairs, feedbackKeys)
+  if (pendingPairs.length === 0) return empty
+
+  const studentIds = [...new Set(pendingPairs.map((p) => p.studentId))]
+  const supabase = await createClient()
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, full_name, display_name, email, student_code')
+    .in('id', studentIds)
+    .eq('role', 'student')
+
+  const profileById = new Map(
+    (profiles ?? []).map((profile) => [
+      profile.id as string,
+      profile as StudentDailyStudySummary['student'],
+    ]),
+  )
+
+  const nameByStudentId = new Map<string, string>()
+  for (const [id, profile] of profileById) {
+    nameByStudentId.set(id, getPersonName(profile))
+  }
+
+  pendingPairs = pendingPairs.filter((pair) => profileById.has(pair.studentId))
+  if (query) {
+    pendingPairs = pendingPairs.filter((pair) =>
+      matchesPendingStudentName(nameByStudentId.get(pair.studentId) ?? '', query),
+    )
+  }
+
+  const sorted = sortPendingStudyDayPairs(pendingPairs, nameByStudentId)
+  const requestedPage = params.page ?? 1
+  const { pageItems, totalCount, page } = paginatePendingPairs(
+    sorted,
+    requestedPage,
+    pageSize,
+  )
+
+  const items = await hydratePendingStudyFeedbackItems(pageItems, profileById)
+
+  // Preserve sorted page order after hydration (skip dropped empty pairs).
+  const itemByKey = new Map(
+    items.map((item) => [pendingStudyDayKey(item.student.id, item.studiedOn), item]),
+  )
+  const orderedItems = pageItems
+    .map((pair) => itemByKey.get(pendingStudyDayKey(pair.studentId, pair.studiedOn)))
+    .filter((item): item is PendingStudyFeedbackItem => Boolean(item))
+
+  return {
+    items: orderedItems,
+    totalCount,
+    page,
+    pageSize,
+    dateFilter,
+    query,
+  }
 }
 
 export const fetchUnreadStudyFeedbackDates = cache(
