@@ -1,6 +1,6 @@
 'use client'
 
-import { useActionState, useEffect, useRef, type ChangeEvent } from 'react'
+import { useActionState, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import Link from 'next/link'
 import {
   upsertStudyDayFeedback,
@@ -14,6 +14,7 @@ import {
   type StudyDayFeedback,
   type StudyFeedbackStampId,
   isStudyFeedbackStampId,
+  getStudyFeedbackStamp,
 } from '@/lib/study/feedback'
 import { getPersonName } from '@/lib/auth/display-name'
 import { useActionToast } from '@/hooks/useActionToast'
@@ -114,10 +115,16 @@ function StudyFeedbackFormCard({
   dailyHref?: string
 }) {
   const [state, formAction, pending] = useActionState(upsertStudyDayFeedback, initialState)
-  const defaultStamp = feedback?.stamp ?? STUDY_FEEDBACK_STAMPS[0].id
   const todayKey = getJstDateKey()
   const formRef = useRef<HTMLFormElement>(null)
   const submissionStarted = useRef(false)
+  /** Baseline for expected version only — never auto-adopted from conflict payload. */
+  const [baselineOverride, setBaselineOverride] = useState<StudyDayFeedback | null>(null)
+  const [conflictPreview, setConflictPreview] = useState<StudyDayFeedback | null>(null)
+  const [previewAdoptedNotice, setPreviewAdoptedNotice] = useState(false)
+
+  const baseline = baselineOverride ?? feedback
+  const defaultStamp = baseline?.stamp ?? STUDY_FEEDBACK_STAMPS[0].id
 
   const controlledComment = onCommentChange != null
   const controlledStamp = onStampChange != null
@@ -126,13 +133,17 @@ function StudyFeedbackFormCard({
       ? stampValue
       : defaultStamp
 
-  // Snapshot at last successful load / save — used to refuse blind overwrites.
-  const expectedFeedbackId = feedback?.id?.startsWith('local-') ? '' : (feedback?.id ?? '')
-  const expectedComment = feedback?.comment ?? ''
+  const expectedFeedbackId =
+    baseline?.id && !baseline.id.startsWith('local-') ? baseline.id : ''
+  // Pass DB string through unchanged (no Date re-serialize).
+  const expectedUpdatedAt = expectedFeedbackId ? (baseline?.updated_at ?? '') : ''
+
+  const historyHref = dailyHref ?? `/admin/study-daily?date=${studiedOn}`
 
   useActionToast(state, {
     successMessage: 'フィードバックを保存しました',
     pending,
+    showSuccess: !state.conflict,
   })
 
   useEffect(() => {
@@ -142,43 +153,62 @@ function StudyFeedbackFormCard({
     }
     if (!submissionStarted.current) return
     submissionStarted.current = false
-    if (!state.success || !onSaveSuccess || !formRef.current) return
 
-    const form = formRef.current
-    const stamp = String(new FormData(form).get('stamp') ?? '').trim()
-    const comment = String(new FormData(form).get('comment') ?? '')
-    if (!isStudyFeedbackStampId(stamp)) return
+    if (state.conflict) {
+      if (state.latestFeedback) {
+        setConflictPreview(state.latestFeedback)
+      }
+      setPreviewAdoptedNotice(false)
+      return
+    }
 
-    const now = new Date().toISOString()
-    const feedbackId =
-      state.feedbackId?.trim() ||
-      (feedback?.id && !feedback.id.startsWith('local-') ? feedback.id : `local-${summary.student.id}-${studiedOn}`)
+    if (!state.success || !onSaveSuccess) return
+    if (!state.feedbackId || !state.updatedAt) return
+    if (!state.stamp || !isStudyFeedbackStampId(state.stamp)) return
 
+    const savedComment = state.comment ?? ''
+    const saved: StudyDayFeedback = {
+      id: state.feedbackId,
+      student_id: summary.student.id,
+      studied_on: studiedOn,
+      stamp: state.stamp,
+      comment: savedComment,
+      admin_id: baseline?.admin_id ?? '',
+      created_at: baseline?.created_at ?? state.updatedAt,
+      updated_at: state.updatedAt,
+    }
+
+    setBaselineOverride(saved)
+    setConflictPreview(null)
+    setPreviewAdoptedNotice(false)
     onSaveSuccess({
-      stamp,
-      comment,
-      feedback: {
-        id: feedbackId,
-        student_id: summary.student.id,
-        studied_on: studiedOn,
-        stamp,
-        comment,
-        admin_id: feedback?.admin_id ?? '',
-        created_at: feedback?.created_at ?? now,
-        updated_at: now,
-      },
+      stamp: state.stamp,
+      comment: savedComment,
+      feedback: saved,
     })
   }, [
     state.success,
+    state.conflict,
     state.feedbackId,
+    state.updatedAt,
+    state.stamp,
+    state.comment,
+    state.latestFeedback,
     pending,
     onSaveSuccess,
-    feedback,
     summary.student.id,
     studiedOn,
+    baseline?.admin_id,
+    baseline?.created_at,
   ])
 
   const textareaValue = controlledComment ? (commentValue ?? '') : undefined
+
+  function adoptConflictPreviewAsBaseline() {
+    if (!conflictPreview) return
+    setBaselineOverride(conflictPreview)
+    setPreviewAdoptedNotice(true)
+  }
 
   return (
     <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
@@ -192,13 +222,11 @@ function StudyFeedbackFormCard({
             </p>
           ) : null}
           <p className="text-sm text-muted">{summary.student.email}</p>
-          {dailyHref ? (
-            <p className="mt-1 text-xs">
-              <Link href={dailyHref} className="text-primary hover:underline">
-                元の学習記録（毎日管理）へ
-              </Link>
-            </p>
-          ) : null}
+          <p className="mt-1 text-xs">
+            <Link href={historyHref} className="text-primary hover:underline">
+              元の学習記録（毎日管理）へ
+            </Link>
+          </p>
         </div>
         <p className="text-sm font-medium">合計 {formatDuration(summary.totalMinutes)}</p>
       </div>
@@ -212,35 +240,73 @@ function StudyFeedbackFormCard({
         ))}
       </ul>
 
+      {state.conflict && (
+        <div
+          className="mt-4 space-y-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950"
+          role="alert"
+        >
+          <p>{state.error}</p>
+          <p>
+            <Link href={historyHref} className="font-medium text-primary hover:underline">
+              毎日管理で最新内容を開く
+            </Link>
+          </p>
+          {conflictPreview && (
+            <div className="rounded-md border border-amber-200 bg-white/80 px-3 py-2">
+              <p className="font-medium">現在保存されている内容（参照）</p>
+              <p className="mt-1">
+                スタンプ:{' '}
+                {getStudyFeedbackStamp(conflictPreview.stamp)?.label ?? conflictPreview.stamp}
+              </p>
+              <p className="mt-1 whitespace-pre-wrap">
+                コメント: {conflictPreview.comment.trim() || '（なし）'}
+              </p>
+              <button
+                type="button"
+                onClick={adoptConflictPreviewAsBaseline}
+                className="mt-2 rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium hover:bg-amber-100"
+              >
+                この内容を確認したので、これを前提に再編集する
+              </button>
+              {previewAdoptedNotice && (
+                <p className="mt-2 text-xs text-amber-900">
+                  前提バージョンを更新しました。入力中のスタンプ・コメントはそのままです。内容を整えて再保存してください。
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       <form ref={formRef} action={formAction} className="mt-6 space-y-4 border-t border-border pt-6">
         <input type="hidden" name="studentId" value={summary.student.id} />
         <input type="hidden" name="studiedOn" value={studiedOn} />
         <input type="hidden" name="expectedFeedbackId" value={expectedFeedbackId} />
-        <input type="hidden" name="expectedComment" value={expectedComment} />
+        <input type="hidden" name="expectedUpdatedAt" value={expectedUpdatedAt} />
 
         <div>
           <p className="mb-2 text-sm font-medium">スタンプ</p>
           <div className="flex flex-wrap gap-2">
-            {STUDY_FEEDBACK_STAMPS.map((stamp) => (
+            {STUDY_FEEDBACK_STAMPS.map((stampOption) => (
               <label
-                key={stamp.id}
+                key={stampOption.id}
                 className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm has-checked:border-primary has-checked:bg-primary/5"
               >
                 <input
                   type="radio"
                   name="stamp"
-                  value={stamp.id}
+                  value={stampOption.id}
                   required
                   className="sr-only"
                   {...(controlledStamp
                     ? {
-                        checked: selectedStamp === stamp.id,
-                        onChange: () => onStampChange?.(stamp.id),
+                        checked: selectedStamp === stampOption.id,
+                        onChange: () => onStampChange?.(stampOption.id),
                       }
-                    : { defaultChecked: defaultStamp === stamp.id })}
+                    : { defaultChecked: defaultStamp === stampOption.id })}
                 />
-                <span aria-hidden>{stamp.emoji}</span>
-                {stamp.label}
+                <span aria-hidden>{stampOption.emoji}</span>
+                {stampOption.label}
               </label>
             ))}
           </div>
@@ -257,13 +323,13 @@ function StudyFeedbackFormCard({
                   onChange: (event: ChangeEvent<HTMLTextAreaElement>) =>
                     onCommentChange?.(event.target.value),
                 }
-              : { defaultValue: feedback?.comment ?? '' })}
+              : { defaultValue: baseline?.comment ?? '' })}
             placeholder="その日の学習についてコメントを入力"
             className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </label>
 
-        {state.error && (
+        {state.error && !state.conflict && (
           <p className="text-sm text-error" role="alert">
             {state.error}
           </p>
