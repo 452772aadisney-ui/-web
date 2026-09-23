@@ -59,19 +59,27 @@ export function buildPendingStudyDayPairs(
   return pending
 }
 
-/** Newer studied_on first; same day uses existing ja name order. */
+/** Older studied_on first; same day uses existing ja name order. */
+export function comparePendingStudyDayOrder(
+  a: { studiedOn: string; studentId: string },
+  b: { studiedOn: string; studentId: string },
+  nameByStudentId: ReadonlyMap<string, string>,
+): number {
+  if (a.studiedOn !== b.studiedOn) {
+    return a.studiedOn < b.studiedOn ? -1 : 1
+  }
+  const nameA = nameByStudentId.get(a.studentId) ?? ''
+  const nameB = nameByStudentId.get(b.studentId) ?? ''
+  return nameA.localeCompare(nameB, 'ja')
+}
+
 export function sortPendingStudyDayPairs(
   pairs: ReadonlyArray<PendingStudyDayPair>,
   nameByStudentId: ReadonlyMap<string, string>,
 ): PendingStudyDayPair[] {
-  return [...pairs].sort((a, b) => {
-    if (a.studiedOn !== b.studiedOn) {
-      return a.studiedOn < b.studiedOn ? 1 : -1
-    }
-    const nameA = nameByStudentId.get(a.studentId) ?? ''
-    const nameB = nameByStudentId.get(b.studentId) ?? ''
-    return nameA.localeCompare(nameB, 'ja')
-  })
+  return [...pairs].sort((a, b) =>
+    comparePendingStudyDayOrder(a, b, nameByStudentId),
+  )
 }
 
 export function matchesPendingStudentName(

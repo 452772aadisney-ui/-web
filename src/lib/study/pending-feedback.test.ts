@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildPendingStudyDayPairs,
+  comparePendingStudyDayOrder,
   defaultPendingListDateLabel,
   detectStudyDayFeedbackWriteConflict,
   isStudyDayFeedbackIncomplete,
@@ -85,7 +86,7 @@ describe('buildPendingStudyDayPairs', () => {
 })
 
 describe('sortPendingStudyDayPairs', () => {
-  it('orders by date desc then ja name', () => {
+  it('orders by date asc then ja name', () => {
     const sorted = sortPendingStudyDayPairs(
       [
         { studentId: '1', studiedOn: '2026-09-20' },
@@ -99,9 +100,9 @@ describe('sortPendingStudyDayPairs', () => {
       ]),
     )
     expect(sorted.map((p) => `${p.studiedOn}:${p.studentId}`)).toEqual([
+      '2026-09-20:1',
       '2026-09-21:2',
       '2026-09-21:3',
-      '2026-09-20:1',
     ])
   })
 })
@@ -121,6 +122,62 @@ describe('paginatePendingPairs', () => {
     expect(page2.pageItems).toHaveLength(2)
     expect(page3.pageItems).toHaveLength(1)
     expect(page3.page).toBe(3)
+  })
+
+  it('puts the oldest studied_on pairs on page 1 after ascending sort', () => {
+    const sorted = sortPendingStudyDayPairs(
+      [
+        { studentId: 'a', studiedOn: '2026-09-22' },
+        { studentId: 'b', studiedOn: '2026-09-20' },
+        { studentId: 'c', studiedOn: '2026-09-21' },
+        { studentId: 'd', studiedOn: '2026-09-21' },
+      ],
+      new Map([
+        ['a', '青木'],
+        ['b', '山田'],
+        ['c', '佐藤'],
+        ['d', '鈴木'],
+      ]),
+    )
+    expect(sorted.map((p) => p.studiedOn)).toEqual([
+      '2026-09-20',
+      '2026-09-21',
+      '2026-09-21',
+      '2026-09-22',
+    ])
+
+    const page1 = paginatePendingPairs(sorted, 1, 2)
+    const page2 = paginatePendingPairs(sorted, 2, 2)
+
+    expect(page1.pageItems.map((p) => `${p.studiedOn}:${p.studentId}`)).toEqual([
+      '2026-09-20:b',
+      '2026-09-21:c',
+    ])
+    expect(page2.pageItems.map((p) => `${p.studiedOn}:${p.studentId}`)).toEqual([
+      '2026-09-21:d',
+      '2026-09-22:a',
+    ])
+  })
+
+  it('keeps same-day student order when merging retained cards into asc list', () => {
+    const nameByStudentId = new Map([
+      ['older', '山田'],
+      ['newer-retained', '青木'],
+      ['same-day', '佐藤'],
+    ])
+    const rows = [
+      { studiedOn: '2026-09-22', studentId: 'newer-retained' },
+      { studiedOn: '2026-09-20', studentId: 'older' },
+      { studiedOn: '2026-09-22', studentId: 'same-day' },
+    ]
+    const sorted = [...rows].sort((a, b) =>
+      comparePendingStudyDayOrder(a, b, nameByStudentId),
+    )
+    expect(sorted.map((r) => `${r.studiedOn}:${r.studentId}`)).toEqual([
+      '2026-09-20:older',
+      '2026-09-22:same-day',
+      '2026-09-22:newer-retained',
+    ])
   })
 
   it('clamps oversized page numbers', () => {

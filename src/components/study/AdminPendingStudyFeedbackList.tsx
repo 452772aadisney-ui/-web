@@ -8,6 +8,7 @@ import type { StudyFeedbackStampId } from '@/lib/study/feedback'
 import {
   pendingStudyDayKey,
   retainedItemMatchesPendingFilter,
+  comparePendingStudyDayOrder,
   type PendingDateFilter,
 } from '@/lib/study/pending-feedback'
 
@@ -91,19 +92,17 @@ export function AdminPendingStudyFeedbackList({
 
   const retainedVisible = useMemo(
     () =>
-      retained
-        .filter((item) => {
-          const key = pendingStudyDayKey(item.student.id, item.studiedOn)
-          if (serverKeys.has(key)) return false
-          return retainedItemMatchesPendingFilter(
-            {
-              studiedOn: item.studiedOn,
-              studentName: getPersonName(item.student),
-            },
-            { dateFilter, query },
-          )
-        })
-        .sort((a, b) => b.retainedAt - a.retainedAt),
+      retained.filter((item) => {
+        const key = pendingStudyDayKey(item.student.id, item.studiedOn)
+        if (serverKeys.has(key)) return false
+        return retainedItemMatchesPendingFilter(
+          {
+            studiedOn: item.studiedOn,
+            studentName: getPersonName(item.student),
+          },
+          { dateFilter, query },
+        )
+      }),
     [retained, serverKeys, dateFilter, query],
   )
 
@@ -125,7 +124,19 @@ export function AdminPendingStudyFeedbackList({
       retention: item.reason as RetentionReason,
     }))
 
-    return [...fromServer, ...extras]
+    const nameByStudentId = new Map<string, string>()
+    for (const row of [...fromServer, ...extras]) {
+      nameByStudentId.set(row.item.student.id, getPersonName(row.item.student))
+    }
+
+    // Same order as the server pending list: studied_on asc, then ja name.
+    return [...fromServer, ...extras].sort((a, b) =>
+      comparePendingStudyDayOrder(
+        { studiedOn: a.item.studiedOn, studentId: a.item.student.id },
+        { studiedOn: b.item.studiedOn, studentId: b.item.student.id },
+        nameByStudentId,
+      ),
+    )
   }, [items, retained, retainedVisible])
 
   const handleCommentChange = useCallback((key: string, value: string) => {
