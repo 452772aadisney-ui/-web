@@ -21,7 +21,7 @@ import { CommonTestCountdownBanner } from '@/components/student/CommonTestCountd
 import { useDeviceNotificationStatus } from '@/hooks/useDeviceNotificationStatus'
 import type { StudentStarRanking } from '@/lib/achievements/ranking'
 import type { OnboardingChecklistItem } from '@/lib/student/onboarding-checklist'
-import { formatTodayStudyButtonSubtitle } from '@/lib/study/today-status'
+import { formatStudyStreakLabel } from '@/lib/study/streak'
 
 type MenuBadgeKey = 'studyHistory' | 'announcements' | 'chat' | 'bookshelf' | 'faqIntro' | 'todo'
 
@@ -111,7 +111,7 @@ interface MyPageActionsProps {
   nextCoaching?: CoachingBookingWithDetails | null
   coachingAlertMessage?: string | null
   commonTestDaysRemaining?: number | null
-  todayStudyMinutes?: number
+  studyStreakDays?: number
   onboardingItems?: OnboardingChecklistItem[]
   unreadStudyFeedbackCount?: number
   unreadAnnouncementCount?: number
@@ -131,7 +131,7 @@ export function MyPageActions({
   nextCoaching,
   coachingAlertMessage = null,
   commonTestDaysRemaining = null,
-  todayStudyMinutes = 0,
+  studyStreakDays = 0,
   onboardingItems = [],
   unreadStudyFeedbackCount = 0,
   unreadAnnouncementCount = 0,
@@ -158,7 +158,7 @@ export function MyPageActions({
 
   const visibleMenuActions = buildIconMenuActions(isKisotsuStudent)
 
-  const todayStudyStatus = formatTodayStudyButtonSubtitle(todayStudyMinutes)
+  const studyStreakLabel = formatStudyStreakLabel(studyStreakDays)
   const showCommonTestCountdown = commonTestDaysRemaining !== null
   const showNextCoachingBanner = !hideCoaching && !coachingAlertMessage
   const showOnboarding = onboardingItems.some((item) => !item.completed)
@@ -248,8 +248,7 @@ export function MyPageActions({
 
       <MyPagePrimaryActionButton
         label="学習を記録する"
-        subtitle={todayStudyStatus.text}
-        subtitleTone={todayStudyStatus.tone}
+        subtitle={studyStreakLabel ?? undefined}
         iconSrc={MYPAGE_MENU_ICONS.recordStudy}
         onClick={() => setStudyDialogOpen(true)}
       />

@@ -38,5 +38,5 @@ export function getStudyStreakExclamationCount(streakDays: number): number {
 export function formatStudyStreakLabel(streakDays: number): string | null {
   if (streakDays <= 0) return null
   const exclamations = '!'.repeat(getStudyStreakExclamationCount(streakDays))
-  return `連続${streakDays}日登録中${exclamations}`
+  return `連続${streakDays}日記録中${exclamations}`
 }

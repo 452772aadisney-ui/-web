@@ -1,5 +1,6 @@
 'use server'
 
+import { canRescheduleCoachingSource } from '@/lib/coaching/booking-time-policy'
 import { evaluateAndUnlockAchievements, type UnlockedAchievement } from '@/lib/achievements/unlock'
 import { isCoachingKarteTableMissingError } from '@/lib/coaching/karte-table'
 import { revalidatePath } from 'next/cache'
@@ -880,8 +881,8 @@ async function performCoachingReschedule(params: {
     return { error: '変更できる予約ではありません' }
   }
 
-  if (new Date(booking.coaching_slots.starts_at) <= new Date()) {
-    return { error: '開始済みの予約は変更できません' }
+  if (!canRescheduleCoachingSource(booking.coaching_slots.starts_at, params.actor)) {
+    return { error: params.actor === 'admin' ? '前日以前の予約は変更できません' : '開始済みの予約は変更できません' }
   }
 
   if (booking.slot_id === params.newSlotId) {

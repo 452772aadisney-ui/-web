@@ -1,4 +1,5 @@
 import type { CoachingBookingWithDetails } from '@/types/coaching'
+import { isTodayOrFutureCoaching } from '@/lib/coaching/booking-time-policy'
 
 export const COACHING_INTERVAL_DAYS = 7
 
@@ -19,10 +20,16 @@ export function getCoachingAlertState(
   now = new Date(),
 ): CoachingAlertState {
   const active = bookings.filter((b) => b.status !== 'cancelled')
+  // Align with getNextCoachingBooking: JST today stays "upcoming" until midnight
+  // so the reservation-nudge alert does not hide today's home banner after start.
   const upcoming = active.filter(
-    (b) => b.status === 'scheduled' && new Date(b.slot.starts_at) > now,
+    (b) => b.status === 'scheduled' && isTodayOrFutureCoaching(b.slot.starts_at, now),
   )
-  const past = active.filter((b) => new Date(b.slot.starts_at) <= now)
+  const past = active.filter(
+    (b) =>
+      !(b.status === 'scheduled' && isTodayOrFutureCoaching(b.slot.starts_at, now)) &&
+      new Date(b.slot.starts_at) <= now,
+  )
 
   const lastSession = past.sort(
     (a, b) => new Date(b.slot.starts_at).getTime() - new Date(a.slot.starts_at).getTime(),
@@ -58,7 +65,7 @@ export function getNextCoachingBooking(
   now = new Date(),
 ): CoachingBookingWithDetails | null {
   const upcoming = bookings
-    .filter((booking) => booking.status === 'scheduled' && new Date(booking.slot.starts_at) > now)
+    .filter((booking) => booking.status === 'scheduled' && isTodayOrFutureCoaching(booking.slot.starts_at, now))
     .sort(
       (a, b) =>
         new Date(a.slot.starts_at).getTime() - new Date(b.slot.starts_at).getTime(),

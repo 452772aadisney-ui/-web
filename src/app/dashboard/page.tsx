@@ -9,6 +9,7 @@ import { fetchUnreadAnnouncementCount } from '@/lib/announcements/queries'
 import { fetchUnreadChatCount } from '@/lib/chat/unread-count'
 import {
   fetchStudentDashboardStudySummary,
+  fetchCurrentStudyStreakForStudent,
 } from '@/lib/study/queries'
 import { fetchUnreadStudyFeedbackCount } from '@/lib/study/feedback-queries'
 import { fetchUnseenTextbookCount } from '@/lib/textbooks/catalog-queries'
@@ -86,6 +87,7 @@ export default async function StudentDashboardPage() {
     overdueTodoCount,
     starRanking,
     studySummary,
+    studyStreakDays,
   ] =
     profile.role === 'student'
       ? await Promise.all([
@@ -101,6 +103,7 @@ export default async function StudentDashboardPage() {
             hasPositiveStudyLog: false,
             textbookCount: 0,
           })),
+          fetchCurrentStudyStreakForStudent(profile.id).catch(() => 0),
         ])
       : [
           0,
@@ -111,6 +114,7 @@ export default async function StudentDashboardPage() {
           0,
           null,
           { todayMinutes: 0, hasPositiveStudyLog: false, textbookCount: 0 },
+          0,
         ]
 
   const onboardingItems =
@@ -150,7 +154,7 @@ export default async function StudentDashboardPage() {
             coachingAlert?.showAlert ? coachingAlert.message : null
           }
           commonTestDaysRemaining={commonTestDaysRemaining}
-          todayStudyMinutes={studySummary.todayMinutes}
+          studyStreakDays={studyStreakDays}
           onboardingItems={onboardingItems}
           unreadStudyFeedbackCount={unreadStudyFeedbackCount}
           unreadAnnouncementCount={unreadAnnouncementCount}
