@@ -37,6 +37,7 @@ describe('dashboard study streak', () => {
     expect(streakFetch).toContain('STUDY_STREAK_PAGE_SIZE')
     expect(streakFetch).toContain('.range(from, from + STUDY_STREAK_PAGE_SIZE - 1)')
     expect(streakFetch).toContain("order('studied_on', { ascending: false })")
+    expect(streakFetch).toContain("order('id', { ascending: false })")
     expect(streakFetch).toContain('if (data.length < STUDY_STREAK_PAGE_SIZE) break')
   })
 })

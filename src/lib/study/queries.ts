@@ -416,6 +416,8 @@ export async function fetchCurrentStudyStreakForStudent(studentId: string): Prom
       .select('studied_on')
       .eq('student_id', studentId)
       .order('studied_on', { ascending: false })
+      // Stable page boundaries when many rows share the same studied_on.
+      .order('id', { ascending: false })
       .range(from, from + STUDY_STREAK_PAGE_SIZE - 1)
 
     if (error) return 0
