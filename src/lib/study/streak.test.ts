@@ -31,7 +31,12 @@ describe('dashboard study streak', () => {
     )?.[0]
     expect(streakFetch).toBeTruthy()
     expect(streakFetch).toContain(".select('studied_on')")
+    // App-level .limit() would drop older days; pagination via .range() avoids
+    // PostgREST single-response truncation (~1000) while keeping all dates.
     expect(streakFetch).not.toContain('.limit(')
-    expect(streakFetch).not.toContain('.range(')
+    expect(streakFetch).toContain('STUDY_STREAK_PAGE_SIZE')
+    expect(streakFetch).toContain('.range(from, from + STUDY_STREAK_PAGE_SIZE - 1)')
+    expect(streakFetch).toContain("order('studied_on', { ascending: false })")
+    expect(streakFetch).toContain('if (data.length < STUDY_STREAK_PAGE_SIZE) break')
   })
 })

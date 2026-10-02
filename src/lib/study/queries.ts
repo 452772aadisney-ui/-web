@@ -402,17 +402,34 @@ export async function fetchStudyLogsForStudent(studentId: string): Promise<Study
   return data as StudyLog[]
 }
 
+/** PostgREST/Supabase truncates a single response around this size; page to keep all days. */
+const STUDY_STREAK_PAGE_SIZE = 1000
+
 export async function fetchCurrentStudyStreakForStudent(studentId: string): Promise<number> {
   const supabase = await createClient()
+  const studiedOnDates: string[] = []
+  let from = 0
 
-  const { data, error } = await supabase
-    .from('study_logs')
-    .select('studied_on')
-    .eq('student_id', studentId)
+  for (;;) {
+    const { data, error } = await supabase
+      .from('study_logs')
+      .select('studied_on')
+      .eq('student_id', studentId)
+      .order('studied_on', { ascending: false })
+      .range(from, from + STUDY_STREAK_PAGE_SIZE - 1)
 
-  if (error || !data) return 0
+    if (error) return 0
+    if (!data?.length) break
 
-  return computeCurrentStudyStreak(data.map((row) => String(row.studied_on)))
+    for (const row of data) {
+      studiedOnDates.push(String(row.studied_on))
+    }
+
+    if (data.length < STUDY_STREAK_PAGE_SIZE) break
+    from += STUDY_STREAK_PAGE_SIZE
+  }
+
+  return computeCurrentStudyStreak(studiedOnDates)
 }
 
 export type StudentListItemRow = {
